@@ -3,7 +3,6 @@
     # Generated on: June 30, 2025
     
     # Module Information
-    RootModule = 'LabViewHelpers.psm1'
     ModuleVersion = '1.0.0'
     
     # Supported PowerShell version
@@ -103,7 +102,6 @@
     # List of all files packaged with this module
     FileList = @(
         'LabViewHelpers.psd1',
-        'LabViewHelpers.psm1',
         'LabViewConfigHelper.psm1',
         'LabViewCliConfigHelper.psm1',
         'LabViewInstallationHelper.psm1',

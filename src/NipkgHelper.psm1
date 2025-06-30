@@ -1,22 +1,107 @@
+#Requires -Version 5.1
+
+<#
+.SYNOPSIS
+    NI Package Manager (NIPKG) Helper Module
+
+.DESCRIPTION
+    Provides comprehensive functions for managing National Instruments packages using NIPKG.
+    Supports feed management, package installation, and package information retrieval.
+
+.NOTES
+    File Name      : NipkgHelper.psm1
+    Author         : LabVIEW Helpers Team
+    Prerequisite   : PowerShell 5.1 or higher, NIPKG installed
+    Copyright 2025 : LabVIEW Helpers
+#>
+
 function Add-FeedDirectories {
-    [CmdletBinding()]
+    <#
+    .SYNOPSIS
+        Adds multiple directory feeds to NI Package Manager.
+
+    .DESCRIPTION
+        Scans a parent directory for subdirectories and adds each as a feed to NIPKG.
+        Updates the package database after adding all feeds.
+
+    .PARAMETER FeedsDirectory
+        Path to the directory containing feed subdirectories.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        Add-FeedDirectories -FeedsDirectory "C:\Installers\feeds"
+
+    .EXAMPLE
+        Add-FeedDirectories -FeedsDirectory "C:\feeds" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Each subdirectory in the FeedsDirectory will be added as a separate feed.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
     param (
-        [Parameter(Mandatory = $true)]
-        [string]
-        $FeedsDirectory,
-        [Parameter(Mandatory = $false)]
-        [string]
-        $NipkgCmdPath = "nipkg"    
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$FeedsDirectory,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg"    
     )
 
-    $directories = Get-ChildItem -Path $FeedsDirectory -Directory
-
-    foreach ($dir in $directories) {
-        Write-Host "Directory Name: $($dir.Name)"
-        & $NipkgCmdPath  feed-add "$($dir.FullName)"
+    begin {
+        Write-Verbose "Starting Add-FeedDirectories operation"
     }
+    
+    process {
+        try {
+            if (-not (Test-Path -LiteralPath $FeedsDirectory)) {
+                throw "Feeds directory not found: $FeedsDirectory"
+            }
 
-    & $NipkgCmdPath update
+            $directories = Get-ChildItem -Path $FeedsDirectory -Directory -ErrorAction Stop
+
+            if ($directories.Count -eq 0) {
+                Write-Warning "No subdirectories found in: $FeedsDirectory"
+                return
+            }
+
+            Write-Information "Adding $($directories.Count) feed directories..." -InformationAction Continue
+
+            foreach ($dir in $directories) {
+                if ($PSCmdlet.ShouldProcess($dir.FullName, "Add NIPKG feed")) {
+                    Write-Verbose "Adding feed directory: $($dir.Name)"
+                    Write-Information "Adding feed: $($dir.Name)" -InformationAction Continue
+                    & $NipkgCmdPath feed-add "$($dir.FullName)"
+                    
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warning "Failed to add feed: $($dir.Name)"
+                    }
+                }
+            }
+
+            if ($PSCmdlet.ShouldProcess("NIPKG", "Update package database")) {
+                Write-Information "Updating package database..." -InformationAction Continue
+                & $NipkgCmdPath update
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Information "Package database updated successfully" -InformationAction Continue
+                } else {
+                    Write-Warning "Package database update may have failed"
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to add feed directories - Path: '$FeedsDirectory'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $FeedsDirectory
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Add-FeedDirectories operation"
+    }
 }
 
 function Get-FeedsInfo {
