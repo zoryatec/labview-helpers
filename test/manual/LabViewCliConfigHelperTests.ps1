@@ -1,5 +1,5 @@
 # Example usage with your LabVIEW CLI config
-Import-Module -Name $PSScriptRoot/../../src/LabViewCLIConfigHelper.psm1 -Force
+Import-Module -Name $PSScriptRoot/../../src/LabViewHelpers.psd1 -Force
 
 $tempDirectory = "$PSScriptRoot/test-temp"
 $sourceConfig = "$PSScriptRoot/test-data/LabVIEWCLI.ini"

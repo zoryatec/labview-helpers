@@ -1,8 +1,5 @@
 #Requires -Version 5.1
 
-Import-Module -Name "$PSScriptRoot\\NipkgHelper.psm1" -Force
-Import-Module -Name "$PSScriptRoot\\LabViewConfigHelper.psm1" -Force
-Import-Module -Name "$PSScriptRoot\\LabViewCLIConfigHelper.psm1" -Force
 function Install-LabView {
     [CmdletBinding()]
 param (
