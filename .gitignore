@@ -1,0 +1,13 @@
+# ignore
+test/manual-docker/installer-nipkg/*
+test/manual-docker/installers/*
+test/manual-docker/installers-iso/*
+test/manual-docker/scripts/test-temp/*
+test/manual-docker/scripts/ni/test-temp/*
+
+# keep
+!test/manual-docker/installers/.gitkeep
+!test/manual-docker/installer-nipkg/.gitkeep
+!test/manual-docker/installers-iso/.gitkeep
+!test/manual-docker/scripts/test-temp/.gitkeep
+!test/manual-docker/scripts/ni/test-temp/.gitkeep
