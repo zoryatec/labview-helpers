@@ -2,7 +2,8 @@
 test/manual-docker/installer-nipkg/*
 test/manual-docker/installers/*
 test/manual-docker/installers-iso/*
-test/manual-docker/scripts/test-temp/*
+test/manual-docker/test-temp/*
+test/manual-docker/src/*
 
 test/manual/test-temp/*
 
@@ -11,4 +12,7 @@ test/manual/test-temp/*
 !test/manual-docker/installers/.gitkeep
 !test/manual-docker/installer-nipkg/.gitkeep
 !test/manual-docker/installers-iso/.gitkeep
-!test/manual-docker/scripts/test-temp/.gitkeep
+!test/manual-docker/test-temp/.gitkeep
+
+
+!test/manual/test-temp/.gitkeep
