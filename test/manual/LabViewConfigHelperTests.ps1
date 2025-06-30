@@ -1,5 +1,5 @@
 # Example usage with your LabVIEW config
-Import-Module -Name $PSScriptRoot/LabViewConfigHelper.psm1 -Force
+Import-Module -Name $PSScriptRoot/../../src/LabViewConfigHelper.psm1 -Force
 
 
 $tempDirectory = "$PSScriptRoot/test-temp"

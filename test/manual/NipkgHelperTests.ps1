@@ -1,4 +1,4 @@
-Import-Module -Name "$PSScriptRoot/NipkgHelper.psm1" -Force
+Import-Module -Name $PSScriptRoot/../../src/NipkgHelper.psm1 -Force
 
 $nipkgPath = 'C:\Program Files\National Instruments\NI Package Manager\nipkg.exe'
 # Add-FeedDirectories `
