@@ -105,11 +105,31 @@ function Add-FeedDirectories {
 }
 
 function Get-FeedsInfo {
+    <#
+    .SYNOPSIS
+        Retrieves information about configured NIPKG feeds.
+
+    .DESCRIPTION
+        Gets a list of all currently configured package feeds from NI Package Manager,
+        including feed names and their associated paths.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        Get-FeedsInfo
+
+    .EXAMPLE
+        Get-FeedsInfo -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns PSCustomObject with Name and Path properties for each feed.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $false)]
-        [string]
-        $NipkgCmdPath = "nipkg" 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg" 
     )
 
     $lines = & $NipkgCmdPath feed-list
@@ -128,33 +148,104 @@ function Get-FeedsInfo {
 }
 
 function Remove-Feeds {
-    [CmdletBinding()]
+    <#
+    .SYNOPSIS
+        Removes specified feeds from NI Package Manager.
+
+    .DESCRIPTION
+        Removes one or more package feeds from NIPKG configuration based on provided feed information.
+
+    .PARAMETER FeedsInfo
+        PSCustomObject containing feed information with Name and Path properties.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        $feeds = Get-FeedsInfo
+        Remove-Feeds -FeedsInfo $feeds
+
+    .EXAMPLE
+        Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Use Get-FeedsInfo to get the required FeedsInfo object.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
     param (
-        [Parameter(Mandatory = $true)]
-        [PSCustomObject]
-        $FeedsInfo,
-        [Parameter(Mandatory = $false)]
-        [string]
-        $NipkgCmdPath = "nipkg"    
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$FeedsInfo,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg"    
     )
-    foreach ($feed in $FeedsInfo) {
-        Write-Host "Removing feed: $($feed.Name)"
-        & $NipkgCmdPath feed-remove "$($feed.Name)"
+    
+    begin {
+        Write-Verbose "Starting Remove-Feeds operation"
+    }
+    
+    process {
+        try {
+            foreach ($feed in $FeedsInfo) {
+                if ($PSCmdlet.ShouldProcess($feed.Name, "Remove NIPKG feed")) {
+                    Write-Verbose "Removing feed: $($feed.Name)"
+                    Write-Information "Removing feed: $($feed.Name)" -InformationAction Continue
+                    & $NipkgCmdPath feed-remove "$($feed.Name)"
+                    
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warning "Failed to remove feed: $($feed.Name)"
+                    }
+                }
+            }
+        }
+        catch {
+            Write-Error "Failed to remove feeds: $_"
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Remove-Feeds operation"
     }
 }
 
 
 
 function Get-PackagesInfo {
+    <#
+    .SYNOPSIS
+        Retrieves package information from NI Package Manager.
+
+    .DESCRIPTION
+        Gets detailed information about either installed or available packages from NIPKG,
+        parsing the output into structured PSCustomObject format.
+
+    .PARAMETER Type
+        Specifies whether to get 'installed' or 'available' packages.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        Get-PackagesInfo -Type "installed"
+
+    .EXAMPLE
+        Get-PackagesInfo -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from NIPKG output.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateSet("installed", "available")]
-        [string]
-        $Type,
-        [Parameter(Mandatory = $false)]
-        [string]
-        $NipkgCmdPath = "nipkg" 
+        [string]$Type,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg" 
     )
 
     $subCmd = if ($Type -eq "installed") { "info-installed" } else { "info" }
@@ -212,33 +303,84 @@ function Get-PackagesInfo {
 }
 
 function Get-DriverPackages {
+    <#
+    .SYNOPSIS
+        Filters package information to return only driver packages.
+
+    .DESCRIPTION
+        Filters the provided package information to include only packages in the "Drivers" section.
+
+    .PARAMETER PackagesInfo
+        PSCustomObject array containing package information from Get-PackagesInfo.
+
+    .EXAMPLE
+        $packages = Get-PackagesInfo -Type "installed"
+        Get-DriverPackages -PackagesInfo $packages
+
+    .NOTES
+        Returns filtered and sorted package list containing only driver packages.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [PSCustomObject]
-        $PackagesInfo 
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$PackagesInfo 
     )
     $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Drivers" }
     return $filteredPackages | Sort-Object Package
 }
 
 function Get-ProgrammingEnvironmentsPackages {
+    <#
+    .SYNOPSIS
+        Filters package information to return only programming environment packages.
+
+    .DESCRIPTION
+        Filters the provided package information to include only packages in the "Programming Environments" section.
+
+    .PARAMETER PackagesInfo
+        PSCustomObject array containing package information from Get-PackagesInfo.
+
+    .EXAMPLE
+        $packages = Get-PackagesInfo -Type "available"
+        Get-ProgrammingEnvironmentsPackages -PackagesInfo $packages
+
+    .NOTES
+        Returns filtered and sorted package list containing only programming environment packages.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [PSCustomObject]
-        $PackagesInfo 
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$PackagesInfo 
     )
     $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Programming Environments" }
     return $filteredPackages | Sort-Object Package
 }
 
 function Get-UtilitiesPackages {
+    <#
+    .SYNOPSIS
+        Filters package information to return only utility packages.
+
+    .DESCRIPTION
+        Filters the provided package information to include only packages in the "Utilities" section.
+
+    .PARAMETER PackagesInfo
+        PSCustomObject array containing package information from Get-PackagesInfo.
+
+    .EXAMPLE
+        $packages = Get-PackagesInfo -Type "installed"
+        Get-UtilitiesPackages -PackagesInfo $packages
+
+    .NOTES
+        Returns filtered and sorted package list containing only utility packages.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [PSCustomObject]
-        $PackagesInfo 
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$PackagesInfo 
     )
     $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Utilities" }
     return $filteredPackages | Sort-Object Package
@@ -246,22 +388,56 @@ function Get-UtilitiesPackages {
 
 
 function Get-ApplicationSoftwarePackages {
+    <#
+    .SYNOPSIS
+        Filters package information to return only application software packages.
+
+    .DESCRIPTION
+        Filters the provided package information to include only packages in the "Application Software" section.
+
+    .PARAMETER PackagesInfo
+        PSCustomObject array containing package information from Get-PackagesInfo.
+
+    .EXAMPLE
+        $packages = Get-PackagesInfo -Type "available"
+        Get-ApplicationSoftwarePackages -PackagesInfo $packages
+
+    .NOTES
+        Returns filtered and sorted package list containing only application software packages.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [PSCustomObject]
-        $PackagesInfo 
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$PackagesInfo 
     )
     $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Application Software" }
     return $filteredPackages | Sort-Object Package
 }
 
 function Install-NipkgManager {
-    [CmdletBinding()]
+    <#
+    .SYNOPSIS
+        Installs NI Package Manager using provided installer.
+
+    .DESCRIPTION
+        Executes the NI Package Manager installer with quiet installation parameters,
+        accepting EULAs and preventing reboots during installation.
+
+    .PARAMETER InstallerPath
+        Path to the NI Package Manager installer executable.
+
+    .EXAMPLE
+        Install-NipkgManager -InstallerPath "C:\Installers\nipkg-manager.exe"
+
+    .NOTES
+        Installation runs with timeout of 5 minutes and captures exit codes and output.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
     param (
-        [Parameter()]
-        [string]
-        $InstallerPath
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InstallerPath
     )
 
     # & $InstallerPath `

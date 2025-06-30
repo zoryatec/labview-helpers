@@ -215,13 +215,34 @@ function Set-LabVIEWCLIConfig {
 function Get-LabVIEWCLIConfig {
     <#
     .SYNOPSIS
-        Gets a configuration value from LabVIEW CLI config file
+        Retrieves a configuration value from LabVIEW CLI configuration file.
+
+    .DESCRIPTION
+        Reads a specific configuration key from the [LabVIEWCLI] section of the specified configuration file.
+
+    .PARAMETER ConfigPath
+        Path to the LabVIEW CLI configuration file.
+
+    .PARAMETER Key
+        Configuration key name to retrieve.
+
+    .EXAMPLE
+        Get-LabVIEWCLIConfig -ConfigPath "C:\config.ini" -Key "DefaultPortNumber"
+
+    .EXAMPLE
+        $timeout = Get-LabVIEWCLIConfig -ConfigPath "C:\LabVIEWCLI.ini" -Key "OpenAppReferenceTimeoutInSecond"
+
+    .NOTES
+        Returns $null if the key is not found in the configuration file.
     #>
+    [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigPath,
         
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$Key
     )
     
@@ -262,13 +283,34 @@ function Get-LabVIEWCLIConfig {
 function Remove-LabVIEWCLIConfig {
     <#
     .SYNOPSIS
-        Removes a configuration key from LabVIEW CLI config file
+        Removes a configuration key from LabVIEW CLI configuration file.
+
+    .DESCRIPTION
+        Deletes a specific configuration key from the [LabVIEWCLI] section of the specified configuration file.
+
+    .PARAMETER ConfigPath
+        Path to the LabVIEW CLI configuration file.
+
+    .PARAMETER Key
+        Configuration key name to remove.
+
+    .EXAMPLE
+        Remove-LabVIEWCLIConfig -ConfigPath "C:\config.ini" -Key "PingDelay"
+
+    .EXAMPLE
+        Remove-LabVIEWCLIConfig -ConfigPath "C:\LabVIEWCLI.ini" -Key "OldSetting"
+
+    .NOTES
+        Displays a warning if the key is not found in the configuration file.
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigPath,
         
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$Key
     )
     
@@ -317,10 +359,27 @@ function Remove-LabVIEWCLIConfig {
 function Get-AllLabVIEWCLIConfig {
     <#
     .SYNOPSIS
-        Gets all configuration values from LabVIEW CLI config file
+        Retrieves all configuration values from LabVIEW CLI configuration file.
+
+    .DESCRIPTION
+        Reads all configuration key-value pairs from the [LabVIEWCLI] section of the specified configuration file.
+
+    .PARAMETER ConfigPath
+        Path to the LabVIEW CLI configuration file.
+
+    .EXAMPLE
+        Get-AllLabVIEWCLIConfig -ConfigPath "C:\config.ini"
+
+    .EXAMPLE
+        $allConfig = Get-AllLabVIEWCLIConfig -ConfigPath "C:\LabVIEWCLI.ini"
+
+    .NOTES
+        Returns a hashtable with all key-value pairs from the LabVIEWCLI section.
     #>
+    [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigPath
     )
     
@@ -365,10 +424,28 @@ function Get-AllLabVIEWCLIConfig {
 function Show-LabVIEWCLIConfig {
     <#
     .SYNOPSIS
-        Displays all LabVIEW CLI configuration values
+        Displays all LabVIEW CLI configuration values in a formatted output.
+
+    .DESCRIPTION
+        Shows all configuration key-value pairs from the [LabVIEWCLI] section in a readable format
+        with color-coded output.
+
+    .PARAMETER ConfigPath
+        Path to the LabVIEW CLI configuration file.
+
+    .EXAMPLE
+        Show-LabVIEWCLIConfig -ConfigPath "C:\config.ini"
+
+    .EXAMPLE
+        Show-LabVIEWCLIConfig -ConfigPath "C:\LabVIEWCLI.ini"
+
+    .NOTES
+        Displays configuration in a user-friendly format with sorted keys.
     #>
+    [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigPath
     )
     
@@ -392,12 +469,34 @@ function Show-LabVIEWCLIConfig {
 function Initialize-LabVIEWCLIConfig {
     <#
     .SYNOPSIS
-        Creates a LabVIEW CLI config file with default values
+        Creates a LabVIEW CLI configuration file with default values.
+
+    .DESCRIPTION
+        Initializes a new LabVIEW CLI configuration file with standard default settings,
+        including timeout values, port configuration, and license validation settings.
+
+    .PARAMETER ConfigPath
+        Path where the LabVIEW CLI configuration file should be created.
+
+    .PARAMETER Force
+        Overwrites an existing configuration file if present.
+
+    .EXAMPLE
+        Initialize-LabVIEWCLIConfig -ConfigPath "C:\config.ini"
+
+    .EXAMPLE
+        Initialize-LabVIEWCLIConfig -ConfigPath "C:\LabVIEWCLI.ini" -Force
+
+    .NOTES
+        Creates a [LabVIEWCLI] section with commonly used default values.
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
         [string]$ConfigPath,
         
+        [Parameter()]
         [switch]$Force
     )
     
