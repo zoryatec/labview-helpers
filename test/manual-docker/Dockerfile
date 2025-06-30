@@ -6,6 +6,7 @@ SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPref
 COPY installer-nipkg C:/installer-nipkg
 COPY installers-iso/ni-labview-2025-community-x86_25.1.3_offline.iso C:/installer-iso/installer.iso
 COPY scripts/ C:/scripts/
+COPY src/ C:/src/
 
 WORKDIR C:/scripts
 

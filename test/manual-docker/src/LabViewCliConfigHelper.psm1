@@ -1,0 +1,342 @@
+#Requires -Version 5.1
+
+<#
+.SYNOPSIS
+    LabVIEW CLI Configuration Helper Module
+    
+.DESCRIPTION
+    Provides functions to manage LabVIEW CLI configuration files with format:
+    [LabVIEWCLI]
+    Key = Value
+    
+.EXAMPLE
+    Set-LabVIEWCLIConfig -ConfigPath "C:\config.ini" -Key "OpenAppReferenceTimeoutInSecond" -Value "120"
+#>
+
+function Set-LabVIEWCLIConfig {
+    <#
+    .SYNOPSIS
+        Sets a configuration value in LabVIEW CLI config file
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$Value,
+        
+        [switch]$CreateIfNotExists
+    )
+    
+    # Check if file exists
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        if ($CreateIfNotExists) {
+            $null = New-Item -Path $ConfigPath -ItemType File -Force
+            Write-Host "[OK] Created new LabVIEW CLI config file: $ConfigPath" -ForegroundColor Green
+        } else {
+            throw "LabVIEW CLI config file not found: $ConfigPath"
+        }
+    }
+    
+    # Read the file content
+    $content = @(Get-Content -LiteralPath $ConfigPath -ErrorAction SilentlyContinue)
+    if ($null -eq $content -or $content.Count -eq 0) { 
+        $content = @() 
+    }
+    
+    $sectionFound = $false
+    $keyFound = $false
+    $newContent = [System.Collections.ArrayList]::new()
+    
+    # Process each line
+    for ($i = 0; $i -lt $content.Count; $i++) {
+        $line = $content[$i]
+        
+        # Check if we found the [LabVIEWCLI] section
+        if ($line -match "^\[LabVIEWCLI\]$") {
+            $sectionFound = $true
+            $null = $newContent.Add($line)
+            continue
+        }
+        
+        # Check if we're in the LabVIEWCLI section and found the key
+        if ($sectionFound -and $line -match "^$([regex]::Escape($Key))\s*=") {
+            $keyFound = $true
+            # Handle quoted values
+            if ($Value -match '^".*"$' -or $Value -eq "TRUE" -or $Value -eq "FALSE" -or $Value -match '^\d+$' -or $Value -match '^-?\d+$') {
+                $null = $newContent.Add("$Key = $Value")
+            } else {
+                $null = $newContent.Add("$Key = `"$Value`"")
+            }
+            Write-Host "[OK] Updated: $Key = $Value" -ForegroundColor Green
+            continue
+        }
+        
+        # Check if we hit a new section (and we were in LabVIEWCLI section)
+        if ($sectionFound -and $line -match "^\[.+\]$" -and $line -notmatch "^\[LabVIEWCLI\]$") {
+            # We've moved to a new section, add the key if not found
+            if (-not $keyFound) {
+                if ($Value -match '^".*"$' -or $Value -eq "TRUE" -or $Value -eq "FALSE" -or $Value -match '^\d+$' -or $Value -match '^-?\d+$') {
+                    $null = $newContent.Add("$Key = $Value")
+                } else {
+                    $null = $newContent.Add("$Key = `"$Value`"")
+                }
+                Write-Host "[OK] Added: $Key = $Value" -ForegroundColor Green
+                $keyFound = $true
+            }
+            $sectionFound = $false
+        }
+        
+        $null = $newContent.Add($line)
+    }
+    
+    # If LabVIEWCLI section was found but key wasn't, add it at the end of the section
+    if ($sectionFound -and -not $keyFound) {
+        if ($Value -match '^".*"$' -or $Value -eq "TRUE" -or $Value -eq "FALSE" -or $Value -match '^\d+$' -or $Value -match '^-?\d+$') {
+            $null = $newContent.Add("$Key = $Value")
+        } else {
+            $null = $newContent.Add("$Key = `"$Value`"")
+        }
+        Write-Host "[OK] Added: $Key = $Value" -ForegroundColor Green
+        $keyFound = $true
+    }
+    
+    # If LabVIEWCLI section wasn't found, add it with the key
+    if (-not $sectionFound) {
+        if ($newContent.Count -gt 0) {
+            $null = $newContent.Add("")
+        }
+        $null = $newContent.Add("[LabVIEWCLI]")
+        if ($Value -match '^".*"$' -or $Value -eq "TRUE" -or $Value -eq "FALSE" -or $Value -match '^\d+$' -or $Value -match '^-?\d+$') {
+            $null = $newContent.Add("$Key = $Value")
+        } else {
+            $null = $newContent.Add("$Key = `"$Value`"")
+        }
+        Write-Host "[OK] Added new [LabVIEWCLI] section with $Key = $Value" -ForegroundColor Green
+    }
+    
+    # Write back to file
+    $newContent.ToArray() | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+    Write-Host "[SAVED] LabVIEW CLI config file updated: $ConfigPath" -ForegroundColor Cyan
+}
+
+function Get-LabVIEWCLIConfig {
+    <#
+    .SYNOPSIS
+        Gets a configuration value from LabVIEW CLI config file
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$Key
+    )
+    
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        throw "LabVIEW CLI config file not found: $ConfigPath"
+    }
+    
+    $content = @(Get-Content -LiteralPath $ConfigPath)
+    $inLabVIEWCLISection = $false
+    
+    foreach ($line in $content) {
+        # Check if we found the [LabVIEWCLI] section
+        if ($line -match "^\[LabVIEWCLI\]$") {
+            $inLabVIEWCLISection = $true
+            continue
+        }
+        
+        # Check if we hit a new section
+        if ($line -match "^\[.+\]$") {
+            $inLabVIEWCLISection = $false
+            continue
+        }
+        
+        # If we're in the LabVIEWCLI section, look for the key
+        if ($inLabVIEWCLISection -and $line -match "^$([regex]::Escape($Key))\s*=\s*(.*)$") {
+            $value = $matches[1].Trim()
+            # Remove quotes if present
+            if ($value -match '^"(.*)"$') {
+                return $matches[1]
+            }
+            return $value
+        }
+    }
+    
+    return $null
+}
+
+function Remove-LabVIEWCLIConfig {
+    <#
+    .SYNOPSIS
+        Removes a configuration key from LabVIEW CLI config file
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$Key
+    )
+    
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        throw "LabVIEW CLI config file not found: $ConfigPath"
+    }
+    
+    $content = @(Get-Content -LiteralPath $ConfigPath)
+    $newContent = [System.Collections.ArrayList]::new()
+    $inLabVIEWCLISection = $false
+    $removed = $false
+    
+    foreach ($line in $content) {
+        # Check if we found the [LabVIEWCLI] section
+        if ($line -match "^\[LabVIEWCLI\]$") {
+            $inLabVIEWCLISection = $true
+            $null = $newContent.Add($line)
+            continue
+        }
+        
+        # Check if we hit a new section
+        if ($line -match "^\[.+\]$") {
+            $inLabVIEWCLISection = $false
+            $null = $newContent.Add($line)
+            continue
+        }
+        
+        # If we're in the LabVIEWCLI section and found the key, skip it
+        if ($inLabVIEWCLISection -and $line -match "^$([regex]::Escape($Key))\s*=") {
+            $removed = $true
+            Write-Host "[OK] Removed: $Key" -ForegroundColor Yellow
+            continue
+        }
+        
+        $null = $newContent.Add($line)
+    }
+    
+    if ($removed) {
+        $newContent.ToArray() | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+        Write-Host "[SAVED] LabVIEW CLI config file updated: $ConfigPath" -ForegroundColor Cyan
+    } else {
+        Write-Host "[WARNING] Key not found: $Key" -ForegroundColor Yellow
+    }
+}
+
+function Get-AllLabVIEWCLIConfig {
+    <#
+    .SYNOPSIS
+        Gets all configuration values from LabVIEW CLI config file
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath
+    )
+    
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        throw "LabVIEW CLI config file not found: $ConfigPath"
+    }
+    
+    $content = @(Get-Content -LiteralPath $ConfigPath)
+    $result = @{}
+    $inLabVIEWCLISection = $false
+    
+    foreach ($line in $content) {
+        # Check if we found the [LabVIEWCLI] section
+        if ($line -match "^\[LabVIEWCLI\]$") {
+            $inLabVIEWCLISection = $true
+            continue
+        }
+        
+        # Check if we hit a new section
+        if ($line -match "^\[.+\]$") {
+            $inLabVIEWCLISection = $false
+            continue
+        }
+        
+        # If we're in the LabVIEWCLI section, parse key-value pairs
+        if ($inLabVIEWCLISection -and $line -match "^([^=]+)=(.*)$") {
+            $key = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            
+            # Remove quotes if present
+            if ($value -match '^"(.*)"$') {
+                $value = $matches[1]
+            }
+            
+            $result[$key] = $value
+        }
+    }
+    
+    return $result
+}
+
+function Show-LabVIEWCLIConfig {
+    <#
+    .SYNOPSIS
+        Displays all LabVIEW CLI configuration values
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath
+    )
+    
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        throw "LabVIEW CLI config file not found: $ConfigPath"
+    }
+    
+    $allValues = Get-AllLabVIEWCLIConfig -ConfigPath $ConfigPath
+    
+    Write-Host "LabVIEW CLI Configuration File: $ConfigPath" -ForegroundColor Yellow
+    Write-Host ("-" * 60) -ForegroundColor Gray
+    Write-Host "[LabVIEWCLI]" -ForegroundColor Cyan
+    
+    foreach ($key in $allValues.Keys | Sort-Object) {
+        $value = $allValues[$key]
+        Write-Host "  $key = $value" -ForegroundColor White
+    }
+    Write-Host ""
+}
+
+function Initialize-LabVIEWCLIConfig {
+    <#
+    .SYNOPSIS
+        Creates a LabVIEW CLI config file with default values
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConfigPath,
+        
+        [switch]$Force
+    )
+    
+    if ((Test-Path -LiteralPath $ConfigPath) -and -not $Force) {
+        Write-Host "[WARNING] Config file already exists: $ConfigPath" -ForegroundColor Yellow
+        Write-Host "Use -Force to overwrite" -ForegroundColor Yellow
+        return
+    }
+    
+    $defaultConfig = @"
+[LabVIEWCLI]
+OpenAppReferenceTimeoutInSecond = 120    
+AfterLaunchOpenAppReferenceTimeoutInSecond = 300    
+UDCInstallID = "16e7cd52-35d6-4890-a1c9-a914e1682be7"
+DefaultPortNumber = 3363
+AppendToLogFile = FALSE
+AppExitTimeout = 10000
+DefaultLabVIEWPath = ""
+DeleteLabVIEWCLILogFile = FALSE
+PingDelay = -1
+PingTimeout = 10000
+IndividualOpenAppRefTimeout = 20
+ValidateLabVIEWLicense = TRUE
+"@
+    
+    Set-Content -LiteralPath $ConfigPath -Value $defaultConfig -Encoding UTF8
+    Write-Host "[OK] Created LabVIEW CLI config file with defaults: $ConfigPath" -ForegroundColor Green
+}
+
+# Export all functions
+Export-ModuleMember -Function Set-LabVIEWCLIConfig, Get-LabVIEWCLIConfig, Remove-LabVIEWCLIConfig, Get-AllLabVIEWCLIConfig, Show-LabVIEWCLIConfig, Initialize-LabVIEWCLIConfig

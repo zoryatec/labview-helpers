@@ -1,10 +1,7 @@
-[CmdletBinding()]
-param (
-    [Parameter()]
-    [string] $NipkgCmdPath = 'nipkg'
-)
+$srcDirectory = "$PSScriptRoot\..\src"
+$modulePath = "$srcDirectory\LabViewHelpers.psd1"
 
-Import-Module -Name "$PSScriptRoot\\ni\LabViewInstallationHelper.psm1" -Force
+Import-Module -Name $modulePath -Force
 
 $niLicenseCmdDirectory = 'C:\\Program Files (x86)\\National Instruments\\Shared\\License Manager'
 $labViewCliDirectory = "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI"
