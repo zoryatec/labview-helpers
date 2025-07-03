@@ -521,7 +521,7 @@ function New-NipkgSnapshot {
             # Convert feeds to desired format
             $feeds = @()
             foreach ($feed in $FeedsInfo) {
-                $feeds += @{
+                $feeds += [ordered]@{
                     name = $feed.Name
                     uri = $feed.Path
                 }
@@ -532,7 +532,7 @@ function New-NipkgSnapshot {
             # Convert packages to desired format
             $packages = @()
             foreach ($package in $PackagesInfo) {
-                $packages += @{
+                $packages += [ordered]@{
                     name = $package.Package
                     version = $package.Version
                 }
@@ -644,6 +644,105 @@ function Export-NipkgSnapshotToJson {
     }
 }
 
+function Import-NipkgSnapshotFromJson {
+    <#
+    .SYNOPSIS
+        Imports a NIPKG snapshot from a JSON file.
+
+    .DESCRIPTION
+        Reads and parses a JSON snapshot file created by Export-NipkgSnapshotToJson.
+        Returns the snapshot object with feeds and packages information.
+
+    .PARAMETER InputPath
+        Path to the JSON snapshot file to import.
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\nipkg-snapshot.json"
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\snapshot.json"
+        Write-Host "Imported $($snapshot.packages.Count) packages and $($snapshot.feeds.Count) feeds"
+
+    .NOTES
+        Returns a hashtable with:
+        - feeds: Array of feeds with name and uri properties
+        - packages: Array of packages with name and version properties
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Import-NipkgSnapshotFromJson operation"
+    }
+    
+    process {
+        try {
+            # Validate input file exists
+            if (-not (Test-Path -Path $InputPath)) {
+                throw "Snapshot file not found: $InputPath"
+            }
+
+            Write-Information "Importing NIPKG snapshot from JSON..." -InformationAction Continue
+            Write-Verbose "Reading JSON file: $InputPath"
+            
+            # Read and parse JSON content
+            $jsonContent = Get-Content -Path $InputPath -Raw -Encoding UTF8
+            $snapshotData = $jsonContent | ConvertFrom-Json
+            
+            # Validate JSON structure
+            if (-not $snapshotData) {
+                throw "Invalid or empty JSON content"
+            }
+            
+            # Convert back to hashtable format
+            $snapshot = @{
+                feeds = @()
+                packages = @()
+            }
+            
+            # Process feeds if they exist
+            if ($snapshotData.feeds) {
+                Write-Verbose "Processing $($snapshotData.feeds.Count) feeds"
+                foreach ($feed in $snapshotData.feeds) {
+                    $snapshot.feeds += [ordered]@{
+                        name = $feed.name
+                        uri = $feed.uri
+                    }
+                }
+            }
+            
+            # Process packages if they exist
+            if ($snapshotData.packages) {
+                Write-Verbose "Processing $($snapshotData.packages.Count) packages"
+                foreach ($package in $snapshotData.packages) {
+                    $snapshot.packages += [ordered]@{
+                        name = $package.name
+                        version = $package.version
+                    }
+                }
+            }
+            
+            Write-Information "Snapshot imported successfully: $InputPath" -InformationAction Continue
+            Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to import NIPKG snapshot from JSON - InputPath: '$InputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Import-NipkgSnapshotFromJson operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Get-PackagesInfo `
@@ -655,4 +754,5 @@ Export-ModuleMember -Function `
     ,   Remove-Feeds `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `
-    ,   Export-NipkgSnapshotToJson
+    ,   Export-NipkgSnapshotToJson `
+    ,   Import-NipkgSnapshotFromJson

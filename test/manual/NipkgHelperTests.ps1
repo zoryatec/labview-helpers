@@ -45,6 +45,35 @@ Export-NipkgSnapshotToJson `
     -Snapshot $snapshot `
     -OutputPath "$tempDirectory\snapshot.json"
 
+# Test import functionality
+Write-Host "Testing Import-NipkgSnapshotFromJson..." -ForegroundColor Green
+$importedSnapshot = Import-NipkgSnapshotFromJson -InputPath "$tempDirectory\snapshot.json"
+
+Write-Host "Original snapshot: Feeds=$($snapshot.feeds.Count), Packages=$($snapshot.packages.Count)" -ForegroundColor Cyan
+Write-Host "Imported snapshot: Feeds=$($importedSnapshot.feeds.Count), Packages=$($importedSnapshot.packages.Count)" -ForegroundColor Cyan
+
+# Verify the imported data matches the original
+if ($snapshot.feeds.Count -eq $importedSnapshot.feeds.Count -and $snapshot.packages.Count -eq $importedSnapshot.packages.Count) {
+    Write-Host "✓ Import test passed - counts match!" -ForegroundColor Green
+} else {
+    Write-Host "✗ Import test failed - counts don't match!" -ForegroundColor Red
+}
+
+# Display a sample of imported data
+if ($importedSnapshot.feeds.Count -gt 0) {
+    Write-Host "Sample imported feeds:" -ForegroundColor Yellow
+    $importedSnapshot.feeds | Select-Object -First 3 | ForEach-Object { 
+        Write-Host "  - $($_.name): $($_.uri)" -ForegroundColor White
+    }
+}
+
+if ($importedSnapshot.packages.Count -gt 0) {
+    Write-Host "Sample imported packages:" -ForegroundColor Yellow
+    $importedSnapshot.packages | Select-Object -First 3 | ForEach-Object { 
+        Write-Host "  - $($_.name): $($_.version)" -ForegroundColor White
+    }
+}
+
 # Your raw output (from file or command)
 
 # $feedInfo = Get-FeedsInfo `
