@@ -9,7 +9,7 @@
     PowerShellVersion = '5.1'
     
     # ID used to uniquely identify this module
-    GUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    GUID = 'd60e43a5-207e-4d86-9279-91d1b94f7384'
     
     # Author and company information
     Author = 'Zoryatec'
