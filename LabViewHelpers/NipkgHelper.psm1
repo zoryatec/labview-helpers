@@ -474,6 +474,117 @@ function Install-NipkgManager {
     Write-Host "Error Output: $errorOutput"
 }
 
+function New-NipkgSnapshot {
+    <#
+    .SYNOPSIS
+        Creates a JSON snapshot from provided NIPKG feeds and packages information.
+
+    .DESCRIPTION
+        Generates a JSON file containing information about feeds and packages from provided PSObjects.
+        This snapshot can be used for backup, documentation, or environment replication purposes.
+
+    .PARAMETER OutputPath
+        Path where the JSON snapshot file will be created.
+
+    .PARAMETER FeedsInfo
+        PSCustomObject containing feed information from Get-FeedsInfo.
+
+    .PARAMETER PackagesInfo
+        PSCustomObject containing package information from Get-PackagesInfo.
+
+    .EXAMPLE
+        $feeds = Get-FeedsInfo
+        $packages = Get-PackagesInfo -Type "installed"
+        New-NipkgSnapshot -OutputPath "C:\Snapshots\nipkg-snapshot.json" -FeedsInfo $feeds -PackagesInfo $packages
+
+    .NOTES
+        The JSON structure includes:
+        - feeds: Array of feeds with name and uri
+        - packages: Array of packages with name and version
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject[]]$FeedsInfo,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject[]]$PackagesInfo
+    )
+
+    begin {
+        Write-Verbose "Starting New-NipkgSnapshot operation"
+    }
+    
+    process {
+        try {
+            if ($PSCmdlet.ShouldProcess($OutputPath, "Create NIPKG snapshot")) {
+                Write-Information "Creating NIPKG snapshot..." -InformationAction Continue
+                
+                # Convert feeds to desired format
+                $feeds = @()
+                foreach ($feed in $FeedsInfo) {
+                    $feeds += @{
+                        name = $feed.Name
+                        uri = $feed.Path
+                    }
+                }
+                
+                # Convert packages to desired format
+                $packages = @()
+                foreach ($package in $PackagesInfo) {
+                    $packages += @{
+                        name = $package.Package
+                        version = $package.Version
+                    }
+                }
+                
+                # Create the snapshot object
+                $snapshot = @{
+                    feeds = $feeds
+                    packages = $packages
+                }
+                
+                # Convert to JSON and save
+                $jsonContent = $snapshot | ConvertTo-Json -Depth 10 -Compress:$false
+                
+                # Ensure output directory exists
+                $outputDir = Split-Path -Path $OutputPath -Parent
+                if ($outputDir -and -not (Test-Path -Path $outputDir)) {
+                    New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
+                }
+                
+                # Write JSON to file
+                $jsonContent | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+                
+                Write-Information "Snapshot created successfully: $OutputPath" -InformationAction Continue
+                Write-Verbose "Snapshot contains $($feeds.Count) feeds and $($packages.Count) packages"
+                
+                # Return summary information
+                return [PSCustomObject]@{
+                    SnapshotPath = $OutputPath
+                    FeedsCount = $feeds.Count
+                    PackagesCount = $packages.Count
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to create NIPKG snapshot - OutputPath: '$OutputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $OutputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed New-NipkgSnapshot operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Get-PackagesInfo `
@@ -483,4 +594,5 @@ Export-ModuleMember -Function `
     ,   Get-ApplicationSoftwarePackages `
     ,   Get-FeedsInfo `
     ,   Remove-Feeds `
-    ,   Install-NipkgManager
+    ,   Install-NipkgManager `
+    ,   New-NipkgSnapshot

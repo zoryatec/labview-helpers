@@ -64,6 +64,7 @@
         'Get-FeedsInfo',
         'Remove-Feeds',
         'Install-NipkgManager'
+        'New-NipkgSnapshot'
     )
     
     # Cmdlets to export from this module
