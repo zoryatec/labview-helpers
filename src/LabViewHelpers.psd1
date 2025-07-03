@@ -3,7 +3,7 @@
     # Generated on: June 30, 2025
     
     # Module Information
-    ModuleVersion = '1.0.0'
+    ModuleVersion = '0.1.0'
     
     # Supported PowerShell version
     PowerShellVersion = '5.1'
@@ -136,7 +136,7 @@
             
             # Release notes for this module
             ReleaseNotes = @'
-## Version 1.0.0
+## Version 0.1.0
 - Initial release of LabVIEW Helper Modules
 - LabViewConfigHelper: Manage LabVIEW.ini configuration files
 - LabViewCliConfigHelper: Manage LabVIEW CLI configuration 
