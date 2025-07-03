@@ -1,4 +1,4 @@
-Import-Module -Name $PSScriptRoot/../../src/LabViewHelpers.psd1 -Force
+Import-Module -Name $PSScriptRoot/../../LabViewHelpers/LabViewHelpers.psd1 -Force
 
 $tempDirectory = "$PSScriptRoot/test-temp"
 $sourceConfig = "$PSScriptRoot/test-data/LabVIEW.ini"
