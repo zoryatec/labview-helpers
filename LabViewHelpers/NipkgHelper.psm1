@@ -477,14 +477,11 @@ function Install-NipkgManager {
 function New-NipkgSnapshot {
     <#
     .SYNOPSIS
-        Creates a JSON snapshot from provided NIPKG feeds and packages information.
+        Creates a snapshot object from provided NIPKG feeds and packages information.
 
     .DESCRIPTION
-        Generates a JSON file containing information about feeds and packages from provided PSObjects.
-        This snapshot can be used for backup, documentation, or environment replication purposes.
-
-    .PARAMETER OutputPath
-        Path where the JSON snapshot file will be created.
+        Formats feeds and packages information from provided PSObjects into a structured object.
+        This object can be serialized to JSON or used for other purposes.
 
     .PARAMETER FeedsInfo
         PSCustomObject containing feed information from Get-FeedsInfo.
@@ -495,19 +492,15 @@ function New-NipkgSnapshot {
     .EXAMPLE
         $feeds = Get-FeedsInfo
         $packages = Get-PackagesInfo -Type "installed"
-        New-NipkgSnapshot -OutputPath "C:\Snapshots\nipkg-snapshot.json" -FeedsInfo $feeds -PackagesInfo $packages
+        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
 
     .NOTES
-        The JSON structure includes:
+        Returns a hashtable with:
         - feeds: Array of feeds with name and uri
         - packages: Array of packages with name and version
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNullOrEmpty()]
-        [string]$OutputPath,
-        
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject[]]$FeedsInfo,
@@ -523,65 +516,131 @@ function New-NipkgSnapshot {
     
     process {
         try {
-            if ($PSCmdlet.ShouldProcess($OutputPath, "Create NIPKG snapshot")) {
-                Write-Information "Creating NIPKG snapshot..." -InformationAction Continue
-                
-                # Convert feeds to desired format
-                $feeds = @()
-                foreach ($feed in $FeedsInfo) {
-                    $feeds += @{
-                        name = $feed.Name
-                        uri = $feed.Path
-                    }
-                }
-                
-                # Convert packages to desired format
-                $packages = @()
-                foreach ($package in $PackagesInfo) {
-                    $packages += @{
-                        name = $package.Package
-                        version = $package.Version
-                    }
-                }
-                
-                # Create the snapshot object
-                $snapshot = @{
-                    feeds = $feeds
-                    packages = $packages
-                }
-                
-                # Convert to JSON and save
-                $jsonContent = $snapshot | ConvertTo-Json -Depth 10 -Compress:$false
-                
-                # Ensure output directory exists
-                $outputDir = Split-Path -Path $OutputPath -Parent
-                if ($outputDir -and -not (Test-Path -Path $outputDir)) {
-                    New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
-                }
-                
-                # Write JSON to file
-                $jsonContent | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
-                
-                Write-Information "Snapshot created successfully: $OutputPath" -InformationAction Continue
-                Write-Verbose "Snapshot contains $($feeds.Count) feeds and $($packages.Count) packages"
-                
-                # Return summary information
-                return [PSCustomObject]@{
-                    SnapshotPath = $OutputPath
-                    FeedsCount = $feeds.Count
-                    PackagesCount = $packages.Count
+            Write-Verbose "Formatting feeds information"
+            
+            # Convert feeds to desired format
+            $feeds = @()
+            foreach ($feed in $FeedsInfo) {
+                $feeds += @{
+                    name = $feed.Name
+                    uri = $feed.Path
                 }
             }
+            
+            Write-Verbose "Formatting packages information"
+            
+            # Convert packages to desired format
+            $packages = @()
+            foreach ($package in $PackagesInfo) {
+                $packages += @{
+                    name = $package.Package
+                    version = $package.Version
+                }
+            }
+            
+            # Create the snapshot object
+            $snapshot = @{
+                feeds = $feeds
+                packages = $packages
+            }
+            
+            Write-Verbose "Snapshot object contains $($feeds.Count) feeds and $($packages.Count) packages"
+            
+            return $snapshot
         }
         catch {
-            $errorMessage = "Failed to create NIPKG snapshot - OutputPath: '$OutputPath'. Error: $($_.Exception.Message)"
-            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $OutputPath
+            $errorMessage = "Failed to create NIPKG snapshot object. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
             throw
         }
     }
     
     end {
         Write-Verbose "Completed New-NipkgSnapshot operation"
+    }
+}
+
+function Export-NipkgSnapshotToJson {
+    <#
+    .SYNOPSIS
+        Exports a snapshot object to a JSON file.
+
+    .DESCRIPTION
+        Serializes a snapshot object (from New-NipkgSnapshot) to a JSON file.
+        Creates the output directory if it doesn't exist.
+
+    .PARAMETER Snapshot
+        Hashtable containing the snapshot data to serialize.
+
+    .PARAMETER OutputPath
+        Path where the JSON snapshot file will be created.
+
+    .EXAMPLE
+        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
+        Export-NipkgSnapshotToJson -Snapshot $snapshot -OutputPath "C:\Snapshots\nipkg-snapshot.json"
+
+    .NOTES
+        Creates the output directory if it doesn't exist.
+        Returns summary information about the exported file.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Export-NipkgSnapshotToJson operation"
+    }
+    
+    process {
+        try {
+            if ($PSCmdlet.ShouldProcess($OutputPath, "Export NIPKG snapshot to JSON")) {
+                Write-Information "Exporting NIPKG snapshot to JSON..." -InformationAction Continue
+                
+                # Convert to JSON
+                $jsonContent = $Snapshot | ConvertTo-Json -Depth 10 -Compress:$false
+                
+                # Ensure output directory exists
+                $outputDir = Split-Path -Path $OutputPath -Parent
+                if ($outputDir -and -not (Test-Path -Path $outputDir)) {
+                    Write-Verbose "Creating output directory: $outputDir"
+                    New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
+                }
+                
+                # Write JSON to file
+                $jsonContent | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+                
+                Write-Information "Snapshot exported successfully: $OutputPath" -InformationAction Continue
+                
+                $feedsCount = if ($Snapshot.feeds) { $Snapshot.feeds.Count } else { 0 }
+                $packagesCount = if ($Snapshot.packages) { $Snapshot.packages.Count } else { 0 }
+                
+                Write-Verbose "Exported snapshot contains $feedsCount feeds and $packagesCount packages"
+                
+                # Return summary information
+                return [PSCustomObject]@{
+                    SnapshotPath = $OutputPath
+                    FeedsCount = $feedsCount
+                    PackagesCount = $packagesCount
+                    FileSizeBytes = (Get-Item -Path $OutputPath).Length
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to export NIPKG snapshot to JSON - OutputPath: '$OutputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $OutputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Export-NipkgSnapshotToJson operation"
     }
 }
 
@@ -595,4 +654,5 @@ Export-ModuleMember -Function `
     ,   Get-FeedsInfo `
     ,   Remove-Feeds `
     ,   Install-NipkgManager `
-    ,   New-NipkgSnapshot
+    ,   New-NipkgSnapshot `
+    ,   Export-NipkgSnapshotToJson

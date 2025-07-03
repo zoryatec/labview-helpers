@@ -36,11 +36,14 @@ $packagesInfo = Get-PackagesInfo `
 # $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $packagesInfo
 # $utilitiesPackages | Sort-Object Section | Format-Table Package, Version, Architecture, Section
 
-New-NipkgSnapshot `
+$snapshot = New-NipkgSnapshot `
     -PackagesInfo $packagesInfo `
-    -FeedsInfo $feedsInfo `
-    -OutputPath "$tempDirectory\snapshot.json" 
+    -FeedsInfo $feedsInfo 
 
+
+Export-NipkgSnapshotToJson `
+    -Snapshot $snapshot `
+    -OutputPath "$tempDirectory\snapshot.json"
 
 # Your raw output (from file or command)
 

@@ -63,8 +63,9 @@
         'Get-ApplicationSoftwarePackages',
         'Get-FeedsInfo',
         'Remove-Feeds',
-        'Install-NipkgManager'
-        'New-NipkgSnapshot'
+        'Install-NipkgManager',
+        'New-NipkgSnapshot',
+        "Export-NipkgSnapshotToJson"
     )
     
     # Cmdlets to export from this module
