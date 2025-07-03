@@ -1,8 +1,3 @@
-$srcDirectory = "$PSScriptRoot\..\LabViewHelpers"
-$modulePath = "$srcDirectory\LabViewHelpers.psd1"
-
-Import-Module -Name $modulePath -Force
-
 $niLicenseCmdDirectory = 'C:\\Program Files (x86)\\National Instruments\\Shared\\License Manager'
 $labViewCliDirectory = "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI"
 $labViewDirectory = "C:\\Program Files (x86)\\National Instruments\\LabVIEW 2025"
