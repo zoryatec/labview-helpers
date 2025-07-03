@@ -3,7 +3,7 @@ test/manual-docker/installer-nipkg/*
 test/manual-docker/installers/*
 test/manual-docker/installers-iso/*
 test/manual-docker/test-temp/*
-test/manual-docker/src/*
+test/manual-docker/LabViewHelpers/*
 
 test/manual/test-temp/*
 

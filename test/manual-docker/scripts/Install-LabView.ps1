@@ -1,4 +1,4 @@
-$srcDirectory = "$PSScriptRoot\..\src"
+$srcDirectory = "$PSScriptRoot\..\LabViewHelpers"
 $modulePath = "$srcDirectory\LabViewHelpers.psd1"
 
 Import-Module -Name $modulePath -Force
