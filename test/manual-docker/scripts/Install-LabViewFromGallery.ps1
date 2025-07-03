@@ -1,6 +1,7 @@
 $installScript = "$PSScriptRoot\Install-LabView.ps1"
 
-Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Install-PackageProvider -Name NuGet -Force -Scope CurrentUser
 Install-Module -Name LabViewHelpers -Force -Scope CurrentUser
 
 & $installScript 
