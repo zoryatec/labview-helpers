@@ -71,4 +71,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Made with ❤️ by [Zoryatec](https://github.com/zoryatec)**
+**Made by [Zoryatec](https://github.com/zoryatec)**
