@@ -1389,9 +1389,17 @@ function New-SnapshotFromInstaller {
 
             Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
 
+            $programingEnvironmentsPackages  = Get-ProgrammingEnvironmentsPackages -PackagesInfo $allPackages
+            $driversPackages  = Get-DriverPackages -PackagesInfo $allPackages
+            $applicationPackages  = Get-ApplicationSoftwarePackages -PackagesInfo $allPackages
+            $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $allPackages
+
+            $outputPackages = @($programingEnvironmentsPackages) +  @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
+
+            Write-Verbose "Filtered packages: $($outputPackages.Count) total packages from programming environments, drivers, applications, and utilities"
             # Convert packages to snapshot format
             $snapshotPackages = @()
-            foreach ($package in $allPackages) {
+            foreach ($package in $outputPackages) {
                 $snapshotPackages += [ordered]@{
                     name = $package.Package
                     version = $package.Version
@@ -1575,26 +1583,32 @@ function Apply-NipkgSnapshot {
 
                 if ($PSCmdlet.ShouldProcess("$($snapshot.packages.Count) packages", "Install NIPKG packages")) {
                     try {
-                        # Build the complete command
-                        $cmdArgs = @('install') + $installArgs
-                        if ($Force) {
-                            $cmdArgs += '--force'
-                        }
-                        $cmdArgs += '--accept-eulas'
-                        $cmdArgs += '--prevent-reboot'
 
-                        Write-Verbose "Executing: $NipkgCmdPath $($cmdArgs -join ' ')"
-                        
-                        # Execute the install command
-                        & $NipkgCmdPath @cmdArgs
-                        
-                        if ($LASTEXITCODE -eq 0) {
-                            $results.PackagesInstalled = $snapshot.packages.Count
-                            Write-Information "Successfully installed all packages" -InformationAction Continue
-                        } else {
-                            $results.PackagesFailed = $snapshot.packages.Count
-                            Write-Warning "Package installation failed (exit code: $LASTEXITCODE)"
+                        foreach ($package in $snapshot.packages) {
+                            Write-Host "Installing package: $($package.Package) version $($package.Version)"
+                            $packageSpec = "$($package.name)=$($package.version)"
+                            & $NipkgCmdPath install "$packageSpec" --accept-eulas --include-recommended -y  
                         }
+                        # # Build the complete command
+                        # $cmdArgs = @('install') + $installArgs
+                        # if ($Force) {
+                        #     $cmdArgs += '--force'
+                        # }
+                        # $cmdArgs += '--accept-eulas'
+                        # $cmdArgs += '--prevent-reboot'
+
+                        # Write-Verbose "Executing: $NipkgCmdPath $($cmdArgs -join ' ')"
+                        
+                        # # Execute the install command
+                        # & $NipkgCmdPath @cmdArgs
+                        
+                        # if ($LASTEXITCODE -eq 0) {
+                        #     $results.PackagesInstalled = $snapshot.packages.Count
+                        #     Write-Information "Successfully installed all packages" -InformationAction Continue
+                        # } else {
+                        #     $results.PackagesFailed = $snapshot.packages.Count
+                        #     Write-Warning "Package installation failed (exit code: $LASTEXITCODE)"
+                        # }
                     }
                     catch {
                         $results.PackagesFailed = $snapshot.packages.Count

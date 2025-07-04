@@ -310,29 +310,34 @@ function Install-LabViewOffline {
                 throw "LabVIEW installer directory not found: $LabViewInstallerDirectory"
             }
 
-            $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
-            $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"
+            $installerSnapshotFile  =  New-TemporaryFile 
+            $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
+            Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $installerSnapshotFile
+            Apply-NipkgSnapshot -SnapshotPath $installerSnapshot 
 
-            if ($NipkgInstallerPath -and (Test-Path -Path $NipkgInstallerPath)) {
-                Write-Information "Installing NIPKG manager first..." -InformationAction Continue
-                Install-NipkgManager -InstallerPath $NipkgInstallerPath
-            }
+            # $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
+            # $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"
 
-            # Verify NIPKG is available
-            Write-Information "Verifying NIPKG installation..." -InformationAction Continue
-            & $NipkgCmdPath --version
+            # if ($NipkgInstallerPath -and (Test-Path -Path $NipkgInstallerPath)) {
+            #     Write-Information "Installing NIPKG manager first..." -InformationAction Continue
+            #     Install-NipkgManager -InstallerPath $NipkgInstallerPath
+            # }
+
+            # # Verify NIPKG is available
+            # Write-Information "Verifying NIPKG installation..." -InformationAction Continue
+            # & $NipkgCmdPath --version
             
-            if ($LASTEXITCODE -ne 0) {
-                throw "NIPKG is not installed or not accessible at: $NipkgCmdPath"
-            }
+            # if ($LASTEXITCODE -ne 0) {
+            #     throw "NIPKG is not installed or not accessible at: $NipkgCmdPath"
+            # }
 
-            Write-Information "Adding feed directories..." -InformationAction Continue
-            Add-FeedDirectories -FeedsDirectory $feedsDirectory -NipkgCmdPath $NipkgCmdPath 
+            # Write-Information "Adding feed directories..." -InformationAction Continue
+            # Add-FeedDirectories -FeedsDirectory $feedsDirectory -NipkgCmdPath $NipkgCmdPath 
 
-            Write-Information "Starting LabVIEW installation..." -InformationAction Continue
-            Install-LabView -NipkgCmdPath $NipkgCmdPath
+            # Write-Information "Starting LabVIEW installation..." -InformationAction Continue
+            # Install-LabView -NipkgCmdPath $NipkgCmdPath
             
-            Write-Information "LabVIEW offline installation completed successfully" -InformationAction Continue
+            # Write-Information "LabVIEW offline installation completed successfully" -InformationAction Continue
         }
         catch {
             $errorMessage = "Failed to install LabVIEW offline. Error: $($_.Exception.Message)"
