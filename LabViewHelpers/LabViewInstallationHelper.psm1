@@ -297,7 +297,10 @@ function Install-LabViewOffline {
         [string]$LabViewInstallerDirectory,
         
         [Parameter()]
-        [string]$NipkgInstallerPath
+        [string]$NipkgInstallerPath,
+
+        [Parameter()]
+        [string]$InstallationSnapshotFile
     )
     
     begin {
@@ -316,10 +319,12 @@ function Install-LabViewOffline {
                 Install-NipkgManager -InstallerPath $NipkgInstallerPath
             }
 
-            $installerSnapshotFile  =  New-TemporaryFile 
+            if ([string]::IsNullOrEmpty($OutputSnapshotPath)) {
+                $InstallationSnapshotFile  =  New-TemporaryFile 
+            }
             $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
-            Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $installerSnapshotFile -Verbose
-            Apply-NipkgSnapshot -SnapshotPath $installerSnapshotFile  -NipkgCmdPath $NipkgCmdPath -Verbose
+            Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
+            Apply-NipkgSnapshot -SnapshotPath $InstallationSnapshotFile  -NipkgCmdPath $NipkgCmdPath -Verbose
 
             # $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
             # $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"

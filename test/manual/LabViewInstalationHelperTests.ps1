@@ -11,7 +11,11 @@ $nipkgCmdPath = "$nipkgCmdContainingDir\\nipkg.exe"
 $installerDirectory = Join-Path $PSScriptRoot ".." "manual-docker/installers/ni-labview-2025-community-x86_25.1.3_offline"
 $nipkgInstallerPath = Join-Path $PSScriptRoot ".." "manual-docker/installer-nipkg/Install.exe"
 
+
+$tempDirectory = "$PSScriptRoot/test-temp"
+$tempSnapshotFile = "$tempDirectory/installation-snapshot.json"
 Install-LabViewOffline `
     -LabViewInstallerDirectory $installerDirectory `
     -NipkgCmdPath $nipkgCmdPath `
-    -NipkgInstallerPath $nipkgInstallerPath
+    -NipkgInstallerPath $nipkgInstallerPath `
+    -InstallationSnapshotFile $tempSnapshotFile
