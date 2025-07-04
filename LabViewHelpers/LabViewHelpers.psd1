@@ -73,7 +73,8 @@
         'New-NipkgSnapshot',
         'New-SnapshotFromInstaller',
         "Export-NipkgSnapshotToJson",
-        "Import-NipkgSnapshotFromJson"
+        "Import-NipkgSnapshotFromJson",
+        "Apply-NipkgSnapshot"
     )
     
     # Cmdlets to export from this module

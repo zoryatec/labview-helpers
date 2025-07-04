@@ -10,7 +10,13 @@ $nipkgFunctions = @(
     'Get-NipkgCommandOutput',
     'ConvertFrom-NipkgOutput', 
     'Get-PackagesInfo',
-    'Get-PackagesInfoFromFile'
+    'Get-PackagesInfoFromFile',
+    'ConvertFrom-NipkgPackagesFile',
+    'Get-PackagesInfoFromNipkgFile',
+    'New-SnapshotFromInstaller',
+    'Apply-NipkgSnapshot',
+    'Export-NipkgSnapshotToJson',
+    'Import-NipkgSnapshotFromJson'
 )
 
 Write-Host "`nVerifying new NipkgHelper functions are exported:" -ForegroundColor Yellow
@@ -334,6 +340,41 @@ if (Test-Path $installerDirectory) {
 } else {
     Write-Host "✗ Installer directory not found: $installerDirectory" -ForegroundColor Red
     Write-Host "   This test requires the sample installer directory to be present." -ForegroundColor Yellow
+}
+
+Write-Host ""
+
+# Test Apply-NipkgSnapshot function availability (without making system changes)
+Write-Host "Testing Apply-NipkgSnapshot function availability..." -ForegroundColor Green
+
+if (Test-Path "$tempDirectory\snapshot.json") {
+    Write-Host "Found snapshot file: $tempDirectory\snapshot.json" -ForegroundColor Cyan
+    
+    # Test function availability and parameter validation only
+    Write-Host "✓ Apply-NipkgSnapshot function is available for manual testing" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "USAGE EXAMPLES:" -ForegroundColor Yellow
+    Write-Host "  # Apply complete snapshot (adds feeds and installs packages):" -ForegroundColor White
+    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json'" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  # Only add feeds (skip package installation):" -ForegroundColor White  
+    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -SkipPackages" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  # Only install packages (skip adding feeds):" -ForegroundColor White
+    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -SkipFeeds" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  # Use with specific NIPKG path and force installation:" -ForegroundColor White
+    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -NipkgCmdPath '$nipkgPath' -Force" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  # Preview what would be done (safe to run):" -ForegroundColor White
+    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -WhatIf" -ForegroundColor Gray
+    Write-Host ""
+    
+    Write-Host "WARNING: Apply-NipkgSnapshot makes system changes. Test manually with appropriate permissions." -ForegroundColor Red
+    
+} else {
+    Write-Host "✗ No snapshot file found at $tempDirectory\snapshot.json" -ForegroundColor Red
+    Write-Host "   Run the snapshot creation tests first to generate a test snapshot" -ForegroundColor Yellow
 }
 
 Write-Host ""

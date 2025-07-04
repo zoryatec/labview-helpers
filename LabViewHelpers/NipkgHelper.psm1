@@ -1420,6 +1420,224 @@ function New-SnapshotFromInstaller {
     }
 }
 
+function Apply-NipkgSnapshot {
+    <#
+    .SYNOPSIS
+        Applies a NIPKG snapshot by adding feeds and installing packages.
+
+    .DESCRIPTION
+        Imports a NIPKG snapshot from JSON and applies it to the system by:
+        1. Adding all feeds from the snapshot to NIPKG
+        2. Updating the package database
+        3. Installing all packages from the snapshot
+        
+        This function is useful for restoring a system to a specific state or
+        applying a known configuration from a snapshot file.
+
+    .PARAMETER SnapshotPath
+        Path to the JSON snapshot file created by Export-NipkgSnapshotToJson.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER SkipFeeds
+        Skip adding feeds from the snapshot (only install packages).
+
+    .PARAMETER SkipPackages
+        Skip installing packages from the snapshot (only add feeds).
+
+    .PARAMETER Force
+        Force installation of packages even if they are already installed.
+
+    .EXAMPLE
+        Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
+
+    .EXAMPLE
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -Force
+
+    .EXAMPLE
+        # Only add feeds, don't install packages
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -SkipPackages
+
+    .NOTES
+        This function requires administrator privileges for feed addition and package installation.
+        The operation can take significant time depending on the number of packages.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$SnapshotPath,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [switch]$SkipFeeds,
+        
+        [Parameter()]
+        [switch]$SkipPackages,
+        
+        [Parameter()]
+        [switch]$Force
+    )
+
+    begin {
+        Write-Verbose "Starting Apply-NipkgSnapshot operation"
+        
+        # Check if NIPKG command is available
+        try {
+            $null = Get-Command $NipkgCmdPath -ErrorAction Stop
+        }
+        catch {
+            throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
+        }
+    }
+    
+    process {
+        try {
+            # Import the snapshot
+            Write-Information "Importing NIPKG snapshot..." -InformationAction Continue
+            $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
+            
+            Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
+
+            $results = @{
+                FeedsAdded = 0
+                FeedsSkipped = 0
+                FeedsFailed = 0
+                PackagesInstalled = 0
+                PackagesSkipped = 0
+                PackagesFailed = 0
+            }
+
+            # Phase 1: Add feeds
+            if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
+                Write-Information "Phase 1: Adding feeds to NIPKG..." -InformationAction Continue
+                
+                foreach ($feed in $snapshot.feeds) {
+                    if ($PSCmdlet.ShouldProcess($feed.name, "Add NIPKG feed")) {
+                        try {
+                            Write-Verbose "Adding feed: $($feed.name) -> $($feed.uri)"
+                            Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
+                            
+                            & $NipkgCmdPath feed-add "$($feed.uri)" --name "$($feed.name)"
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                $results.FeedsAdded++
+                                Write-Verbose "Successfully added feed: $($feed.name)"
+                            } else {
+                                $results.FeedsFailed++
+                                Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
+                            }
+                        }
+                        catch {
+                            $results.FeedsFailed++
+                            Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
+                        }
+                    } else {
+                        $results.FeedsSkipped++
+                    }
+                }
+
+                # Update package database after adding feeds
+                if ($results.FeedsAdded -gt 0) {
+                    if ($PSCmdlet.ShouldProcess("NIPKG", "Update package database")) {
+                        Write-Information "Updating package database..." -InformationAction Continue
+                        & $NipkgCmdPath update
+                        
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Information "Package database updated successfully" -InformationAction Continue
+                        } else {
+                            Write-Warning "Package database update may have failed (exit code: $LASTEXITCODE)"
+                        }
+                    }
+                }
+            } else {
+                Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
+            }
+
+            # Phase 2: Install packages
+            if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
+                Write-Information "Phase 2: Installing packages..." -InformationAction Continue
+                
+                # Build install command arguments
+                $installArgs = @()
+                foreach ($package in $snapshot.packages) {
+                    # Add package with specific version
+                    $packageSpec = "$($package.name)=$($package.version)"
+                    $installArgs += $packageSpec
+                }
+                
+                Write-Information "Installing $($snapshot.packages.Count) packages..." -InformationAction Continue
+                Write-Verbose "Package specifications: $($installArgs -join ', ')"
+
+                if ($PSCmdlet.ShouldProcess("$($snapshot.packages.Count) packages", "Install NIPKG packages")) {
+                    try {
+                        # Build the complete command
+                        $cmdArgs = @('install') + $installArgs
+                        if ($Force) {
+                            $cmdArgs += '--force'
+                        }
+                        $cmdArgs += '--accept-eulas'
+                        $cmdArgs += '--prevent-reboot'
+
+                        Write-Verbose "Executing: $NipkgCmdPath $($cmdArgs -join ' ')"
+                        
+                        # Execute the install command
+                        & $NipkgCmdPath @cmdArgs
+                        
+                        if ($LASTEXITCODE -eq 0) {
+                            $results.PackagesInstalled = $snapshot.packages.Count
+                            Write-Information "Successfully installed all packages" -InformationAction Continue
+                        } else {
+                            $results.PackagesFailed = $snapshot.packages.Count
+                            Write-Warning "Package installation failed (exit code: $LASTEXITCODE)"
+                        }
+                    }
+                    catch {
+                        $results.PackagesFailed = $snapshot.packages.Count
+                        Write-Error "Failed to install packages: $($_.Exception.Message)"
+                    }
+                } else {
+                    $results.PackagesSkipped = $snapshot.packages.Count
+                }
+            } else {
+                Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
+            }
+
+            # Summary
+            Write-Information "Snapshot application completed" -InformationAction Continue
+            Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
+            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
+
+            # Return detailed results
+            return [PSCustomObject]@{
+                SnapshotPath = $SnapshotPath
+                FeedsTotal = $snapshot.feeds.Count
+                FeedsAdded = $results.FeedsAdded
+                FeedsSkipped = $results.FeedsSkipped
+                FeedsFailed = $results.FeedsFailed
+                PackagesTotal = $snapshot.packages.Count
+                PackagesInstalled = $results.PackagesInstalled
+                PackagesSkipped = $results.PackagesSkipped
+                PackagesFailed = $results.PackagesFailed
+                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0)
+            }
+        }
+        catch {
+            $errorMessage = "Failed to apply NIPKG snapshot - SnapshotPath: '$SnapshotPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $SnapshotPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Apply-NipkgSnapshot operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -1440,5 +1658,4 @@ Export-ModuleMember -Function `
     ,   New-SnapshotFromInstaller `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
-    ,   Test-NipkgAvailability `
-    ,   New-SnapshotFromInstaller
+    ,   Apply-NipkgSnapshot
