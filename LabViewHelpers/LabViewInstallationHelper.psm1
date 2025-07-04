@@ -319,7 +319,7 @@ function Install-LabViewOffline {
                 Install-NipkgManager -InstallerPath $NipkgInstallerPath
             }
 
-            if ([string]::IsNullOrEmpty($OutputSnapshotPath)) {
+            if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
                 $InstallationSnapshotFile  =  New-TemporaryFile 
             }
             $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
