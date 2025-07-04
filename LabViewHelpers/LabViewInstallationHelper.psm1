@@ -310,10 +310,16 @@ function Install-LabViewOffline {
                 throw "LabVIEW installer directory not found: $LabViewInstallerDirectory"
             }
 
+
+            if ($NipkgInstallerPath -and (Test-Path -Path $NipkgInstallerPath)) {
+                Write-Information "Installing NIPKG manager first..." -InformationAction Continue
+                Install-NipkgManager -InstallerPath $NipkgInstallerPath
+            }
+
             $installerSnapshotFile  =  New-TemporaryFile 
             $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $installerSnapshotFile -Verbose
-            Apply-NipkgSnapshot -SnapshotPath $installerSnapshot  -NipkgCmdPath $NipkgCmdPath -Verbose
+            Apply-NipkgSnapshot -SnapshotPath $installerSnapshotFile  -NipkgCmdPath $NipkgCmdPath -Verbose
 
             # $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
             # $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"

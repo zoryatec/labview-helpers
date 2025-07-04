@@ -1495,12 +1495,12 @@ function Apply-NipkgSnapshot {
         Write-Verbose "Starting Apply-NipkgSnapshot operation"
         
         # Check if NIPKG command is available
-        try {
-            $null = Get-Command $NipkgCmdPath -ErrorAction Stop
-        }
-        catch {
-            throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
-        }
+        # try {
+        #     $null = Get-Command $NipkgCmdPath -ErrorAction Stop
+        # }
+        # catch {
+        #     throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
+        # }
     }
     
     process {
@@ -1530,7 +1530,7 @@ function Apply-NipkgSnapshot {
                             Write-Verbose "Adding feed: $($feed.name) -> $($feed.uri)"
                             Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
                             
-                            & $NipkgCmdPath feed-add "$($feed.uri)" --name "$($feed.name)"
+                            & $NipkgCmdPath feed-add "$($feed.uri)"
                             
                             if ($LASTEXITCODE -eq 0) {
                                 $results.FeedsAdded++
