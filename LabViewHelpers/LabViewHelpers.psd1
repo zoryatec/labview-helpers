@@ -3,7 +3,7 @@
     # Generated on: June 30, 2025
     
     # Module Information
-    ModuleVersion = '0.1.0'
+    ModuleVersion = '0.2.0'
     
     # Supported PowerShell version
     PowerShellVersion = '5.1'
@@ -56,7 +56,11 @@
         
         # NipkgHelper functions
         'Add-FeedDirectories',
+        'Test-NipkgAvailability',
+        'Get-NipkgCommandOutput',
+        'ConvertFrom-NipkgOutput',
         'Get-PackagesInfo',
+        'Get-PackagesInfoFromFile',
         'Get-DriverPackages',
         'Get-ProgrammingEnvironmentsPackages',
         'Get-UtilitiesPackages',

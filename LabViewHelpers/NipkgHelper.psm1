@@ -7,6 +7,15 @@
 .DESCRIPTION
     Provides comprehensive functions for managing National Instruments packages using NIPKG.
     Supports feed management, package installation, and package information retrieval.
+    
+    ARCHITECTURE:
+    The module uses a modular approach for package information retrieval:
+    - Get-NipkgCommandOutput: Executes NIPKG commands and returns raw output
+    - ConvertFrom-NipkgOutput: Parses raw NIPKG output into structured objects
+    - Get-PackagesInfo: Convenience function combining command execution and parsing
+    - Get-PackagesInfoFromFile: Parses NIPKG output from saved files
+    
+    This separation allows for flexible data sources and easier testing.
 
 .NOTES
     File Name      : NipkgHelper.psm1
@@ -213,6 +222,206 @@ function Remove-Feeds {
 
 
 
+function Get-NipkgCommandOutput {
+    <#
+    .SYNOPSIS
+        Executes NIPKG command and returns raw output lines.
+
+    .DESCRIPTION
+        Executes the specified NIPKG command and returns the raw output as an array of lines.
+        This function handles only command execution, not parsing.
+
+    .PARAMETER Type
+        Specifies whether to get 'installed' or 'available' packages.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        $output = Get-NipkgCommandOutput -Type "installed"
+
+    .EXAMPLE
+        $output = Get-NipkgCommandOutput -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns an array of strings representing the raw command output.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateSet("installed", "available")]
+        [string]$Type,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg" 
+    )
+
+    begin {
+        Write-Verbose "Starting Get-NipkgCommandOutput operation"
+        
+        # Check if NIPKG command is available
+        try {
+            $null = Get-Command $NipkgCmdPath -ErrorAction Stop
+        }
+        catch {
+            throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
+        }
+    }
+    
+    process {
+        try {
+            $subCmd = if ($Type -eq "installed") { "info-installed" } else { "info" }
+            Write-Verbose "Executing NIPKG command: $NipkgCmdPath $subCmd"
+            
+            $lines = & $NipkgCmdPath $subCmd
+            
+            # Handle empty or null output
+            if (-not $lines) {
+                Write-Warning "NIPKG command returned no output"
+                return @()
+            }
+            
+            # Ensure we have an array and filter out any null/empty entries that might cause binding issues
+            $filteredLines = @()
+            foreach ($line in $lines) {
+                if ($null -ne $line) {
+                    $filteredLines += $line.ToString()
+                }
+            }
+            
+            if ($filteredLines.Count -eq 0) {
+                Write-Warning "No valid output lines after filtering"
+                return @()
+            }
+            
+            Write-Verbose "Command executed successfully, returned $($filteredLines.Count) valid lines"
+            
+            return $filteredLines
+        }
+        catch {
+            $errorMessage = "Failed to execute NIPKG command - Type: '$Type', Command: '$NipkgCmdPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Type
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-NipkgCommandOutput operation"
+    }
+}
+
+function ConvertFrom-NipkgOutput {
+    <#
+    .SYNOPSIS
+        Parses NIPKG command output into structured package information.
+
+    .DESCRIPTION
+        Takes raw NIPKG command output lines and parses them into structured PSCustomObjects
+        containing package properties. Handles package separation and key-value parsing.
+
+    .PARAMETER OutputLines
+        Array of strings representing the raw NIPKG command output.
+
+    .EXAMPLE
+        $output = Get-NipkgCommandOutput -Type "installed"
+        $packages = ConvertFrom-NipkgOutput -OutputLines $output
+
+    .EXAMPLE
+        $lines = @("Package: example", "Version: 1.0.0", "", "", "", "Package: another", "Version: 2.0.0")
+        $packages = ConvertFrom-NipkgOutput -OutputLines $lines
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the output.
+        Uses 3+ consecutive blank lines as package separators.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$OutputLines
+    )
+
+    begin {
+        Write-Verbose "Starting ConvertFrom-NipkgOutput operation"
+    }
+    
+    process {
+        try {
+            # Handle empty input
+            if (-not $OutputLines -or $OutputLines.Count -eq 0) {
+                Write-Warning "No output lines provided for parsing"
+                return @()
+            }
+            
+            # Variables to hold packages
+            $packages = @()
+            $currentPackage = @()
+            $blankLineCount = 0
+
+            Write-Verbose "Processing $($OutputLines.Count) output lines"
+
+            foreach ($line in $OutputLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) {
+                    # Increment count for blank lines
+                    $blankLineCount++
+                    # If 3 or more consecutive blank lines, start a new package block
+                    if ($blankLineCount -ge 3) {
+                        if ($currentPackage.Count -gt 0) {
+                            $packages += ,@($currentPackage)
+                            $currentPackage = @()
+                        }
+                        # Reset blank line count after splitting
+                        $blankLineCount = 0
+                    }
+                }
+                else {
+                    # Non-blank line, reset blank line count and add to current package
+                    $blankLineCount = 0
+                    $currentPackage += $line
+                }
+            }
+
+            # Add last package if any lines remain
+            if ($currentPackage.Count -gt 0) {
+                $packages += ,@($currentPackage)
+            }
+
+            Write-Verbose "Split output into $($packages.Count) package blocks"
+
+            # Parse each package block into key-value pairs
+            $parsedPackages = @()
+
+            foreach ($packageLines in $packages) {
+                $packageProps = @{}
+                foreach ($line in $packageLines) {
+                    # Split on first colon
+                    $key, $value = $line -split ":\s*", 2
+                    if ($key -and $value) {
+                        $packageProps[$key] = $value
+                    }
+                }
+                if ($packageProps.Count -gt 0) {
+                    $parsedPackages += [PSCustomObject]$packageProps
+                }
+            }
+
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from output"
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to parse NIPKG output. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidData -TargetObject $OutputLines
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed ConvertFrom-NipkgOutput operation"
+    }
+}
+
 function Get-PackagesInfo {
     <#
     .SYNOPSIS
@@ -220,7 +429,8 @@ function Get-PackagesInfo {
 
     .DESCRIPTION
         Gets detailed information about either installed or available packages from NIPKG,
-        parsing the output into structured PSCustomObject format.
+        parsing the output into structured PSCustomObject format. This function combines
+        command execution and output parsing for convenience.
 
     .PARAMETER Type
         Specifies whether to get 'installed' or 'available' packages.
@@ -236,6 +446,7 @@ function Get-PackagesInfo {
 
     .NOTES
         Returns an array of PSCustomObjects with package properties parsed from NIPKG output.
+        This function is a convenience wrapper around Get-NipkgCommandOutput and ConvertFrom-NipkgOutput.
     #>
     [CmdletBinding()]
     param (
@@ -248,58 +459,106 @@ function Get-PackagesInfo {
         [string]$NipkgCmdPath = "nipkg" 
     )
 
-    $subCmd = if ($Type -eq "installed") { "info-installed" } else { "info" }
-    $lines = & $NipkgCmdPath $subCmd
-    # Variables to hold packages
-    $packages = @()
-    $currentPackage = @()
-    $blankLineCount = 0
-
-    foreach ($line in $lines) {
-        if ([string]::IsNullOrWhiteSpace($line)) {
-            # Increment count for blank lines
-            $blankLineCount++
-            # If 3 or more consecutive blank lines, start a new package block
-            if ($blankLineCount -ge 3) {
-                if ($currentPackage.Count -gt 0) {
-                    $packages += ,@($currentPackage)
-                    $currentPackage = @()
-                }
-                # Reset blank line count after splitting
-                $blankLineCount = 0
+    begin {
+        Write-Verbose "Starting Get-PackagesInfo operation"
+    }
+    
+    process {
+        try {
+            # Get raw command output
+            $outputLines = Get-NipkgCommandOutput -Type $Type -NipkgCmdPath $NipkgCmdPath
+            
+            # Handle empty output
+            if (-not $outputLines -or $outputLines.Count -eq 0) {
+                Write-Warning "No package information available for type: $Type"
+                return @()
             }
+            
+            # Parse the output into structured format
+            $parsedPackages = ConvertFrom-NipkgOutput -OutputLines $outputLines
+            
+            Write-Verbose "Retrieved and parsed $($parsedPackages.Count) packages"
+            return $parsedPackages
         }
-        else {
-            # Non-blank line, reset blank line count and add to current package
-            $blankLineCount = 0
-            $currentPackage += $line
+        catch {
+            $errorMessage = "Failed to get packages info - Type: '$Type'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Type
+            throw
         }
     }
-
-    # Add last package if any lines remain
-    if ($currentPackage.Count -gt 0) {
-        $packages += ,@($currentPackage)
+    
+    end {
+        Write-Verbose "Completed Get-PackagesInfo operation"
     }
+}
 
+function Get-PackagesInfoFromFile {
+    <#
+    .SYNOPSIS
+        Retrieves package information from a saved NIPKG output file.
 
-    ## 🛠️ Step 3: Parse each package block into key-value pairs
+    .DESCRIPTION
+        Reads NIPKG command output from a file and parses it into structured PSCustomObject format.
+        This is useful for parsing previously saved NIPKG output or testing with sample data.
 
+    .PARAMETER InputPath
+        Path to the file containing NIPKG command output.
 
-    $parsedPackages = @()
+    .EXAMPLE
+        Get-PackagesInfoFromFile -InputPath "C:\temp\nipkg-output.txt"
 
-    foreach ($packageLines in $packages) {
-        $packageProps = @{}
-        foreach ($line in $packageLines) {
-            # Split on first colon
-            $key, $value = $line -split ":\s*", 2
-            if ($key -and $value) {
-                $packageProps[$key] = $value
+    .EXAMPLE
+        # Save output to file first, then parse it
+        nipkg info-installed > "C:\temp\installed-packages.txt"
+        $packages = Get-PackagesInfoFromFile -InputPath "C:\temp\installed-packages.txt"
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the file content.
+        The file should contain raw NIPKG command output in the same format as 'nipkg info' or 'nipkg info-installed'.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackagesInfoFromFile operation"
+    }
+    
+    process {
+        try {
+            # Validate input file exists
+            if (-not (Test-Path -Path $InputPath)) {
+                throw "Input file not found: $InputPath"
             }
-        }
-        $parsedPackages += [PSCustomObject]$packageProps
-    }
 
-    return $parsedPackages
+            Write-Information "Reading NIPKG output from file..." -InformationAction Continue
+            Write-Verbose "Reading file: $InputPath"
+            
+            # Read file content as array of lines
+            $outputLines = Get-Content -Path $InputPath -Encoding UTF8
+            Write-Verbose "Read $($outputLines.Count) lines from file"
+            
+            # Parse the output using the existing parser
+            $parsedPackages = ConvertFrom-NipkgOutput -OutputLines $outputLines
+            
+            Write-Information "Parsed packages from file successfully: $InputPath" -InformationAction Continue
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from file"
+            
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to get packages info from file - InputPath: '$InputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackagesInfoFromFile operation"
+    }
 }
 
 function Get-DriverPackages {
@@ -440,38 +699,74 @@ function Install-NipkgManager {
         [string]$InstallerPath
     )
 
-    # & $InstallerPath `
-    #     --quiet `
-    #     --accept-eulas `
-    #     --prevent-reboot
-    $timeout = 300000  # 5 minutes
+    begin {
+        Write-Verbose "Starting Install-NipkgManager operation"
+    }
+    
+    process {
+        try {
+            if (-not (Test-Path -Path $InstallerPath)) {
+                throw "Installer not found: $InstallerPath"
+            }
 
-    # Set up the process start info
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo.FileName = $InstallerPath
-    $process.StartInfo.Arguments = "--quiet --accept-eulas --prevent-reboot"
-    $process.StartInfo.RedirectStandardOutput = $true
-    $process.StartInfo.RedirectStandardError = $true
-    $process.StartInfo.UseShellExecute = $false
-    $process.StartInfo.CreateNoWindow = $false
+            if ($PSCmdlet.ShouldProcess($InstallerPath, "Install NI Package Manager")) {
+                Write-Information "Installing NI Package Manager..." -InformationAction Continue
+                
+                $timeout = 300000  # 5 minutes
 
-    # Start the process
-    $process.Start()
+                # Set up the process start info
+                $process = New-Object System.Diagnostics.Process
+                $process.StartInfo.FileName = $InstallerPath
+                $process.StartInfo.Arguments = "--quiet --accept-eulas --prevent-reboot"
+                $process.StartInfo.RedirectStandardOutput = $true
+                $process.StartInfo.RedirectStandardError = $true
+                $process.StartInfo.UseShellExecute = $false
+                $process.StartInfo.CreateNoWindow = $false
 
-    # Wait for it to exit
-    $process.WaitForExit($timeout)
+                # Start the process
+                Write-Verbose "Starting installer process: $InstallerPath"
+                $process.Start()
 
-    # Capture the exit code
-    $exitCode = $process.ExitCode
+                # Wait for it to exit
+                $process.WaitForExit($timeout)
 
-    # Optionally capture output or error text
-    $output = $process.StandardOutput.ReadToEnd()
-    $errorOutput = $process.StandardError.ReadToEnd()
+                # Capture the exit code
+                $exitCode = $process.ExitCode
 
-    # Display results
-    Write-Host "Exit Code: $exitCode"
-    Write-Host "Output: $output"
-    Write-Host "Error Output: $errorOutput"
+                # Optionally capture output or error text
+                $output = $process.StandardOutput.ReadToEnd()
+                $errorOutput = $process.StandardError.ReadToEnd()
+
+                # Display results
+                Write-Information "Installation completed with exit code: $exitCode" -InformationAction Continue
+                Write-Verbose "Installer output: $output"
+                
+                if ($errorOutput) {
+                    Write-Warning "Installer error output: $errorOutput"
+                }
+
+                if ($exitCode -ne 0) {
+                    Write-Warning "Installation may have failed with exit code: $exitCode"
+                }
+                
+                return [PSCustomObject]@{
+                    ExitCode = $exitCode
+                    Output = $output
+                    ErrorOutput = $errorOutput
+                    InstallerPath = $InstallerPath
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to install NI Package Manager - InstallerPath: '$InstallerPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InstallerPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Install-NipkgManager operation"
+    }
 }
 
 function New-NipkgSnapshot {
@@ -743,9 +1038,76 @@ function Import-NipkgSnapshotFromJson {
     }
 }
 
+function Test-NipkgAvailability {
+    <#
+    .SYNOPSIS
+        Tests if NI Package Manager is available and accessible.
+
+    .DESCRIPTION
+        Checks if the NIPKG command is available and can be executed.
+        This is useful for troubleshooting connection issues.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        Test-NipkgAvailability
+
+    .EXAMPLE
+        Test-NipkgAvailability -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns $true if NIPKG is available, $false otherwise.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg" 
+    )
+
+    begin {
+        Write-Verbose "Starting Test-NipkgAvailability operation"
+    }
+    
+    process {
+        try {
+            # Test if command exists
+            $command = Get-Command $NipkgCmdPath -ErrorAction Stop
+            Write-Verbose "NIPKG command found at: $($command.Source)"
+            
+            # Test if command can execute (try getting version)
+            $versionOutput = & $NipkgCmdPath --version 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Information "NIPKG is available and working" -InformationAction Continue
+                Write-Verbose "NIPKG version output: $versionOutput"
+                return $true
+            } else {
+                Write-Warning "NIPKG command exists but failed to execute properly (exit code: $LASTEXITCODE)"
+                Write-Verbose "NIPKG error output: $versionOutput"
+                return $false
+            }
+        }
+        catch {
+            Write-Warning "NIPKG command not found or not accessible: $NipkgCmdPath"
+            Write-Verbose "Error details: $($_.Exception.Message)"
+            return $false
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Test-NipkgAvailability operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
+    ,   Test-NipkgAvailability `
+    ,   Get-NipkgCommandOutput `
+    ,   ConvertFrom-NipkgOutput `
     ,   Get-PackagesInfo `
+    ,   Get-PackagesInfoFromFile `
     ,   Get-DriverPackages `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
@@ -755,4 +1117,5 @@ Export-ModuleMember -Function `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `
     ,   Export-NipkgSnapshotToJson `
-    ,   Import-NipkgSnapshotFromJson
+    ,   Import-NipkgSnapshotFromJson `
+    ,   Test-NipkgAvailability
