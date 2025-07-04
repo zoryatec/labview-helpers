@@ -1,0 +1,65 @@
+﻿Architecture: windows_x64
+CompatibilityVersion: 0
+Conflicts: ni-package-manager
+Description: Package for displaying the IVI Foundation Inc. License Agreement
+DisplayName: IVI Foundation Inc. License Agreement
+DisplayVersion: 2025 Q1
+EulaTitle: IVI
+Filename: ../../pool/eula-ivi_25.0.0.49255-0+f103_windows_x64.nipkg
+Homepage: https://www.ni.com
+MD5Sum: 1f210835d6745f294ae03f28fa225f18
+MD5sum: 1f210835d6745f294ae03f28fa225f18
+Maintainer: National Instruments <support@ni.com>
+OsRequires: >= 10.0.14393
+OsSupport: WINDOWS_11 WINDOWS_SERVER_2022 WINDOWS_10_64BIT WINDOWS_SERVER_2019_64BIT
+Package: eula-ivi
+Plugin: eula
+Priority: standard
+Section: Infrastructure
+Size: 4020
+UserVisible: no
+Version: 25.0.0.49255-0+f103
+
+Architecture: windows_x64
+CompatibilityVersion: 0
+Conflicts: ni-package-manager
+Description: Package for displaying the JKI VIPM EULA License Agreement
+DisplayName: JKI VIPM EULA License Agreement
+DisplayVersion: 2025 Q1
+EulaTitle: JKI VI Package Manager
+Filename: ../../pool/eula-jki-vimp_25.0.0.49255-0+f103_windows_x64.nipkg
+Homepage: https://www.ni.com
+MD5Sum: ae892018a4e777f315efa45a40948502
+MD5sum: ae892018a4e777f315efa45a40948502
+Maintainer: National Instruments <support@ni.com>
+OsRequires: >= 10.0.14393
+OsSupport: WINDOWS_11 WINDOWS_SERVER_2022 WINDOWS_10_64BIT WINDOWS_SERVER_2019_64BIT
+Package: eula-jki-vimp
+Plugin: eula
+Priority: standard
+Section: Infrastructure
+Size: 17732
+UserVisible: no
+Version: 25.0.0.49255-0+f103
+
+Architecture: windows_x64
+CompatibilityVersion: 0
+Conflicts: ni-package-manager
+Description: Package for displaying the Microsoft .NET Framework 4.8 License Agreement
+DisplayName: Microsoft .NET Framework 4.8 License Agreement
+DisplayVersion: 2025 Q1
+EulaTitle: .NET 4.8
+Filename: ../../pool/eula-ms-dotnet-4.8_25.0.0.49255-0+f103_windows_x64.nipkg
+Homepage: https://www.ni.com
+MD5Sum: 96bc89544f3f48623edb0d579daf7ae5
+MD5sum: 96bc89544f3f48623edb0d579daf7ae5
+Maintainer: National Instruments <support@ni.com>
+OsRequires: >= 10.0.14393
+OsSupport: WINDOWS_11 WINDOWS_SERVER_2022 WINDOWS_10_64BIT WINDOWS_SERVER_2019_64BIT
+Package: eula-ms-dotnet-4.8
+Plugin: eula
+Priority: standard
+Section: Infrastructure
+Size: 31692
+UserVisible: no
+Version: 25.0.0.49255-0+f103
