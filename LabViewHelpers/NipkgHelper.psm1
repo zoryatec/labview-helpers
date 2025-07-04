@@ -16,6 +16,7 @@
     - Get-PackagesInfo: Convenience function combining command execution and parsing
     - Get-PackagesInfoFromFile: Parses NIPKG command output from saved files
     - Get-PackagesInfoFromNipkgFile: Parses NIPKG feed Packages files
+    - New-SnapshotFromInstaller: Creates snapshots from installer directory structures
     
     This separation allows for flexible data sources and easier testing.
 
@@ -1273,6 +1274,152 @@ function Test-NipkgAvailability {
     }
 }
 
+function New-SnapshotFromInstaller {
+    <#
+    .SYNOPSIS
+        Creates a NIPKG snapshot from an installer directory structure.
+
+    .DESCRIPTION
+        Scans an installer directory for feeds and packages, then creates a snapshot object
+        containing all available feeds and packages from the installer. This is useful for
+        creating snapshots from offline installers before installation.
+
+    .PARAMETER InstallerDirectory
+        Path to the installer directory containing the feeds subdirectory.
+
+    .PARAMETER IncludeFeeds
+        Whether to include feed information in the snapshot. Defaults to $true.
+
+    .EXAMPLE
+        $snapshot = New-SnapshotFromInstaller -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
+
+    .EXAMPLE
+        $snapshot = New-SnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
+
+    .NOTES
+        Returns a hashtable with:
+        - feeds: Array of feeds with name and uri (if IncludeFeeds is true)
+        - packages: Array of packages with name and version from all feeds
+        
+        The function looks for a 'feeds' subdirectory and scans all subdirectories for Packages files.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InstallerDirectory,
+        
+        [Parameter()]
+        [bool]$IncludeFeeds = $true
+    )
+
+    begin {
+        Write-Verbose "Starting New-SnapshotFromInstaller operation"
+    }
+    
+    process {
+        try {
+            # Validate installer directory exists
+            if (-not (Test-Path -Path $InstallerDirectory -PathType Container)) {
+                throw "Installer directory not found: $InstallerDirectory"
+            }
+
+            Write-Information "Scanning installer directory for feeds and packages..." -InformationAction Continue
+            Write-Verbose "Installer directory: $InstallerDirectory"
+
+            # Look for feeds directory
+            $feedsDirectory = Join-Path -Path $InstallerDirectory -ChildPath "feeds"
+            if (-not (Test-Path -Path $feedsDirectory -PathType Container)) {
+                throw "Feeds directory not found in installer: $feedsDirectory"
+            }
+
+            Write-Verbose "Found feeds directory: $feedsDirectory"
+
+            # Get all feed subdirectories
+            $feedSubdirectories = Get-ChildItem -Path $feedsDirectory -Directory -ErrorAction Stop
+            
+            if ($feedSubdirectories.Count -eq 0) {
+                Write-Warning "No feed subdirectories found in: $feedsDirectory"
+                return @{
+                    feeds = @()
+                    packages = @()
+                }
+            }
+
+            Write-Information "Found $($feedSubdirectories.Count) feed(s) in installer" -InformationAction Continue
+
+            # Initialize collections
+            $allPackages = @()
+            $allFeeds = @()
+
+            # Process each feed subdirectory
+            foreach ($feedDir in $feedSubdirectories) {
+                Write-Verbose "Processing feed: $($feedDir.Name)"
+                
+                # Look for Packages file in this feed
+                $packagesFile = Join-Path -Path $feedDir.FullName -ChildPath "Packages"
+                
+                if (Test-Path -Path $packagesFile -PathType Leaf) {
+                    Write-Information "Processing packages from feed: $($feedDir.Name)" -InformationAction Continue
+                    
+                    try {
+                        # Parse packages from this feed
+                        $feedPackages = Get-PackagesInfoFromNipkgFile -InputPath $packagesFile
+                        Write-Verbose "Found $($feedPackages.Count) packages in feed: $($feedDir.Name)"
+                        
+                        # Add packages to the combined collection
+                        $allPackages += $feedPackages
+                        
+                        # Add feed information if requested
+                        if ($IncludeFeeds) {
+                            $feedInfo = [ordered]@{
+                                name = $feedDir.Name
+                                uri = $feedDir.FullName
+                            }
+                            $allFeeds += $feedInfo
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to parse packages from feed '$($feedDir.Name)': $($_.Exception.Message)"
+                    }
+                } else {
+                    Write-Warning "No Packages file found in feed directory: $($feedDir.FullName)"
+                }
+            }
+
+            Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
+
+            # Convert packages to snapshot format
+            $snapshotPackages = @()
+            foreach ($package in $allPackages) {
+                $snapshotPackages += [ordered]@{
+                    name = $package.Package
+                    version = $package.Version
+                }
+            }
+
+            # Create the snapshot object
+            $snapshot = @{
+                feeds = $allFeeds
+                packages = $snapshotPackages
+            }
+            
+            Write-Verbose "Created snapshot with $($allFeeds.Count) feeds and $($snapshotPackages.Count) packages"
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to create snapshot from installer - InstallerDirectory: '$InstallerDirectory'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InstallerDirectory
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed New-SnapshotFromInstaller operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -1290,6 +1437,8 @@ Export-ModuleMember -Function `
     ,   Remove-Feeds `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `
+    ,   New-SnapshotFromInstaller `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
-    ,   Test-NipkgAvailability
+    ,   Test-NipkgAvailability `
+    ,   New-SnapshotFromInstaller

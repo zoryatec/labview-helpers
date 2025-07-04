@@ -251,3 +251,89 @@ if (Test-Path $nipkgPackagesFile) {
 }
 
 Write-Host ""
+
+# Test the new installer snapshot function
+Write-Host "Testing New-SnapshotFromInstaller function..." -ForegroundColor Green
+
+$installerDirectory = "$PSScriptRoot\..\manual-docker\installers\ni-labview-2025-community-x86_25.1.3_offline"
+if (Test-Path $installerDirectory) {
+    Write-Host "1. Creating snapshot from installer directory..." -ForegroundColor Yellow
+    Write-Host "   Installer: $installerDirectory" -ForegroundColor White
+    
+    try {
+        $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $installerDirectory -Verbose
+        Write-Host "   ✓ Created installer snapshot: $($installerSnapshot.feeds.Count) feeds, $($installerSnapshot.packages.Count) packages" -ForegroundColor Green
+
+        if ($installerSnapshot.feeds.Count -gt 0) {
+            Write-Host "   Feeds found in installer:" -ForegroundColor Yellow
+            foreach ($feed in $installerSnapshot.feeds) {
+                Write-Host "     - $($feed.name)" -ForegroundColor White
+            }
+        }
+
+        if ($installerSnapshot.packages.Count -gt 0) {
+            Write-Host "   Sample packages from installer:" -ForegroundColor Yellow
+            $installerSnapshot.packages | Select-Object -First 5 | ForEach-Object {
+                Write-Host "     - $($_.name): $($_.version)" -ForegroundColor White
+            }
+            
+            # Test different package types
+            Write-Host "   Package analysis:" -ForegroundColor Yellow
+            $packageNames = $installerSnapshot.packages | ForEach-Object { $_.name }
+            $labviewPackages = $packageNames | Where-Object { $_ -like "*labview*" }
+            $runtimePackages = $packageNames | Where-Object { $_ -like "*runtime*" }
+            $driverPackages = $packageNames | Where-Object { $_ -like "*driver*" -or $_ -like "*ni-*" }
+            
+            Write-Host "     - LabVIEW packages: $($labviewPackages.Count)" -ForegroundColor White
+            Write-Host "     - Runtime packages: $($runtimePackages.Count)" -ForegroundColor White
+            Write-Host "     - Driver packages: $($driverPackages.Count)" -ForegroundColor White
+        }
+
+        # Test exporting installer snapshot
+        Write-Host "2. Exporting installer snapshot to JSON..." -ForegroundColor Yellow
+        $installerSnapshotFile = "$tempDirectory\installer-snapshot.json"
+        
+        try {
+            $exportResult = Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $installerSnapshotFile
+            Write-Host "   ✓ Exported to: $installerSnapshotFile" -ForegroundColor Green
+            Write-Host "   ✓ File size: $($exportResult.FileSizeBytes) bytes" -ForegroundColor Green
+            
+            # Test reimporting
+            Write-Host "3. Testing import of installer snapshot..." -ForegroundColor Yellow
+            $reimported = Import-NipkgSnapshotFromJson -InputPath $installerSnapshotFile
+            
+            if ($reimported.packages.Count -eq $installerSnapshot.packages.Count) {
+                Write-Host "   ✓ Import test passed - package counts match!" -ForegroundColor Green
+            } else {
+                Write-Host "   ✗ Import test failed - package counts don't match!" -ForegroundColor Red
+            }
+        }
+        catch {
+            Write-Host "   ✗ Failed to export/import installer snapshot: $($_.Exception.Message)" -ForegroundColor Red
+        }
+
+        # Test without feeds
+        Write-Host "4. Testing installer snapshot without feeds..." -ForegroundColor Yellow
+        try {
+            $noFeedsSnapshot = New-SnapshotFromInstaller -InstallerDirectory $installerDirectory -IncludeFeeds $false
+            Write-Host "   ✓ Created snapshot without feeds: $($noFeedsSnapshot.feeds.Count) feeds, $($noFeedsSnapshot.packages.Count) packages" -ForegroundColor Green
+            
+            if ($noFeedsSnapshot.feeds.Count -eq 0 -and $noFeedsSnapshot.packages.Count -eq $installerSnapshot.packages.Count) {
+                Write-Host "   ✓ No-feeds test passed - 0 feeds, same package count!" -ForegroundColor Green
+            } else {
+                Write-Host "   ✗ No-feeds test failed - unexpected results!" -ForegroundColor Red
+            }
+        }
+        catch {
+            Write-Host "   ✗ Failed to create snapshot without feeds: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "   ✗ Failed to create installer snapshot: $($_.Exception.Message)" -ForegroundColor Red
+    }
+} else {
+    Write-Host "✗ Installer directory not found: $installerDirectory" -ForegroundColor Red
+    Write-Host "   This test requires the sample installer directory to be present." -ForegroundColor Yellow
+}
+
+Write-Host ""
