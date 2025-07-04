@@ -213,3 +213,41 @@ catch {
     Write-Host "This might indicate an issue with NIPKG or no packages installed" -ForegroundColor Yellow
 }
 Write-Host ""
+
+# Test the new NIPKG Packages file parsing function
+Write-Host "Testing Get-PackagesInfoFromNipkgFile function..." -ForegroundColor Green
+
+$nipkgPackagesFile = "$PSScriptRoot\test-data\Packages"
+if (Test-Path $nipkgPackagesFile) {
+    Write-Host "1. Parsing NIPKG Packages file: $nipkgPackagesFile" -ForegroundColor Yellow
+    
+    try {
+        $nipkgFilePackages = Get-PackagesInfoFromNipkgFile -InputPath $nipkgPackagesFile -Verbose
+        Write-Host "   ✓ Parsed $($nipkgFilePackages.Count) packages from NIPKG Packages file" -ForegroundColor Green
+
+        if ($nipkgFilePackages.Count -gt 0) {
+            Write-Host "   Sample packages from NIPKG file:" -ForegroundColor Yellow
+            foreach ($pkg in $nipkgFilePackages) {
+                Write-Host "     - $($pkg.Package) v$($pkg.Version) [$($pkg.Section)]" -ForegroundColor White
+            }
+            
+            # Test the specialized parser directly
+            Write-Host "2. Testing specialized ConvertFrom-NipkgPackagesFile parser..." -ForegroundColor Yellow
+            $fileLines = Get-Content -Path $nipkgPackagesFile -Encoding UTF8
+            $directParsed = ConvertFrom-NipkgPackagesFile -OutputLines $fileLines
+            
+            if ($directParsed.Count -eq $nipkgFilePackages.Count) {
+                Write-Host "   ✓ Direct parser test passed - counts match!" -ForegroundColor Green
+            } else {
+                Write-Host "   ✗ Direct parser test failed - counts don't match!" -ForegroundColor Red
+            }
+        }
+    }
+    catch {
+        Write-Host "   ✗ Failed to parse NIPKG Packages file: $($_.Exception.Message)" -ForegroundColor Red
+    }
+} else {
+    Write-Host "✗ NIPKG Packages test file not found: $nipkgPackagesFile" -ForegroundColor Red
+}
+
+Write-Host ""

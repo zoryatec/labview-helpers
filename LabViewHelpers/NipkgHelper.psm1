@@ -11,9 +11,11 @@
     ARCHITECTURE:
     The module uses a modular approach for package information retrieval:
     - Get-NipkgCommandOutput: Executes NIPKG commands and returns raw output
-    - ConvertFrom-NipkgOutput: Parses raw NIPKG output into structured objects
+    - ConvertFrom-NipkgOutput: Parses raw NIPKG command output (3+ blank line separators)
+    - ConvertFrom-NipkgPackagesFile: Parses NIPKG Packages files (single blank line separators)
     - Get-PackagesInfo: Convenience function combining command execution and parsing
-    - Get-PackagesInfoFromFile: Parses NIPKG output from saved files
+    - Get-PackagesInfoFromFile: Parses NIPKG command output from saved files
+    - Get-PackagesInfoFromNipkgFile: Parses NIPKG feed Packages files
     
     This separation allows for flexible data sources and easier testing.
 
@@ -422,6 +424,106 @@ function ConvertFrom-NipkgOutput {
     }
 }
 
+function ConvertFrom-NipkgPackagesFile {
+    <#
+    .SYNOPSIS
+        Parses NIPKG Packages file content into structured package information.
+
+    .DESCRIPTION
+        Takes content from NIPKG Packages files and parses it into structured PSCustomObjects.
+        This function is specifically designed for NIPKG feed Packages files which use single
+        blank line separation between packages (unlike command output which uses 3+ blank lines).
+
+    .PARAMETER OutputLines
+        Array of strings representing the content from a NIPKG Packages file.
+
+    .EXAMPLE
+        $lines = Get-Content "Packages" -Encoding UTF8
+        $packages = ConvertFrom-NipkgPackagesFile -OutputLines $lines
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the file content.
+        Uses single blank lines as package separators (NIPKG feed file format).
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$OutputLines
+    )
+
+    begin {
+        Write-Verbose "Starting ConvertFrom-NipkgPackagesFile operation"
+    }
+    
+    process {
+        try {
+            # Handle empty input
+            if (-not $OutputLines -or $OutputLines.Count -eq 0) {
+                Write-Warning "No output lines provided for parsing"
+                return @()
+            }
+            
+            # Variables to hold packages
+            $packages = @()
+            $currentPackage = @()
+
+            Write-Verbose "Processing $($OutputLines.Count) output lines"
+
+            foreach ($line in $OutputLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) {
+                    # Single blank line indicates end of package block in Packages files
+                    if ($currentPackage.Count -gt 0) {
+                        $packages += ,@($currentPackage)
+                        $currentPackage = @()
+                    }
+                }
+                else {
+                    # Non-blank line, add to current package
+                    $currentPackage += $line
+                }
+            }
+
+            # Add last package if any lines remain
+            if ($currentPackage.Count -gt 0) {
+                $packages += ,@($currentPackage)
+            }
+
+            Write-Verbose "Split output into $($packages.Count) package blocks"
+
+            # Parse each package block into key-value pairs
+            $parsedPackages = @()
+
+            foreach ($packageLines in $packages) {
+                $packageProps = @{}
+                foreach ($line in $packageLines) {
+                    # Split on first colon
+                    $key, $value = $line -split ":\s*", 2
+                    if ($key -and $value) {
+                        $packageProps[$key] = $value
+                    }
+                }
+                if ($packageProps.Count -gt 0) {
+                    $parsedPackages += [PSCustomObject]$packageProps
+                }
+            }
+
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from Packages file"
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to parse NIPKG Packages file content. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidData -TargetObject $OutputLines
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed ConvertFrom-NipkgPackagesFile operation"
+    }
+}
+
 function Get-PackagesInfo {
     <#
     .SYNOPSIS
@@ -558,6 +660,76 @@ function Get-PackagesInfoFromFile {
     
     end {
         Write-Verbose "Completed Get-PackagesInfoFromFile operation"
+    }
+}
+
+function Get-PackagesInfoFromNipkgFile {
+    <#
+    .SYNOPSIS
+        Retrieves package information from a NIPKG Packages file.
+
+    .DESCRIPTION
+        Reads and parses a NIPKG Packages file (typically found in feeds) and converts it into 
+        structured PSCustomObject format. This file format is the same as NIPKG command output
+        but stored in a file, commonly used in NIPKG feeds and repositories.
+
+    .PARAMETER InputPath
+        Path to the NIPKG Packages file to parse.
+
+    .EXAMPLE
+        Get-PackagesInfoFromNipkgFile -InputPath "C:\feeds\my-feed\Packages"
+
+    .EXAMPLE
+        $packages = Get-PackagesInfoFromNipkgFile -InputPath ".\test-data\Packages"
+        $packages | Where-Object { $_.Section -eq "Programming Environments" }
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the NIPKG Packages file.
+        The file format is the same as 'nipkg info' command output, with packages separated by blank lines
+        and properties in key: value format.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackagesInfoFromNipkgFile operation"
+    }
+    
+    process {
+        try {
+            # Validate input file exists
+            if (-not (Test-Path -Path $InputPath)) {
+                throw "NIPKG Packages file not found: $InputPath"
+            }
+
+            Write-Information "Reading NIPKG Packages file..." -InformationAction Continue
+            Write-Verbose "Reading file: $InputPath"
+            
+            # Read file content as array of lines
+            $outputLines = Get-Content -Path $InputPath -Encoding UTF8
+            Write-Verbose "Read $($outputLines.Count) lines from NIPKG Packages file"
+            
+            # Parse the output using the specialized Packages file parser
+            $parsedPackages = ConvertFrom-NipkgPackagesFile -OutputLines $outputLines
+            
+            Write-Information "Parsed packages from NIPKG file successfully: $InputPath" -InformationAction Continue
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from NIPKG Packages file"
+            
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to get packages info from NIPKG file - InputPath: '$InputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackagesInfoFromNipkgFile operation"
     }
 }
 
@@ -1106,8 +1278,10 @@ Export-ModuleMember -Function `
     ,   Test-NipkgAvailability `
     ,   Get-NipkgCommandOutput `
     ,   ConvertFrom-NipkgOutput `
+    ,   ConvertFrom-NipkgPackagesFile `
     ,   Get-PackagesInfo `
     ,   Get-PackagesInfoFromFile `
+    ,   Get-PackagesInfoFromNipkgFile `
     ,   Get-DriverPackages `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
