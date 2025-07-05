@@ -1567,11 +1567,11 @@ function Apply-NipkgSnapshot {
 
     .DESCRIPTION
         Imports a NIPKG snapshot from JSON and applies it to the system using a declarative approach:
-        1. Adding all feeds from the snapshot to NIPKG
-        2. Updating the package database
+        1. Analyzing current feed state vs. snapshot requirements and only adding missing feeds
+        2. Updating the package database if any feeds were added
         3. Analyzing current package state vs. snapshot requirements
         4. Installing missing packages, upgrading outdated packages, and downgrading newer packages
-        5. Leaving unchanged packages alone
+        5. Leaving unchanged feeds and packages alone
         
         The function compares the current system state with the snapshot and only performs
         necessary actions, making it safe to run multiple times (idempotent).
@@ -1687,6 +1687,7 @@ function Apply-NipkgSnapshot {
                 FeedsRemoved = 0
                 FeedsAdded = 0
                 FeedsSkipped = 0
+                FeedsUnchanged = 0
                 FeedsFailed = 0
                 SnapshotFeedsRemoved = 0
                 SnapshotFeedsRemovalFailed = 0
@@ -1729,33 +1730,77 @@ function Apply-NipkgSnapshot {
                 }
             }
 
-            # Phase 1: Add feeds
+            # Phase 1: Add feeds (declarative approach)
             if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
-                Write-Information "Phase 1: Adding feeds to NIPKG..." -InformationAction Continue
+                Write-Information "Phase 1: Processing feeds in declarative mode..." -InformationAction Continue
+                
+                # Get currently configured feeds
+                Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
+                try {
+                    $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
+                }
+                catch {
+                    Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
+                    $currentFeeds = @()
+                }
+                
+                # Create lookup table for current feeds (by name and path)
+                $currentFeedsLookup = @{}
+                foreach ($currentFeed in $currentFeeds) {
+                    # Create a key combining name and normalized path for comparison
+                    $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
+                    $lookupKey = "$($currentFeed.Name)|$normalizedPath"
+                    $currentFeedsLookup[$lookupKey] = $currentFeed
+                }
+                
+                Write-Information "Processing $($snapshot.feeds.Count) feeds from snapshot..." -InformationAction Continue
                 
                 foreach ($feed in $snapshot.feeds) {
-                    if ($PSCmdlet.ShouldProcess($feed.name, "Add NIPKG feed")) {
-                        try {
-                            Write-Verbose "Adding feed: $($feed.name) -> $($feed.uri)"
-                            Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
-                            
-                            & $NipkgCmdPath feed-add "$($feed.uri)"
-                            
-                            if ($LASTEXITCODE -eq 0) {
-                                $results.FeedsAdded++
-                                $snapshotFeedsAdded += $feed
-                                Write-Verbose "Successfully added feed: $($feed.name)"
-                            } else {
-                                $results.FeedsFailed++
-                                Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
+                    # Normalize the snapshot feed URI for comparison
+                    $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
+                    $feedLookupKey = "$($feed.name)|$normalizedUri"
+                    
+                    # Check if this feed already exists with the same name and URI
+                    if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
+                        $results.FeedsUnchanged++
+                        Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
+                        Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
+                        
+                        # Still track it as a snapshot feed in case we need to remove it later
+                        $snapshotFeedsAdded += $feed
+                    }
+                    else {
+                        # Check if a feed with the same name but different URI exists
+                        $existingFeedWithSameName = $currentFeeds | Where-Object { $_.Name -eq $feed.name }
+                        if ($existingFeedWithSameName) {
+                            Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
+                        }
+                        
+                        # Feed doesn't exist - add it
+                        if ($PSCmdlet.ShouldProcess($feed.name, "Add NIPKG feed")) {
+                            try {
+                                Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
+                                Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
+                                
+                                & $NipkgCmdPath feed-add "$($feed.uri)"
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $results.FeedsAdded++
+                                    $snapshotFeedsAdded += $feed
+                                    Write-Verbose "Successfully added feed: $($feed.name)"
+                                } else {
+                                    $results.FeedsFailed++
+                                    Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
+                                }
                             }
+                            catch {
+                                $results.FeedsFailed++
+                                Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
+                            }
+                        } else {
+                            $results.FeedsSkipped++
                         }
-                        catch {
-                            $results.FeedsFailed++
-                            Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
-                        }
-                    } else {
-                        $results.FeedsSkipped++
                     }
                 }
 
@@ -2045,7 +2090,7 @@ function Apply-NipkgSnapshot {
             if ($results.FeedsRemoved -gt 0) {
                 Write-Information "Existing feeds removed: $($results.FeedsRemoved)" -InformationAction Continue
             }
-            Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
+            Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsUnchanged) unchanged, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
             if ($results.SnapshotFeedsRemoved -gt 0) {
                 Write-Information "Snapshot feeds removed: $($results.SnapshotFeedsRemoved)" -InformationAction Continue
             }
@@ -2063,6 +2108,7 @@ function Apply-NipkgSnapshot {
                 FeedsRemoved = $results.FeedsRemoved
                 FeedsTotal = $snapshot.feeds.Count
                 FeedsAdded = $results.FeedsAdded
+                FeedsUnchanged = $results.FeedsUnchanged
                 FeedsSkipped = $results.FeedsSkipped
                 FeedsFailed = $results.FeedsFailed
                 SnapshotFeedsRemoved = $results.SnapshotFeedsRemoved

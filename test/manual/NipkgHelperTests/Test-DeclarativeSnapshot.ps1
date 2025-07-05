@@ -232,19 +232,25 @@ Write-Host "KEY FEATURES TESTED:" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "✓ Snapshot import/export functionality" -ForegroundColor Green
 Write-Host "✓ Current package state analysis" -ForegroundColor Green
-Write-Host "✓ Declarative action determination (install/upgrade/downgrade/none)" -ForegroundColor Green
+Write-Host "✓ Current feed state analysis" -ForegroundColor Green
+Write-Host "✓ Declarative action determination (install/upgrade/downgrade/none for packages)" -ForegroundColor Green
+Write-Host "✓ Declarative action determination (add/skip for feeds)" -ForegroundColor Green
 Write-Host "✓ Processing packages in dependency order" -ForegroundColor Green
+Write-Host "✓ Processing feeds declaratively" -ForegroundColor Green
 Write-Host "✓ Version comparison logic" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "DECLARATIVE BEHAVIOR:" -ForegroundColor Yellow
-Write-Host "- Only takes action when needed (install/upgrade/downgrade)" -ForegroundColor White
+Write-Host "- Only takes action when needed (install/upgrade/downgrade packages, add feeds)" -ForegroundColor White
 Write-Host "- Skips packages already at correct version" -ForegroundColor White
+Write-Host "- Skips feeds already configured with same name and URI" -ForegroundColor White
 Write-Host "- Processes packages in correct dependency order" -ForegroundColor White
+Write-Host "- Normalizes feed URIs for consistent comparison" -ForegroundColor White
 Write-Host "- Idempotent - safe to run multiple times" -ForegroundColor White
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
 Write-Host 'Apply-NipkgSnapshot -SnapshotPath "snapshot.json"' -ForegroundColor Gray
 Write-Host "# Will only install/upgrade/downgrade packages that need it" -ForegroundColor Gray
+Write-Host "# Will only add feeds that don't already exist" -ForegroundColor Gray
 Write-Host ""
