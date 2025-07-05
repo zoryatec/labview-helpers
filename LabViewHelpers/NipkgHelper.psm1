@@ -1604,6 +1604,11 @@ function Apply-NipkgSnapshot {
         This ensures the system matches exactly what is defined in the snapshot by
         removing any extra packages. Use with caution as this can remove important packages.
 
+    .PARAMETER RemoveUnlistedFeeds
+        Remove feeds that are currently configured but not listed in the snapshot.
+        This ensures the feed configuration matches exactly what is defined in the snapshot by
+        removing any extra feeds. Use with caution as this can remove important feeds.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1627,8 +1632,12 @@ function Apply-NipkgSnapshot {
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedPackages
 
     .EXAMPLE
+        # Remove feeds not in snapshot (exact match)
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedFeeds
+
+    .EXAMPLE
         # Complete workflow: clean slate approach
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveSnapshotFeeds
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -1660,7 +1669,10 @@ function Apply-NipkgSnapshot {
         [switch]$RemoveSnapshotFeeds,
         
         [Parameter()]
-        [switch]$RemoveUnlistedPackages
+        [switch]$RemoveUnlistedPackages,
+        
+        [Parameter()]
+        [switch]$RemoveUnlistedFeeds
     )
 
     begin {
@@ -1689,6 +1701,8 @@ function Apply-NipkgSnapshot {
                 FeedsSkipped = 0
                 FeedsUnchanged = 0
                 FeedsFailed = 0
+                FeedsUnlistedRemoved = 0
+                FeedsUnlistedRemovalFailed = 0
                 SnapshotFeedsRemoved = 0
                 SnapshotFeedsRemovalFailed = 0
                 PackagesInstalled = 0
@@ -1990,9 +2004,80 @@ function Apply-NipkgSnapshot {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
             }
 
-            # Phase 3: Remove unlisted packages if requested
+            # Phase 3: Remove unlisted feeds if requested
+            if ($RemoveUnlistedFeeds -and -not $SkipFeeds) {
+                Write-Information "Phase 3: Removing feeds not listed in snapshot..." -InformationAction Continue
+                
+                # Get current feeds (refresh the list in case it changed during feed addition)
+                try {
+                    $currentConfiguredFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Found $($currentConfiguredFeeds.Count) currently configured feeds for unlisted feed removal"
+                }
+                catch {
+                    Write-Warning "Failed to get current configured feeds for unlisted removal: $($_.Exception.Message)"
+                    $currentConfiguredFeeds = @()
+                }
+                
+                if ($currentConfiguredFeeds.Count -gt 0) {
+                    # Create a set of feed names and URIs from the snapshot for quick lookup
+                    $snapshotFeedLookup = @{}
+                    foreach ($snapshotFeed in $snapshot.feeds) {
+                        # Use same normalization as in Phase 1
+                        $normalizedUri = $snapshotFeed.uri -replace '\\', '/' -replace '/$', ''
+                        $feedLookupKey = "$($snapshotFeed.name)|$normalizedUri"
+                        $snapshotFeedLookup[$feedLookupKey] = $true
+                    }
+                    
+                    # Find feeds that are configured but not in the snapshot
+                    $feedsToRemove = @()
+                    foreach ($configuredFeed in $currentConfiguredFeeds) {
+                        $normalizedPath = $configuredFeed.Path -replace '\\', '/' -replace '/$', ''
+                        $currentFeedKey = "$($configuredFeed.Name)|$normalizedPath"
+                        
+                        if (-not $snapshotFeedLookup.ContainsKey($currentFeedKey)) {
+                            $feedsToRemove += $configuredFeed
+                        }
+                    }
+                    
+                    if ($feedsToRemove.Count -gt 0) {
+                        Write-Information "Found $($feedsToRemove.Count) unlisted feeds to remove" -InformationAction Continue
+                        Write-Warning "About to remove $($feedsToRemove.Count) feeds not listed in snapshot. This could remove important system feeds!" -WarningAction Continue
+                        
+                        foreach ($feedToRemove in $feedsToRemove) {
+                            if ($PSCmdlet.ShouldProcess("$($feedToRemove.Name) -> $($feedToRemove.Path)", "Remove unlisted feed")) {
+                                try {
+                                    Write-Information "Removing unlisted feed: $($feedToRemove.Name) -> $($feedToRemove.Path)" -InformationAction Continue
+                                    & $NipkgCmdPath feed-remove "$($feedToRemove.Path)"
+                                    
+                                    if ($LASTEXITCODE -eq 0) {
+                                        $results.FeedsUnlistedRemoved++
+                                        Write-Verbose "Successfully removed unlisted feed $($feedToRemove.Name)"
+                                    } else {
+                                        $results.FeedsUnlistedRemovalFailed++
+                                        Write-Warning "Failed to remove unlisted feed '$($feedToRemove.Name)' (exit code: $LASTEXITCODE)"
+                                    }
+                                }
+                                catch {
+                                    $results.FeedsUnlistedRemovalFailed++
+                                    Write-Warning "Exception removing unlisted feed $($feedToRemove.Name): $($_.Exception.Message)"
+                                }
+                            } else {
+                                Write-Verbose "Skipped removal of unlisted feed: $($feedToRemove.Name)"
+                            }
+                        }
+                    } else {
+                        Write-Information "No unlisted feeds found to remove" -InformationAction Continue
+                    }
+                } else {
+                    Write-Information "No configured feeds found for unlisted feed removal" -InformationAction Continue
+                }
+            } elseif ($RemoveUnlistedFeeds -and $SkipFeeds) {
+                Write-Information "Skipping unlisted feed removal (SkipFeeds=True)" -InformationAction Continue
+            }
+
+            # Phase 4: Remove unlisted packages if requested
             if ($RemoveUnlistedPackages -and -not $SkipPackages) {
-                Write-Information "Phase 3: Removing packages not listed in snapshot..." -InformationAction Continue
+                Write-Information "Phase 4: Removing packages not listed in snapshot..." -InformationAction Continue
                 
                 # Get current installed packages (refresh the list in case it changed during installation)
                 try {
@@ -2055,9 +2140,9 @@ function Apply-NipkgSnapshot {
                 Write-Information "Skipping unlisted package removal (SkipPackages=True)" -InformationAction Continue
             }
 
-            # Phase 4: Remove snapshot feeds if requested
+            # Phase 5: Remove snapshot feeds if requested
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
-                Write-Information "Phase 4: Removing snapshot feeds after package operations..." -InformationAction Continue
+                Write-Information "Phase 5: Removing snapshot feeds after package operations..." -InformationAction Continue
                 
                 if ($PSCmdlet.ShouldProcess("$($snapshotFeedsAdded.Count) snapshot feeds", "Remove snapshot feeds")) {
                     try {
@@ -2090,7 +2175,10 @@ function Apply-NipkgSnapshot {
             if ($results.FeedsRemoved -gt 0) {
                 Write-Information "Existing feeds removed: $($results.FeedsRemoved)" -InformationAction Continue
             }
-            Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsUnchanged) unchanged, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
+            Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsUnchanged) unchanged, $($results.FeedsUnlistedRemoved) unlisted removed, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
+            if ($results.FeedsUnlistedRemovalFailed -gt 0) {
+                Write-Information "Unlisted feed removal failures: $($results.FeedsUnlistedRemovalFailed)" -InformationAction Continue
+            }
             if ($results.SnapshotFeedsRemoved -gt 0) {
                 Write-Information "Snapshot feeds removed: $($results.SnapshotFeedsRemoved)" -InformationAction Continue
             }
@@ -2109,8 +2197,10 @@ function Apply-NipkgSnapshot {
                 FeedsTotal = $snapshot.feeds.Count
                 FeedsAdded = $results.FeedsAdded
                 FeedsUnchanged = $results.FeedsUnchanged
+                FeedsUnlistedRemoved = $results.FeedsUnlistedRemoved
                 FeedsSkipped = $results.FeedsSkipped
                 FeedsFailed = $results.FeedsFailed
+                FeedsUnlistedRemovalFailed = $results.FeedsUnlistedRemovalFailed
                 SnapshotFeedsRemoved = $results.SnapshotFeedsRemoved
                 SnapshotFeedsRemovalFailed = $results.SnapshotFeedsRemovalFailed
                 PackagesTotal = $snapshot.packages.Count
@@ -2122,7 +2212,7 @@ function Apply-NipkgSnapshot {
                 PackagesSkipped = $results.PackagesSkipped
                 PackagesFailed = $results.PackagesFailed
                 PackagesRemovalFailed = $results.PackagesRemovalFailed
-                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.PackagesRemovalFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0)
+                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.PackagesRemovalFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0 -and $results.FeedsUnlistedRemovalFailed -eq 0)
             }
         }
         catch {

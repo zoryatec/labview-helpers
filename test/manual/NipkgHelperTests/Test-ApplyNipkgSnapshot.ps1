@@ -21,6 +21,7 @@ $applyParams = @{
 
 $applyParams.RemoveExistingFeeds = $false
 $applyParams.RemoveSnapshotFeeds = $false
-$applyParams.RemoveUnlistedPackages = $true
+$applyParams.RemoveUnlistedFeeds = $true
+
 
 Apply-NipkgSnapshot @applyParams
