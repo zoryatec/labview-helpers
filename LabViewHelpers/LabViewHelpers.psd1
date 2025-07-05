@@ -71,7 +71,7 @@
         'Remove-Feeds',
         'Install-NipkgManager',
         'New-NipkgSnapshot',
-        'New-SnapshotFromInstaller',
+        'New-NipkgSnapshotFromInstaller',
         "Export-NipkgSnapshotToJson",
         "Import-NipkgSnapshotFromJson",
         "Apply-NipkgSnapshot"

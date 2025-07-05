@@ -322,7 +322,7 @@ function Install-LabViewOffline {
             if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
                 $InstallationSnapshotFile  =  New-TemporaryFile 
             }
-            $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
+            $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
             Apply-NipkgSnapshot -SnapshotPath $InstallationSnapshotFile  -NipkgCmdPath $NipkgCmdPath -Verbose
 

@@ -8,7 +8,9 @@ $nipkgCmdContainingDir = "C:\\Program Files\\National Instruments\\NI Package Ma
 $nipkgCmdPath = "$nipkgCmdContainingDir\\nipkg.exe"
 
 
-$installerDirectory = Join-Path $PSScriptRoot ".." "manual-docker/installers/ni-labview-2025-community-x86_25.1.3_offline"
+# $installerDirectory = Join-Path $PSScriptRoot ".." "manual-docker/installers/ni-labview-2025-community-x86_25.1.3_offline"
+$installerDirectory = "C:\Projects\LabVIEW\ni-labview-2024-x86_24.5.0.49229-0+f77_offline"
+
 $nipkgInstallerPath = Join-Path $PSScriptRoot ".." "manual-docker/installer-nipkg/Install.exe"
 
 

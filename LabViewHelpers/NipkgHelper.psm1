@@ -16,7 +16,7 @@
     - Get-PackagesInfo: Convenience function combining command execution and parsing
     - Get-PackagesInfoFromFile: Parses NIPKG command output from saved files
     - Get-PackagesInfoFromNipkgFile: Parses NIPKG feed Packages files
-    - New-SnapshotFromInstaller: Creates snapshots from installer directory structures
+    - New-NipkgSnapshotFromInstaller: Creates snapshots from installer directory structures
     
     This separation allows for flexible data sources and easier testing.
 
@@ -1274,7 +1274,7 @@ function Test-NipkgAvailability {
     }
 }
 
-function New-SnapshotFromInstaller {
+function New-NipkgSnapshotFromInstaller {
     <#
     .SYNOPSIS
         Creates a NIPKG snapshot from an installer directory structure.
@@ -1291,10 +1291,10 @@ function New-SnapshotFromInstaller {
         Whether to include feed information in the snapshot. Defaults to $true.
 
     .EXAMPLE
-        $snapshot = New-SnapshotFromInstaller -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
+        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
 
     .EXAMPLE
-        $snapshot = New-SnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
+        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
 
     .NOTES
         Returns a hashtable with:
@@ -1314,7 +1314,7 @@ function New-SnapshotFromInstaller {
     )
 
     begin {
-        Write-Verbose "Starting New-SnapshotFromInstaller operation"
+        Write-Verbose "Starting New-NipkgSnapshotFromInstaller operation"
     }
     
     process {
@@ -1372,9 +1372,9 @@ function New-SnapshotFromInstaller {
                         
                         # Add feed information if requested
                         if ($IncludeFeeds) {
-                            $feedInfo = [ordered]@{
-                                name = $feedDir.Name
-                                uri = $feedDir.FullName
+                            $feedInfo = [PSCustomObject]@{
+                                Name = $feedDir.Name
+                                Path = $feedDir.FullName
                             }
                             $allFeeds += $feedInfo
                         }
@@ -1389,30 +1389,20 @@ function New-SnapshotFromInstaller {
 
             Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
 
-            $programingEnvironmentsPackages  = Get-ProgrammingEnvironmentsPackages -PackagesInfo $allPackages
-            $driversPackages  = Get-DriverPackages -PackagesInfo $allPackages
-            $applicationPackages  = Get-ApplicationSoftwarePackages -PackagesInfo $allPackages
-            $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $allPackages
+            # Filter packages by category
+            $programingEnvironmentsPackages = Get-ProgrammingEnvironmentsPackages -PackagesInfo $allPackages
+            $driversPackages = Get-DriverPackages -PackagesInfo $allPackages
+            $applicationPackages = Get-ApplicationSoftwarePackages -PackagesInfo $allPackages
+            $utilitiesPackages = Get-UtilitiesPackages -PackagesInfo $allPackages
 
-            $outputPackages = @($programingEnvironmentsPackages) +  @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
+            $outputPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
 
             Write-Verbose "Filtered packages: $($outputPackages.Count) total packages from programming environments, drivers, applications, and utilities"
-            # Convert packages to snapshot format
-            $snapshotPackages = @()
-            foreach ($package in $outputPackages) {
-                $snapshotPackages += [ordered]@{
-                    name = $package.Package
-                    version = $package.Version
-                }
-            }
-
-            # Create the snapshot object
-            $snapshot = @{
-                feeds = $allFeeds
-                packages = $snapshotPackages
-            }
             
-            Write-Verbose "Created snapshot with $($allFeeds.Count) feeds and $($snapshotPackages.Count) packages"
+            # Reuse New-NipkgSnapshot to create the final snapshot object
+            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $outputPackages
+            
+            Write-Verbose "Created snapshot with $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
             return $snapshot
         }
@@ -1424,7 +1414,7 @@ function New-SnapshotFromInstaller {
     }
     
     end {
-        Write-Verbose "Completed New-SnapshotFromInstaller operation"
+        Write-Verbose "Completed New-NipkgSnapshotFromInstaller operation"
     }
 }
 
@@ -1669,7 +1659,7 @@ Export-ModuleMember -Function `
     ,   Remove-Feeds `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `
-    ,   New-SnapshotFromInstaller `
+    ,   New-NipkgSnapshotFromInstaller `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
     ,   Apply-NipkgSnapshot

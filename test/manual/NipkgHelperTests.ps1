@@ -13,7 +13,7 @@ $nipkgFunctions = @(
     'Get-PackagesInfoFromFile',
     'ConvertFrom-NipkgPackagesFile',
     'Get-PackagesInfoFromNipkgFile',
-    'New-SnapshotFromInstaller',
+    'New-NipkgSnapshotFromInstaller',
     'Apply-NipkgSnapshot',
     'Export-NipkgSnapshotToJson',
     'Import-NipkgSnapshotFromJson'
@@ -259,7 +259,7 @@ if (Test-Path $nipkgPackagesFile) {
 Write-Host ""
 
 # Test the new installer snapshot function
-Write-Host "Testing New-SnapshotFromInstaller function..." -ForegroundColor Green
+Write-Host "Testing New-NipkgSnapshotFromInstaller function..." -ForegroundColor Green
 
 $installerDirectory = "$PSScriptRoot\..\manual-docker\installers\ni-labview-2025-community-x86_25.1.3_offline"
 if (Test-Path $installerDirectory) {
@@ -267,7 +267,7 @@ if (Test-Path $installerDirectory) {
     Write-Host "   Installer: $installerDirectory" -ForegroundColor White
     
     try {
-        $installerSnapshot = New-SnapshotFromInstaller -InstallerDirectory $installerDirectory -Verbose
+        $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerDirectory -Verbose
         Write-Host "   ✓ Created installer snapshot: $($installerSnapshot.feeds.Count) feeds, $($installerSnapshot.packages.Count) packages" -ForegroundColor Green
 
         if ($installerSnapshot.feeds.Count -gt 0) {
@@ -321,7 +321,7 @@ if (Test-Path $installerDirectory) {
         # Test without feeds
         Write-Host "4. Testing installer snapshot without feeds..." -ForegroundColor Yellow
         try {
-            $noFeedsSnapshot = New-SnapshotFromInstaller -InstallerDirectory $installerDirectory -IncludeFeeds $false
+            $noFeedsSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerDirectory -IncludeFeeds $false
             Write-Host "   ✓ Created snapshot without feeds: $($noFeedsSnapshot.feeds.Count) feeds, $($noFeedsSnapshot.packages.Count) packages" -ForegroundColor Green
             
             if ($noFeedsSnapshot.feeds.Count -eq 0 -and $noFeedsSnapshot.packages.Count -eq $installerSnapshot.packages.Count) {

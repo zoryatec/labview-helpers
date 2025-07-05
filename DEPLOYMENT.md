@@ -73,7 +73,7 @@ The LabViewHelpers PowerShell module is now fully productionized and ready for d
 - **Snapshot Operations**: `New-NipkgSnapshot`, `Export-NipkgSnapshotToJson`, `Import-NipkgSnapshotFromJson`, `Apply-NipkgSnapshot`
 - **Package Management**: `Get-PackagesInfo`, `Get-*Packages` (by category)
 - **Feed Management**: `Add-FeedDirectories`, `Get-FeedsInfo`, `Remove-Feeds`
-- **Installer Analysis**: `New-SnapshotFromInstaller`, `Get-PackagesInfoFromNipkgFile`
+- **Installer Analysis**: `New-NipkgSnapshotFromInstaller`, `Get-PackagesInfoFromNipkgFile`
 
 ### LabVIEW Configuration (LabViewConfigHelper.psm1)
 
