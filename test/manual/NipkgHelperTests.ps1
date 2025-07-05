@@ -12,7 +12,7 @@ $nipkgFunctions = @(
     'Get-PackagesInfo',
     'Get-PackagesInfoFromNipkgCmd',
     'ConvertFrom-NipkgPackagesFile',
-    'Get-PackagesInfoFromNipkgFile',
+    'Get-PackagesInfoFromPackagesFile',
     'New-NipkgSnapshotFromInstaller',
     'Apply-NipkgSnapshot',
     'Export-NipkgSnapshotToJson',
@@ -221,14 +221,14 @@ catch {
 Write-Host ""
 
 # Test the new NIPKG Packages file parsing function
-Write-Host "Testing Get-PackagesInfoFromNipkgFile function..." -ForegroundColor Green
+Write-Host "Testing Get-PackagesInfoFromPackagesFile function..." -ForegroundColor Green
 
 $nipkgPackagesFile = "$PSScriptRoot\test-data\Packages"
 if (Test-Path $nipkgPackagesFile) {
     Write-Host "1. Parsing NIPKG Packages file: $nipkgPackagesFile" -ForegroundColor Yellow
     
     try {
-        $nipkgFilePackages = Get-PackagesInfoFromNipkgFile -InputPath $nipkgPackagesFile -Verbose
+        $nipkgFilePackages = Get-PackagesInfoFromPackagesFile -InputPath $nipkgPackagesFile -Verbose
         Write-Host "   ✓ Parsed $($nipkgFilePackages.Count) packages from NIPKG Packages file" -ForegroundColor Green
 
         if ($nipkgFilePackages.Count -gt 0) {

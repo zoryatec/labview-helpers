@@ -15,7 +15,7 @@
     - ConvertFrom-NipkgPackagesFile: Parses NIPKG Packages files (single blank line separators)
     - Get-PackagesInfo: Convenience function combining command execution and parsing
     - Get-PackagesInfoFromNipkgCmd: Parses NIPKG command output from saved files
-    - Get-PackagesInfoFromNipkgFile: Parses NIPKG feed Packages files
+    - Get-PackagesInfoFromPackagesFile: Parses NIPKG feed Packages files
     - New-NipkgSnapshotFromInstaller: Creates snapshots from installer directory structures
     
     This separation allows for flexible data sources and easier testing.
@@ -666,7 +666,7 @@ function Get-PackagesInfoFromNipkgCmd {
     }
 }
 
-function Get-PackagesInfoFromNipkgFile {
+function Get-PackagesInfoFromPackagesFile {
     <#
     .SYNOPSIS
         Retrieves package information from a NIPKG Packages file.
@@ -680,10 +680,10 @@ function Get-PackagesInfoFromNipkgFile {
         Path to the NIPKG Packages file to parse.
 
     .EXAMPLE
-        Get-PackagesInfoFromNipkgFile -InputPath "C:\feeds\my-feed\Packages"
+        Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\my-feed\Packages"
 
     .EXAMPLE
-        $packages = Get-PackagesInfoFromNipkgFile -InputPath ".\test-data\Packages"
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath ".\test-data\Packages"
         $packages | Where-Object { $_.Section -eq "Programming Environments" }
 
     .NOTES
@@ -699,7 +699,7 @@ function Get-PackagesInfoFromNipkgFile {
     )
 
     begin {
-        Write-Verbose "Starting Get-PackagesInfoFromNipkgFile operation"
+        Write-Verbose "Starting Get-PackagesInfoFromPackagesFile operation"
     }
     
     process {
@@ -732,7 +732,7 @@ function Get-PackagesInfoFromNipkgFile {
     }
     
     end {
-        Write-Verbose "Completed Get-PackagesInfoFromNipkgFile operation"
+        Write-Verbose "Completed Get-PackagesInfoFromPackagesFile operation"
     }
 }
 
@@ -1377,7 +1377,7 @@ function New-NipkgSnapshotFromInstaller {
                     
                     try {
                         # Parse packages from this feed
-                        $feedPackages = Get-PackagesInfoFromNipkgFile -InputPath $packagesFile
+                        $feedPackages = Get-PackagesInfoFromPackagesFile -InputPath $packagesFile
                         Write-Verbose "Found $($feedPackages.Count) packages in feed: $($feedDir.Name)"
                         
                         # Add packages to the combined collection
@@ -1652,7 +1652,7 @@ Export-ModuleMember -Function `
     ,   ConvertFrom-NipkgPackagesFile `
     ,   Get-PackagesInfo `
     ,   Get-PackagesInfoFromNipkgCmd `
-    ,   Get-PackagesInfoFromNipkgFile `
+    ,   Get-PackagesInfoFromPackagesFile `
     ,   Get-DriverPackages `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
