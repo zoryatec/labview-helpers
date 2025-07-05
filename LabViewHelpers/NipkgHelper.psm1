@@ -1599,6 +1599,11 @@ function Apply-NipkgSnapshot {
         This is useful when you want to install packages from specific feeds but don't want
         to keep those feeds permanently in the system.
 
+    .PARAMETER RemoveUnlistedPackages
+        Remove packages that are currently installed but not listed in the snapshot.
+        This ensures the system matches exactly what is defined in the snapshot by
+        removing any extra packages. Use with caution as this can remove important packages.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1618,8 +1623,12 @@ function Apply-NipkgSnapshot {
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveSnapshotFeeds
 
     .EXAMPLE
-        # Complete workflow: remove existing feeds, apply snapshot, then remove snapshot feeds
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveSnapshotFeeds
+        # Remove packages not in snapshot (exact match)
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedPackages
+
+    .EXAMPLE
+        # Complete workflow: clean slate approach
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -1648,7 +1657,10 @@ function Apply-NipkgSnapshot {
         [switch]$RemoveExistingFeeds,
         
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds
+        [switch]$RemoveSnapshotFeeds,
+        
+        [Parameter()]
+        [switch]$RemoveUnlistedPackages
     )
 
     begin {
@@ -1684,6 +1696,8 @@ function Apply-NipkgSnapshot {
                 PackagesSkipped = 0
                 PackagesFailed = 0
                 PackagesUnchanged = 0
+                PackagesRemoved = 0
+                PackagesRemovalFailed = 0
             }
 
             # Track feeds added from the snapshot for potential removal later
@@ -1931,9 +1945,74 @@ function Apply-NipkgSnapshot {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
             }
 
-            # Phase 3: Remove snapshot feeds if requested
+            # Phase 3: Remove unlisted packages if requested
+            if ($RemoveUnlistedPackages -and -not $SkipPackages) {
+                Write-Information "Phase 3: Removing packages not listed in snapshot..." -InformationAction Continue
+                
+                # Get current installed packages (refresh the list in case it changed during installation)
+                try {
+                    $currentInstalledPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Found $($currentInstalledPackages.Count) currently installed packages for unlisted package removal"
+                }
+                catch {
+                    Write-Warning "Failed to get current installed packages for unlisted removal: $($_.Exception.Message)"
+                    $currentInstalledPackages = @()
+                }
+                
+                if ($currentInstalledPackages.Count -gt 0) {
+                    # Create a set of package names from the snapshot for quick lookup
+                    $snapshotPackageNames = @{}
+                    foreach ($pkg in $snapshot.packages) {
+                        $snapshotPackageNames[$pkg.name] = $true
+                    }
+                    
+                    # Find packages that are installed but not in the snapshot
+                    $packagesToRemove = @()
+                    foreach ($installedPkg in $currentInstalledPackages) {
+                        if (-not $snapshotPackageNames.ContainsKey($installedPkg.Package)) {
+                            $packagesToRemove += $installedPkg
+                        }
+                    }
+                    
+                    if ($packagesToRemove.Count -gt 0) {
+                        Write-Information "Found $($packagesToRemove.Count) unlisted packages to remove" -InformationAction Continue
+                        Write-Warning "About to remove $($packagesToRemove.Count) packages not listed in snapshot. This could remove important system packages!" -WarningAction Continue
+                        
+                        foreach ($packageToRemove in $packagesToRemove) {
+                            if ($PSCmdlet.ShouldProcess("$($packageToRemove.Package) v$($packageToRemove.Version)", "Remove unlisted package")) {
+                                try {
+                                    Write-Information "Removing unlisted package: $($packageToRemove.Package) v$($packageToRemove.Version)" -InformationAction Continue
+                                    & $NipkgCmdPath remove $($packageToRemove.Package) -y
+                                    
+                                    if ($LASTEXITCODE -eq 0) {
+                                        $results.PackagesRemoved++
+                                        Write-Verbose "Successfully removed unlisted package $($packageToRemove.Package)"
+                                    } else {
+                                        $results.PackagesRemovalFailed++
+                                        Write-Warning "Failed to remove unlisted package $($packageToRemove.Package) (exit code: $LASTEXITCODE)"
+                                    }
+                                }
+                                catch {
+                                    $results.PackagesRemovalFailed++
+                                    Write-Warning "Exception removing unlisted package $($packageToRemove.Package): $($_.Exception.Message)"
+                                }
+                            } else {
+                                Write-Verbose "Skipped removal of unlisted package: $($packageToRemove.Package)"
+                            }
+                        }
+                    } else {
+                        Write-Information "No unlisted packages found to remove" -InformationAction Continue
+                    }
+                } else {
+                    Write-Information "No installed packages found for unlisted package removal" -InformationAction Continue
+                }
+            } elseif ($RemoveUnlistedPackages -and $SkipPackages) {
+                Write-Information "Skipping unlisted package removal (SkipPackages=True)" -InformationAction Continue
+            }
+
+            # Phase 4: Remove snapshot feeds if requested
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
-                Write-Information "Phase 3: Removing snapshot feeds after package installation..." -InformationAction Continue
+                Write-Information "Phase 4: Removing snapshot feeds after package operations..." -InformationAction Continue
                 
                 if ($PSCmdlet.ShouldProcess("$($snapshotFeedsAdded.Count) snapshot feeds", "Remove snapshot feeds")) {
                     try {
@@ -1973,7 +2052,10 @@ function Apply-NipkgSnapshot {
             if ($results.SnapshotFeedsRemovalFailed -gt 0) {
                 Write-Information "Snapshot feeds removal failed: $($results.SnapshotFeedsRemovalFailed)" -InformationAction Continue
             }
-            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesUpgraded) upgraded, $($results.PackagesDowngraded) downgraded, $($results.PackagesUnchanged) unchanged, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
+            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesUpgraded) upgraded, $($results.PackagesDowngraded) downgraded, $($results.PackagesUnchanged) unchanged, $($results.PackagesRemoved) removed, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
+            if ($results.PackagesRemovalFailed -gt 0) {
+                Write-Information "Package removal failures: $($results.PackagesRemovalFailed)" -InformationAction Continue
+            }
 
             # Return detailed results
             return [PSCustomObject]@{
@@ -1990,9 +2072,11 @@ function Apply-NipkgSnapshot {
                 PackagesUpgraded = $results.PackagesUpgraded
                 PackagesDowngraded = $results.PackagesDowngraded
                 PackagesUnchanged = $results.PackagesUnchanged
+                PackagesRemoved = $results.PackagesRemoved
                 PackagesSkipped = $results.PackagesSkipped
                 PackagesFailed = $results.PackagesFailed
-                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0)
+                PackagesRemovalFailed = $results.PackagesRemovalFailed
+                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.PackagesRemovalFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0)
             }
         }
         catch {
