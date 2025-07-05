@@ -123,40 +123,124 @@ function Get-FeedsInfoFromNipkgCmd {
 
     .DESCRIPTION
         Gets a list of all currently configured package feeds from NI Package Manager,
-        including feed names and their associated paths.
+        including feed names and their associated paths. Can filter feeds by type (local vs online).
 
     .PARAMETER NipkgCmdPath
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
+    .PARAMETER ExcludeLocalFeeds
+        Exclude local file system feeds from the results. Only online feeds will be returned.
+
+    .PARAMETER ExcludeOnlineFeeds
+        Exclude online feeds from the results. Only local file system feeds will be returned.
+
     .EXAMPLE
-        Get-FeedsInfo
+        Get-FeedsInfoFromNipkgCmd
 
     .EXAMPLE
         Get-FeedsInfoFromNipkgCmd -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
+    .EXAMPLE
+        # Get only online feeds
+        Get-FeedsInfoFromNipkgCmd -ExcludeLocalFeeds
+
+    .EXAMPLE
+        # Get only local feeds
+        Get-FeedsInfoFromNipkgCmd -ExcludeOnlineFeeds
+
     .NOTES
-        Returns PSCustomObject with Name and Path properties for each feed.
+        Returns PSCustomObject with Name, Path, and Type properties for each feed.
+        Feed types are determined as follows:
+        - Local: file:// paths or local file system paths (C:\, D:\, etc.)
+        - Online: http://, https://, ftp://, or other network protocols
+        
+        If neither ExcludeLocalFeeds nor ExcludeOnlineFeeds is specified, all feeds are returned.
     #>
     [CmdletBinding()]
     param (
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$NipkgCmdPath = "nipkg" 
+        [string]$NipkgCmdPath = "nipkg",
+
+        [Parameter()]
+        [switch]$ExcludeLocalFeeds,
+
+        [Parameter()]
+        [switch]$ExcludeOnlineFeeds
     )
 
-    $lines = & $NipkgCmdPath feed-list
-
-    $results = foreach ($line in $lines) {
-        $line = $line.Trim()
-
-        if ($line -match '^(.*\S)\s+([a-zA-Z]:\\.*)$') {
-            [PSCustomObject]@{
-                Name = $matches[1]
-                Path = $matches[2]
-            }
+    begin {
+        Write-Verbose "Starting Get-FeedsInfoFromNipkgCmd operation"
+        
+        # Validate parameter combination
+        if ($ExcludeLocalFeeds -and $ExcludeOnlineFeeds) {
+            throw "Cannot exclude both local and online feeds. Please specify only one exclusion parameter or none."
         }
     }
-    return $results
+
+    process {
+        try {
+            Write-Verbose "Executing NIPKG feed-list command"
+            $lines = & $NipkgCmdPath feed-list
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "NIPKG feed-list command failed with exit code: $LASTEXITCODE"
+            }
+
+            $allResults = @()
+            
+            foreach ($line in $lines) {
+                $line = $line.Trim()
+
+                # Parse feed lines - handle both local paths and URIs
+                if ($line -match '^(.*\S)\s+(.+)$') {
+                    $feedName = $matches[1].Trim()
+                    $feedPath = $matches[2].Trim()
+                    
+                    # Determine feed type based on path
+                    $feedType = if (Test-FeedIsLocal -FeedPath $feedPath) { "Local" } else { "Online" }
+                    
+                    $feedObj = [PSCustomObject]@{
+                        Name = $feedName
+                        Path = $feedPath
+                        Type = $feedType
+                    }
+                    
+                    $allResults += $feedObj
+                    
+                    Write-Verbose "Found feed: $feedName ($feedType) -> $feedPath"
+                }
+            }
+
+            Write-Verbose "Retrieved $($allResults.Count) total feeds from NIPKG"
+
+            # Apply filtering based on parameters
+            $filteredResults = $allResults
+            
+            if ($ExcludeLocalFeeds) {
+                $filteredResults = $filteredResults | Where-Object { $_.Type -eq "Online" }
+                Write-Verbose "Filtered to $($filteredResults.Count) online feeds (excluded local)"
+            }
+            elseif ($ExcludeOnlineFeeds) {
+                $filteredResults = $filteredResults | Where-Object { $_.Type -eq "Local" }
+                Write-Verbose "Filtered to $($filteredResults.Count) local feeds (excluded online)"
+            }
+            else {
+                Write-Verbose "Returning all $($filteredResults.Count) feeds (no filtering applied)"
+            }
+
+            return $filteredResults
+        }
+        catch {
+            $errorMessage = "Failed to retrieve feeds information from NIPKG. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $NipkgCmdPath
+            throw
+        }
+    }
+
+    end {
+        Write-Verbose "Completed Get-FeedsInfoFromNipkgCmd operation"
+    }
 }
 
 function Remove-Feeds {
@@ -1427,7 +1511,7 @@ function New-NipkgSnapshotFromSystem {
                 Write-Verbose "Getting feeds info from NIPKG command"
                 
                 try {
-                    $feedsInfo = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    $feedsInfo = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath -ExcludeLocalFeeds
                     Write-Verbose "Retrieved $($feedsInfo.Count) feeds from system"
                     Write-Information "Found $($feedsInfo.Count) configured feed(s)" -InformationAction Continue
                 }
@@ -2151,6 +2235,75 @@ function Invoke-TopologicalSort {
     $SortedList.Value += $node.Package
 
     return @{ Success = $true }
+}
+
+function Test-FeedIsLocal {
+    <#
+    .SYNOPSIS
+        Tests whether a feed path represents a local or online feed.
+
+    .DESCRIPTION
+        Determines if a feed path is local (file system) or online (network) based on the URI scheme or path format.
+
+    .PARAMETER FeedPath
+        The feed path/URI to test.
+
+    .NOTES
+        Returns $true for local feeds, $false for online feeds.
+        Local feeds include:
+        - file:// URIs
+        - Windows drive paths (C:\, D:\, etc.)
+        - UNC paths (\\server\share)
+        - Relative paths
+        
+        Online feeds include:
+        - http://, https:// URIs
+        - ftp://, ftps:// URIs
+        - Other network protocols
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$FeedPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FeedPath)) {
+        return $false
+    }
+
+    $FeedPath = $FeedPath.Trim()
+
+    # Check for online protocols
+    $onlineProtocols = @('http://', 'https://', 'ftp://', 'ftps://', 'sftp://')
+    foreach ($protocol in $onlineProtocols) {
+        if ($FeedPath.StartsWith($protocol, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+    }
+
+    # Check for file:// protocol (local)
+    if ($FeedPath.StartsWith('file://', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    # Check for Windows drive letters (C:\, D:\, etc.)
+    if ($FeedPath -match '^[a-zA-Z]:\\') {
+        return $true
+    }
+
+    # Check for UNC paths (\\server\share)
+    if ($FeedPath.StartsWith('\\')) {
+        return $true
+    }
+
+    # Check for relative paths or paths without protocol
+    # If it doesn't start with a protocol, assume it's local
+    if (-not ($FeedPath -match '^[a-zA-Z][a-zA-Z0-9+.-]*://')) {
+        return $true
+    }
+
+    # Default to online for unknown protocols
+    return $false
 }
 
 Export-ModuleMember -Function `

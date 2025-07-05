@@ -35,6 +35,17 @@ Tests the `New-NipkgSnapshotFromSystem` function which creates snapshots from th
 - Snapshot export to JSON
 - Error handling and reporting
 
+### Test-FeedFiltering.ps1
+
+Tests the updated `Get-FeedsInfoFromNipkgCmd` function with feed filtering capabilities.
+
+**Features tested:**
+- Retrieving all feeds (default behavior)
+- Filtering to exclude local feeds (online only)
+- Filtering to exclude online feeds (local only)
+- Parameter validation for invalid combinations
+- Feed type detection logic (local vs online)
+
 **Requirements:**
 - LabViewHelpers module must be importable
 - A NIPKG Packages file in `../test-temp/Packages` for real-world testing
