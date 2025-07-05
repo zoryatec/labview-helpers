@@ -74,7 +74,8 @@
         'New-NipkgSnapshotFromSystem',
         "Export-NipkgSnapshotToJson",
         "Import-NipkgSnapshotFromJson",
-        "Apply-NipkgSnapshot"
+        "Apply-NipkgSnapshot",
+        "Test-NipkgSnapshotCompliance"
     )
     
     # Cmdlets to export from this module

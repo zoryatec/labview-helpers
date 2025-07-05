@@ -1609,6 +1609,23 @@ function Apply-NipkgSnapshot {
         This ensures the feed configuration matches exactly what is defined in the snapshot by
         removing any extra feeds. Use with caution as this can remove important feeds.
 
+    .PARAMETER ValidateCompliance
+        Validate that the system state matches the snapshot after all operations are complete.
+        Provides detailed compliance reporting and can optionally fail the operation if 
+        the system is not compliant.
+
+    .PARAMETER FailOnNonCompliance
+        When ValidateCompliance is enabled, throw an error if the system is not compliant
+        with the snapshot. Useful for CI/CD pipelines where compliance is required.
+
+    .PARAMETER AllowExtraFeeds
+        When ValidateCompliance is enabled, allow extra feeds beyond those in the snapshot.
+        If false, extra feeds cause non-compliance. Defaults to $false.
+
+    .PARAMETER AllowExtraPackages
+        When ValidateCompliance is enabled, allow extra packages beyond those in the snapshot.
+        If false, extra packages cause non-compliance. Defaults to $false.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1634,6 +1651,18 @@ function Apply-NipkgSnapshot {
     .EXAMPLE
         # Remove feeds not in snapshot (exact match)
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedFeeds
+
+    .EXAMPLE
+        # Validate compliance after applying snapshot
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance
+
+    .EXAMPLE
+        # Fail if system is not compliant (for CI/CD)
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance -FailOnNonCompliance
+
+    .EXAMPLE
+        # Allow extra packages in development environment
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance -AllowExtraPackages $true
 
     .EXAMPLE
         # Complete workflow: clean slate approach
@@ -1672,7 +1701,19 @@ function Apply-NipkgSnapshot {
         [switch]$RemoveUnlistedPackages,
         
         [Parameter()]
-        [switch]$RemoveUnlistedFeeds
+        [switch]$RemoveUnlistedFeeds,
+        
+        [Parameter()]
+        [switch]$ValidateCompliance,
+        
+        [Parameter()]
+        [switch]$FailOnNonCompliance,
+        
+        [Parameter()]
+        [bool]$AllowExtraFeeds = $false,
+        
+        [Parameter()]
+        [bool]$AllowExtraPackages = $false
     )
 
     begin {
@@ -1981,7 +2022,7 @@ function Apply-NipkgSnapshot {
                                                 Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
                                             } else {
                                                 $results.PackagesFailed++
-                                                Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
+                                                Write-Warning "Failed to downgrade $($packageName) to v$$targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
                                             }
                                         } else {
                                             $results.PackagesFailed++
@@ -2199,7 +2240,7 @@ function Apply-NipkgSnapshot {
             }
 
             # Return detailed results
-            return [PSCustomObject]@{
+            $applyResult = [PSCustomObject]@{
                 SnapshotPath = $SnapshotPath
                 FeedsRemoved = $results.FeedsRemoved
                 FeedsTotal = $snapshot.feeds.Count
@@ -2221,7 +2262,50 @@ function Apply-NipkgSnapshot {
                 PackagesFailed = $results.PackagesFailed
                 PackagesRemovalFailed = $results.PackagesRemovalFailed
                 Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.PackagesRemovalFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0 -and $results.FeedsUnlistedRemovalFailed -eq 0)
+                ComplianceValidated = $false
+                SystemCompliant = $null
+                ComplianceSummary = "Compliance validation not requested"
+                ComplianceIssues = $null
             }
+
+            # Phase 6: Validate compliance if requested
+            if ($ValidateCompliance) {
+                Write-Information "Phase 6: Validating system compliance with snapshot..." -InformationAction Continue
+                
+                try {
+                    $complianceResult = Test-NipkgSnapshotCompliance -SnapshotPath $SnapshotPath -NipkgCmdPath $NipkgCmdPath -ValidateFeeds (-not $SkipFeeds) -ValidatePackages (-not $SkipPackages) -AllowExtraFeeds $AllowExtraFeeds -AllowExtraPackages $AllowExtraPackages -FailOnNonCompliance:$FailOnNonCompliance
+                    
+                    # Add compliance information to the results
+                    $applyResult.ComplianceValidated = $true
+                    $applyResult.SystemCompliant = $complianceResult.OverallCompliant
+                    $applyResult.ComplianceSummary = $complianceResult.Summary
+                    $applyResult.ComplianceIssues = $complianceResult.TotalIssues
+                    $applyResult | Add-Member -MemberType NoteProperty -Name "ComplianceReport" -Value $complianceResult -Force
+                    
+                    if ($complianceResult.OverallCompliant) {
+                        Write-Information "✓ System is compliant with snapshot" -InformationAction Continue
+                    } else {
+                        Write-Warning "✗ System is not fully compliant with snapshot"
+                        Write-Warning "Compliance issues found: $($complianceResult.TotalIssues)"
+                        # Note: If FailOnNonCompliance was set, Test-NipkgSnapshotCompliance would have already thrown
+                    }
+                }
+                catch {
+                    if ($_.Exception.Message -like "*not compliant*") {
+                        # This is expected when FailOnNonCompliance is true
+                        throw
+                    } else {
+                        Write-Warning "Failed to validate compliance: $($_.Exception.Message)"
+                        # Add compliance failure info to results
+                        $applyResult.ComplianceValidated = $false
+                        $applyResult.SystemCompliant = $null
+                        $applyResult.ComplianceSummary = "Validation failed: $($_.Exception.Message)"
+                        $applyResult.ComplianceIssues = $null
+                    }
+                }
+            }
+
+            return $applyResult
         }
         catch {
             $errorMessage = "Failed to apply NIPKG snapshot - SnapshotPath: '$SnapshotPath'. Error: $($_.Exception.Message)"
@@ -2232,6 +2316,479 @@ function Apply-NipkgSnapshot {
     
     end {
         Write-Verbose "Completed Apply-NipkgSnapshot operation"
+    }
+}
+
+function Test-NipkgSnapshotCompliance {
+    <#
+    .SYNOPSIS
+        Validates that the current system state matches the desired snapshot state.
+
+    .DESCRIPTION
+        Compares the current NIPKG configuration (feeds and/or packages) against a snapshot
+        to verify compliance. This function is useful for validating that Apply-NipkgSnapshot
+        achieved the desired state or for ongoing compliance monitoring.
+
+    .PARAMETER SnapshotPath
+        Path to the JSON snapshot file to validate against.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER ValidateFeeds
+        Whether to validate feed configuration compliance. Defaults to $true.
+
+    .PARAMETER ValidatePackages
+        Whether to validate package installation compliance. Defaults to $true.
+
+    .PARAMETER FailOnNonCompliance
+        Whether to throw an error if the system is not compliant. If false, returns
+        compliance status without failing. Defaults to $false.
+
+    .PARAMETER AllowExtraFeeds
+        Allow extra feeds beyond those in the snapshot. If false, extra feeds cause
+        non-compliance. Defaults to $false.
+
+    .PARAMETER AllowExtraPackages
+        Allow extra packages beyond those in the snapshot. If false, extra packages cause
+        non-compliance. Defaults to $false.
+
+    .EXAMPLE
+        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json"
+
+    .EXAMPLE
+        # Validate only packages, allow extra feeds
+        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json" -ValidateFeeds $false -AllowExtraFeeds $true
+
+    .EXAMPLE
+        # Strict validation - fail build if not compliant
+        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json" -FailOnNonCompliance
+
+    .EXAMPLE
+        # Validate feeds only with custom NIPKG path
+        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json" -ValidatePackages $false -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns a compliance report object with detailed information about differences.
+        Can be used in CI/CD pipelines to ensure environment consistency.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$SnapshotPath,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [bool]$ValidateFeeds = $true,
+        
+        [Parameter()]
+        [bool]$ValidatePackages = $true,
+        
+        [Parameter()]
+        [switch]$FailOnNonCompliance,
+        
+        [Parameter()]
+        [bool]$AllowExtraFeeds = $false,
+        
+        [Parameter()]
+        [bool]$AllowExtraPackages = $false
+    )
+
+    begin {
+        Write-Verbose "Starting Test-NipkgSnapshotCompliance operation"
+    }
+    
+    process {
+        try {
+            # Import the snapshot
+            Write-Information "Importing snapshot for compliance validation..." -InformationAction Continue
+            $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
+            
+            Write-Verbose "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+
+            # Initialize compliance report
+            $complianceReport = [PSCustomObject]@{
+                SnapshotPath = $SnapshotPath
+                ValidationTime = Get-Date
+                OverallCompliant = $true
+                FeedsCompliant = $true
+                PackagesCompliant = $true
+                FeedsValidated = $ValidateFeeds
+                PackagesValidated = $ValidatePackages
+                MissingFeeds = @()
+                ExtraFeeds = @()
+                MismatchedFeeds = @()
+                MissingPackages = @()
+                ExtraPackages = @()
+                WrongVersionPackages = @()
+                TotalIssues = 0
+                Summary = ""
+            }
+
+            # Validate feeds if requested
+            if ($ValidateFeeds) {
+                Write-Information "Validating feed compliance..." -InformationAction Continue
+                
+                try {
+                    $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
+                }
+                catch {
+                    Write-Warning "Failed to get current feeds for validation: $($_.Exception.Message)"
+                    $currentFeeds = @()
+                    $complianceReport.FeedsCompliant = $false
+                    $complianceReport.OverallCompliant = $false
+                }
+                
+                # Create lookup tables for comparison
+                $currentFeedsLookup = @{}
+                $currentFeedsByName = @{}
+                foreach ($feed in $currentFeeds) {
+                    $normalizedPath = $feed.Path -replace '\\', '/' -replace '/$', ''
+                    $feedKey = $feed.Name + "|" + $normalizedPath
+                    $currentFeedsLookup[$feedKey] = $feed
+                    $currentFeedsByName[$feed.Name] = $feed
+                }
+                
+                $snapshotFeedsLookup = @{}
+                $snapshotFeedsByName = @{}
+                foreach ($feed in $snapshot.feeds) {
+                    $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
+                    $feedKey = $feed.name + "|" + $normalizedUri
+                    $snapshotFeedsLookup[$feedKey] = $feed
+                    $snapshotFeedsByName[$feed.name] = $feed
+                }
+                
+                # Check for missing feeds (in snapshot but not in current system)
+                foreach ($snapshotFeed in $snapshot.feeds) {
+                    $normalizedUri = $snapshotFeed.uri -replace '\\', '/' -replace '/$', ''
+                    $feedKey = $snapshotFeed.name + "|" + $normalizedUri
+                    
+                    if (-not $currentFeedsLookup.ContainsKey($feedKey)) {
+                        $complianceReport.MissingFeeds += [PSCustomObject]@{
+                            Name = $snapshotFeed.name
+                            ExpectedUri = $snapshotFeed.uri
+                            ActualUri = if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) { $currentFeedsByName[$snapshotFeed.name].Path } else { $null }
+                            Issue = if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) { "URI mismatch" } else { "Feed not configured" }
+                        }
+                        $complianceReport.FeedsCompliant = $false
+                        $complianceReport.OverallCompliant = $false
+                    }
+                }
+                
+                # Check for extra feeds (in current system but not in snapshot) if not allowed
+                if (-not $AllowExtraFeeds) {
+                    foreach ($currentFeed in $currentFeeds) {
+                        $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
+                        $feedKey = $currentFeed.Name + "|" + $normalizedPath
+                        
+                        if (-not $snapshotFeedsLookup.ContainsKey($feedKey)) {
+                            $complianceReport.ExtraFeeds += [PSCustomObject]@{
+                                Name = $currentFeed.Name
+                                Uri = $currentFeed.Path
+                                Issue = "Extra feed not in snapshot"
+                            }
+                            $complianceReport.FeedsCompliant = $false
+                            $complianceReport.OverallCompliant = $false
+                        }
+                    }
+                }
+                
+                Write-Verbose "Feed validation complete. Missing: $($complianceReport.MissingFeeds.Count), Extra: $($complianceReport.ExtraFeeds.Count)"
+            }
+
+            # Validate packages if requested
+            if ($ValidatePackages) {
+                Write-Information "Validating package compliance..." -InformationAction Continue
+                
+                try {
+                    $installedPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Found $($installedPackages.Count) currently installed packages"
+                }
+                catch {
+                    Write-Warning "Failed to get installed packages for validation: $($_.Exception.Message)"
+                    $installedPackages = @()
+                    $complianceReport.PackagesCompliant = $false
+                    $complianceReport.OverallCompliant = $false
+                }
+                
+                # Create lookup tables for comparison
+                $installedLookup = @{}
+                foreach ($pkg in $installedPackages) {
+                    $installedLookup[$pkg.Package] = $pkg.Version
+                }
+                
+                $snapshotPackageLookup = @{}
+                foreach ($pkg in $snapshot.packages) {
+                    $snapshotPackageLookup[$pkg.name] = $pkg.version
+                }
+                
+                # Check for missing packages (in snapshot but not installed)
+                foreach ($snapshotPackage in $snapshot.packages) {
+                    if (-not $installedLookup.ContainsKey($snapshotPackage.name)) {
+                        $complianceReport.MissingPackages += [PSCustomObject]@{
+                            Name = $snapshotPackage.name
+                            ExpectedVersion = $snapshotPackage.version
+                            Issue = "Package not installed"
+                        }
+                        $complianceReport.PackagesCompliant = $false
+                        $complianceReport.OverallCompliant = $false
+                    }
+                    else {
+                        # Check version compliance
+                        $installedVersion = $installedLookup[$snapshotPackage.name]
+                        if ($installedVersion -ne $snapshotPackage.version) {
+                            $versionComparison = Compare-PackageVersions -Version1 $snapshotPackage.version -Version2 $installedVersion
+                            
+                            if ($versionComparison -ne 0) {
+                                $complianceReport.WrongVersionPackages += [PSCustomObject]@{
+                                    Name = $snapshotPackage.name
+                                    ExpectedVersion = $snapshotPackage.version
+                                    ActualVersion = $installedVersion
+                                    Issue = if ($versionComparison -gt 0) { "Version too low" } else { "Version too high" }
+                                }
+                                $complianceReport.PackagesCompliant = $false
+                                $complianceReport.OverallCompliant = $false
+                            }
+                        }
+                    }
+                }
+                
+                # Check for extra packages (installed but not in snapshot) if not allowed
+                if (-not $AllowExtraPackages) {
+                    foreach ($installedPkg in $installedPackages) {
+                        if (-not $snapshotPackageLookup.ContainsKey($installedPkg.Package)) {
+                            $complianceReport.ExtraPackages += [PSCustomObject]@{
+                                Name = $installedPkg.Package
+                                Version = $installedPkg.Version
+                                Issue = "Extra package not in snapshot"
+                            }
+                            $complianceReport.PackagesCompliant = $false
+                            $complianceReport.OverallCompliant = $false
+                        }
+                    }
+                }
+                
+                Write-Verbose "Package validation complete. Missing: $($complianceReport.MissingPackages.Count), Wrong version: $($complianceReport.WrongVersionPackages.Count), Extra: $($complianceReport.ExtraPackages.Count)"
+            }
+
+            # Calculate total issues and generate summary
+            $complianceReport.TotalIssues = $complianceReport.MissingFeeds.Count + $complianceReport.ExtraFeeds.Count + 
+                                           $complianceReport.MissingPackages.Count + $complianceReport.ExtraPackages.Count + 
+                                           $complianceReport.WrongVersionPackages.Count
+
+            # Generate summary
+            $summaryParts = @()
+            if ($ValidateFeeds) {
+                if ($complianceReport.FeedsCompliant) {
+                    $summaryParts += "Feeds: COMPLIANT"
+                } else {
+                    $issueCount = $complianceReport.MissingFeeds.Count + $complianceReport.ExtraFeeds.Count
+                    $summaryParts += "Feeds: NON-COMPLIANT ($issueCount issues)"
+                }
+            }
+            
+            if ($ValidatePackages) {
+                if ($complianceReport.PackagesCompliant) {
+                    $summaryParts += "Packages: COMPLIANT"
+                } else {
+                    $issueCount = $complianceReport.MissingPackages.Count + $complianceReport.ExtraPackages.Count + $complianceReport.WrongVersionPackages.Count
+                    $summaryParts += "Packages: NON-COMPLIANT ($issueCount issues)"
+                }
+            }
+            
+            $complianceReport.Summary = $summaryParts -join ", "
+
+            # Output compliance status
+            if ($complianceReport.OverallCompliant) {
+                Write-Information "✓ System is COMPLIANT with snapshot" -InformationAction Continue
+                Write-Information $complianceReport.Summary -InformationAction Continue
+            } else {
+                Write-Warning "✗ System is NOT COMPLIANT with snapshot"
+                Write-Warning $complianceReport.Summary
+                Write-Warning "Total issues found: $($complianceReport.TotalIssues)"
+                
+                # Output detailed issues
+                if ($complianceReport.MissingFeeds.Count -gt 0) {
+                    Write-Warning "Missing feeds: $($complianceReport.MissingFeeds.Name -join ', ')"
+                }
+                if ($complianceReport.ExtraFeeds.Count -gt 0) {
+                    Write-Warning "Extra feeds: $($complianceReport.ExtraFeeds.Name -join ', ')"
+                }
+                if ($complianceReport.MissingPackages.Count -gt 0) {
+                    Write-Warning "Missing packages: $($complianceReport.MissingPackages.Name -join ', ')"
+                }
+                if ($complianceReport.WrongVersionPackages.Count -gt 0) {
+                    Write-Warning "Wrong version packages: $($complianceReport.WrongVersionPackages.Name -join ', ')"
+                }
+                if ($complianceReport.ExtraPackages.Count -gt 0) {
+                    Write-Warning "Extra packages: $($complianceReport.ExtraPackages.Name -join ', ')"
+                }
+            }
+
+            # Fail if requested and non-compliant
+            if ($FailOnNonCompliance -and -not $complianceReport.OverallCompliant) {
+                $errorMessage = "System is not compliant with snapshot '$SnapshotPath'. $($complianceReport.TotalIssues) issues found. $($complianceReport.Summary)"
+                Write-Error -Message $errorMessage -Category InvalidData -TargetObject $SnapshotPath
+                throw $errorMessage
+            }
+
+            return $complianceReport
+        }
+        catch {
+            if ($_.Exception.Message -notlike "*not compliant*") {
+                $errorMessage = "Failed to validate snapshot compliance - SnapshotPath: '$SnapshotPath'. Error: $($_.Exception.Message)"
+                Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $SnapshotPath
+            }
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Test-NipkgSnapshotCompliance operation"
+    }
+}
+
+function Test-FeedIsLocal {
+    <#
+    .SYNOPSIS
+        Tests whether a feed path represents a local or online feed.
+
+    .DESCRIPTION
+        Determines if a feed path is local (file system) or online (network) based on the URI scheme or path format.
+
+    .PARAMETER FeedPath
+        The feed path/URI to test.
+
+    .NOTES
+        Returns $true for local feeds, $false for online feeds.
+        Local feeds include:
+        - file:// URIs
+        - Windows drive paths (C:\, D:\, etc.)
+        - UNC paths (\\server\share)
+        - Relative paths
+        
+        Online feeds include:
+        - http://, https:// URIs
+        - ftp://, ftps:// URIs
+        - Other network protocols
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$FeedPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FeedPath)) {
+        return $false
+    }
+
+    $FeedPath = $FeedPath.Trim()
+
+    # Check for online protocols
+    $onlineProtocols = @('http://', 'https://', 'ftp://', 'ftps://', 'sftp://')
+    foreach ($protocol in $onlineProtocols) {
+        if ($FeedPath.StartsWith($protocol, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+    }
+
+    # Check for file:// protocol (local)
+    if ($FeedPath.StartsWith('file://', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    # Check for Windows drive letters (C:\, D:\, etc.)
+    if ($FeedPath -match '^[a-zA-Z]:\\') {
+        return $true
+    }
+
+    # Check for UNC paths (\\server\share)
+    if ($FeedPath.StartsWith('\\')) {
+        return $true
+    }
+
+    # Check for relative paths or paths without protocol
+    # If it doesn't start with a protocol, assume it's local
+    if (-not ($FeedPath -match '^[a-zA-Z][a-zA-Z0-9+.-]*://')) {
+        return $true
+    }
+
+    # Default to online for unknown protocols
+    return $false
+}
+
+function Compare-PackageVersions {
+    <#
+    .SYNOPSIS
+        Compares two package version strings.
+
+    .DESCRIPTION
+        Compares two version strings and returns:
+        - 1 if Version1 is greater than Version2
+        - 0 if versions are equal
+        - -1 if Version1 is less than Version2
+
+    .PARAMETER Version1
+        First version string to compare.
+
+    .PARAMETER Version2
+        Second version string to compare.
+
+    .EXAMPLE
+        Compare-PackageVersions -Version1 "2.0.0" -Version2 "1.0.0"
+        Returns: 1 (Version1 is greater)
+
+    .EXAMPLE
+        Compare-PackageVersions -Version1 "1.0.0" -Version2 "1.0.0"
+        Returns: 0 (versions are equal)
+
+    .NOTES
+        Attempts to parse as System.Version first, falls back to string comparison.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Version1,
+        
+        [Parameter(Mandatory)]
+        [string]$Version2
+    )
+
+    begin {
+        Write-Verbose "Starting Compare-PackageVersions operation"
+    }
+    
+    process {
+        try {
+            # Try to parse as System.Version for proper semantic versioning
+            $v1 = [System.Version]::Parse($Version1)
+            $v2 = [System.Version]::Parse($Version2)
+            
+            return $v1.CompareTo($v2)
+        }
+        catch {
+            # Fall back to string comparison if version parsing fails
+            Write-Verbose "Failed to parse versions as System.Version, using string comparison"
+            
+            if ($Version1 -eq $Version2) {
+                return 0
+            }
+            elseif ($Version1 -gt $Version2) {
+                return 1
+            }
+            else {
+                return -1
+            }
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Compare-PackageVersions operation"
     }
 }
 
@@ -2587,135 +3144,6 @@ function Invoke-TopologicalSort {
     return @{ Success = $true }
 }
 
-function Test-FeedIsLocal {
-    <#
-    .SYNOPSIS
-        Tests whether a feed path represents a local or online feed.
-
-    .DESCRIPTION
-        Determines if a feed path is local (file system) or online (network) based on the URI scheme or path format.
-
-    .PARAMETER FeedPath
-        The feed path/URI to test.
-
-    .NOTES
-        Returns $true for local feeds, $false for online feeds.
-        Local feeds include:
-        - file:// URIs
-        - Windows drive paths (C:\, D:\, etc.)
-        - UNC paths (\\server\share)
-        - Relative paths
-        
-        Online feeds include:
-        - http://, https:// URIs
-        - ftp://, ftps:// URIs
-        - Other network protocols
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]$FeedPath
-    )
-
-    if ([string]::IsNullOrWhiteSpace($FeedPath)) {
-        return $false
-    }
-
-    $FeedPath = $FeedPath.Trim()
-
-    # Check for online protocols
-    $onlineProtocols = @('http://', 'https://', 'ftp://', 'ftps://', 'sftp://')
-    foreach ($protocol in $onlineProtocols) {
-        if ($FeedPath.StartsWith($protocol, [System.StringComparison]::OrdinalIgnoreCase)) {
-            return $false
-        }
-    }
-
-    # Check for file:// protocol (local)
-    if ($FeedPath.StartsWith('file://', [System.StringComparison]::OrdinalIgnoreCase)) {
-        return $true
-    }
-
-    # Check for Windows drive letters (C:\, D:\, etc.)
-    if ($FeedPath -match '^[a-zA-Z]:\\') {
-        return $true
-    }
-
-    # Check for UNC paths (\\server\share)
-    if ($FeedPath.StartsWith('\\')) {
-        return $true
-    }
-
-    # Check for relative paths or paths without protocol
-    # If it doesn't start with a protocol, assume it's local
-    if (-not ($FeedPath -match '^[a-zA-Z][a-zA-Z0-9+.-]*://')) {
-        return $true
-    }
-
-    # Default to online for unknown protocols
-    return $false
-}
-
-function Compare-PackageVersions {
-    <#
-    .SYNOPSIS
-        Compares two package version strings.
-
-    .DESCRIPTION
-        Compares two version strings and returns:
-        - 1 if Version1 is greater than Version2
-        - 0 if versions are equal
-        - -1 if Version1 is less than Version2
-
-    .PARAMETER Version1
-        First version string to compare.
-
-    .PARAMETER Version2
-        Second version string to compare.
-
-    .EXAMPLE
-        Compare-PackageVersions -Version1 "2.0.0" -Version2 "1.0.0"
-        Returns: 1 (Version1 is greater)
-
-    .EXAMPLE
-        Compare-PackageVersions -Version1 "1.0.0" -Version2 "1.0.0"
-        Returns: 0 (versions are equal)
-
-    .NOTES
-        Attempts to parse as System.Version first, falls back to string comparison.
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]$Version1,
-        
-        [Parameter(Mandatory)]
-        [string]$Version2
-    )
-
-    try {
-        # Try to parse as System.Version for proper semantic versioning
-        $v1 = [System.Version]::Parse($Version1)
-        $v2 = [System.Version]::Parse($Version2)
-        
-        return $v1.CompareTo($v2)
-    }
-    catch {
-        # Fall back to string comparison if version parsing fails
-        Write-Verbose "Failed to parse versions as System.Version, using string comparison"
-        
-        if ($Version1 -eq $Version2) {
-            return 0
-        }
-        elseif ($Version1 -gt $Version2) {
-            return 1
-        }
-        else {
-            return -1
-        }
-    }
-}
-
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -2738,4 +3166,5 @@ Export-ModuleMember -Function `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
     ,   Apply-NipkgSnapshot `
-    ,   Compare-PackageVersions
+    ,   Compare-PackageVersions `
+    ,   Test-NipkgSnapshotCompliance
