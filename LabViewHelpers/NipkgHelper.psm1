@@ -1922,17 +1922,17 @@ function Apply-NipkgSnapshot {
                             if ($versionComparison -gt 0) {
                                 # Upgrade needed (target version is higher)
                                 $action = "upgrade"
-                                Write-Verbose "Package '$packageName' needs upgrade: $currentVersion → $targetVersion"
+                                Write-Verbose "Package '$packageName' needs upgrade: $currentVersion -> $targetVersion"
                             }
                             elseif ($versionComparison -lt 0) {
                                 # Downgrade needed (target version is lower)
                                 $action = "downgrade"
-                                Write-Verbose "Package '$packageName' needs downgrade: $currentVersion → $targetVersion"
+                                Write-Verbose "Package '$packageName' needs downgrade: $currentVersion -> $targetVersion"
                             }
                             else {
                                 # Versions are considered equal by our comparison
                                 $action = "none"
-                                Write-Verbose "Package '$packageName' is already at equivalent version ($currentVersion ≈ $targetVersion)"
+                                Write-Verbose "Package '$packageName' is already at equivalent version ($currentVersion = $targetVersion)"
                             }
                         }
                     }
@@ -1974,10 +1974,10 @@ function Apply-NipkgSnapshot {
                         }
                         
                         "upgrade" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) → v$($targetVersion)", "Upgrade package")) {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) -> v$($targetVersion)", "Upgrade package")) {
                                 try {
                                     $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Upgrading: $($packageName) v$($currentVersion) → v$($targetVersion)" -InformationAction Continue
+                                    Write-Information "Upgrading: $($packageName) v$($currentVersion) -> v$($targetVersion)" -InformationAction Continue
                                     & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
                                     
                                     if ($LASTEXITCODE -eq 0) {
@@ -1998,10 +1998,10 @@ function Apply-NipkgSnapshot {
                         }
                         
                         "downgrade" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) → v$($targetVersion)", "Downgrade package")) {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) -> v$($targetVersion)", "Downgrade package")) {
                                 try {
                                     $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Downgrading: $($packageName) v$($currentVersion) → v$($targetVersion)" -InformationAction Continue
+                                    Write-Information "Downgrading: $($packageName) v$($currentVersion) -> v$($targetVersion)" -InformationAction Continue
                                     
                                     # For downgrades, we might need to use --force or uninstall first
                                     & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y --force
@@ -2283,9 +2283,9 @@ function Apply-NipkgSnapshot {
                     $applyResult | Add-Member -MemberType NoteProperty -Name "ComplianceReport" -Value $complianceResult -Force
                     
                     if ($complianceResult.OverallCompliant) {
-                        Write-Information "✓ System is compliant with snapshot" -InformationAction Continue
+                        Write-Information "[OK] System is compliant with snapshot" -InformationAction Continue
                     } else {
-                        Write-Warning "✗ System is not fully compliant with snapshot"
+                        Write-Warning "[ERROR] System is not fully compliant with snapshot"
                         $warningMessage = [string]::Concat("Compliance issues found: ", $complianceResult.TotalIssues)
                         Write-Warning $warningMessage
                         # Note: If FailOnNonCompliance was set, Test-NipkgSnapshotCompliance would have already thrown
@@ -2624,10 +2624,10 @@ function Test-NipkgSnapshotCompliance {
 
             # Output compliance status
             if ($complianceReport.OverallCompliant) {
-                Write-Information "✓ System is COMPLIANT with snapshot" -InformationAction Continue
+                Write-Information "[OK] System is COMPLIANT with snapshot" -InformationAction Continue
                 Write-Information $complianceReport.Summary -InformationAction Continue
             } else {
-                Write-Warning "✗ System is NOT COMPLIANT with snapshot"
+                Write-Warning "[ERROR] System is NOT COMPLIANT with snapshot"
                 Write-Warning $complianceReport.Summary
                 $warningMessage = [string]::Concat("Total issues found: ", $complianceReport.TotalIssues)
                 Write-Warning $warningMessage
