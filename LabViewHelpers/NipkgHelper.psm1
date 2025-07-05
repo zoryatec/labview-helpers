@@ -1563,16 +1563,18 @@ function New-NipkgSnapshotFromSystem {
 function Apply-NipkgSnapshot {
     <#
     .SYNOPSIS
-        Applies a NIPKG snapshot by adding feeds and installing packages.
+        Applies a NIPKG snapshot using declarative package management.
 
     .DESCRIPTION
-        Imports a NIPKG snapshot from JSON and applies it to the system by:
+        Imports a NIPKG snapshot from JSON and applies it to the system using a declarative approach:
         1. Adding all feeds from the snapshot to NIPKG
         2. Updating the package database
-        3. Installing all packages from the snapshot
+        3. Analyzing current package state vs. snapshot requirements
+        4. Installing missing packages, upgrading outdated packages, and downgrading newer packages
+        5. Leaving unchanged packages alone
         
-        This function is useful for restoring a system to a specific state or
-        applying a known configuration from a snapshot file.
+        The function compares the current system state with the snapshot and only performs
+        necessary actions, making it safe to run multiple times (idempotent).
 
     .PARAMETER SnapshotPath
         Path to the JSON snapshot file created by Export-NipkgSnapshotToJson.
@@ -1581,19 +1583,19 @@ function Apply-NipkgSnapshot {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .PARAMETER SkipFeeds
-        Skip adding feeds from the snapshot (only install packages).
+        Skip adding feeds from the snapshot (only manage packages).
 
     .PARAMETER SkipPackages
-        Skip installing packages from the snapshot (only add feeds).
+        Skip managing packages from the snapshot (only add feeds).
 
     .PARAMETER Force
-        Force installation of packages even if they are already installed.
+        Force operations even if they might cause issues (used for downgrades).
 
     .PARAMETER RemoveExistingFeeds
         Remove all existing feeds from the system before applying the snapshot feeds.
 
     .PARAMETER RemoveSnapshotFeeds
-        Remove the snapshot feeds from the system after package installation is complete.
+        Remove the snapshot feeds from the system after package operations are complete.
         This is useful when you want to install packages from specific feeds but don't want
         to keep those feeds permanently in the system.
 
@@ -1677,8 +1679,11 @@ function Apply-NipkgSnapshot {
                 SnapshotFeedsRemoved = 0
                 SnapshotFeedsRemovalFailed = 0
                 PackagesInstalled = 0
+                PackagesUpgraded = 0
+                PackagesDowngraded = 0
                 PackagesSkipped = 0
                 PackagesFailed = 0
+                PackagesUnchanged = 0
             }
 
             # Track feeds added from the snapshot for potential removal later
@@ -1757,57 +1762,171 @@ function Apply-NipkgSnapshot {
                 Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
             }
 
-            # Phase 2: Install packages
+            # Phase 2: Install packages (declarative approach)
             if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
-                Write-Information "Phase 2: Installing packages..." -InformationAction Continue
+                Write-Information "Phase 2: Processing packages in installation order..." -InformationAction Continue
                 
-                # Build install command arguments
-                $installArgs = @()
-                foreach ($package in $snapshot.packages) {
-                    # Add package with specific version
-                    $packageSpec = "$($package.name)=$($package.version)"
-                    $installArgs += $packageSpec
+                # Get currently installed packages
+                Write-Information "Retrieving currently installed packages..." -InformationAction Continue
+                try {
+                    $installedPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Found $($installedPackages.Count) currently installed packages"
+                }
+                catch {
+                    Write-Warning "Failed to get installed packages list: $($_.Exception.Message)"
+                    $installedPackages = @()
                 }
                 
-                Write-Information "Installing $($snapshot.packages.Count) packages..." -InformationAction Continue
-                Write-Verbose "Package specifications: $($installArgs -join ', ')"
-
-                if ($PSCmdlet.ShouldProcess("$($snapshot.packages.Count) packages", "Install NIPKG packages")) {
-                    try {
-
-                        foreach ($package in $snapshot.packages) {
-                            Write-Host "Installing package: $($package.Package) version $($package.Version)"
-                            $packageSpec = "$($package.name)=$($package.version)"
-                            & $NipkgCmdPath install "$packageSpec" --accept-eulas --include-recommended -y  
+                # Create lookup table for installed packages
+                $installedLookup = @{}
+                foreach ($pkg in $installedPackages) {
+                    $installedLookup[$pkg.Package] = $pkg.Version
+                }
+                
+                # Process each package in the snapshot in installation order
+                Write-Information "Processing $($snapshot.packages.Count) packages in dependency order..." -InformationAction Continue
+                
+                foreach ($snapshotPackage in $snapshot.packages) {
+                    $packageName = $snapshotPackage.name
+                    $targetVersion = $snapshotPackage.version
+                    
+                    # Determine what action is needed for this package
+                    $action = "none"
+                    $currentVersion = $null
+                    
+                    if ($installedLookup.ContainsKey($packageName)) {
+                        $currentVersion = $installedLookup[$packageName]
+                        
+                        if ($currentVersion -eq $targetVersion) {
+                            # Same version - no action needed
+                            $action = "none"
+                            Write-Verbose "Package '$packageName' is already at target version ($targetVersion)"
                         }
-                        # # Build the complete command
-                        # $cmdArgs = @('install') + $installArgs
-                        # if ($Force) {
-                        #     $cmdArgs += '--force'
-                        # }
-                        # $cmdArgs += '--accept-eulas'
-                        # $cmdArgs += '--prevent-reboot'
-
-                        # Write-Verbose "Executing: $NipkgCmdPath $($cmdArgs -join ' ')"
-                        
-                        # # Execute the install command
-                        # & $NipkgCmdPath @cmdArgs
-                        
-                        # if ($LASTEXITCODE -eq 0) {
-                        #     $results.PackagesInstalled = $snapshot.packages.Count
-                        #     Write-Information "Successfully installed all packages" -InformationAction Continue
-                        # } else {
-                        #     $results.PackagesFailed = $snapshot.packages.Count
-                        #     Write-Warning "Package installation failed (exit code: $LASTEXITCODE)"
-                        # }
+                        else {
+                            $versionComparison = Compare-PackageVersions -Version1 $targetVersion -Version2 $currentVersion
+                            
+                            if ($versionComparison -gt 0) {
+                                # Upgrade needed (target version is higher)
+                                $action = "upgrade"
+                                Write-Verbose "Package '$packageName' needs upgrade: $currentVersion → $targetVersion"
+                            }
+                            elseif ($versionComparison -lt 0) {
+                                # Downgrade needed (target version is lower)
+                                $action = "downgrade"
+                                Write-Verbose "Package '$packageName' needs downgrade: $currentVersion → $targetVersion"
+                            }
+                            else {
+                                # Versions are considered equal by our comparison
+                                $action = "none"
+                                Write-Verbose "Package '$packageName' is already at equivalent version ($currentVersion ≈ $targetVersion)"
+                            }
+                        }
                     }
-                    catch {
-                        $results.PackagesFailed = $snapshot.packages.Count
-                        Write-Error "Failed to install packages: $($_.Exception.Message)"
+                    else {
+                        # Package not installed - needs installation
+                        $action = "install"
+                        Write-Verbose "Package '$packageName' is not installed, needs installation (version $targetVersion)"
                     }
-                } else {
-                    $results.PackagesSkipped = $snapshot.packages.Count
+                    
+                    # Perform the required action
+                    switch ($action) {
+                        "none" {
+                            $results.PackagesUnchanged++
+                            Write-Verbose "Skipping '$packageName' - already at correct version ($targetVersion)"
+                        }
+                        
+                        "install" {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($targetVersion)", "Install package")) {
+                                try {
+                                    $packageSpec = "$($packageName)=$($targetVersion)"
+                                    Write-Information "Installing: $($packageName) v$($targetVersion)" -InformationAction Continue
+                                    & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
+                                    
+                                    if ($LASTEXITCODE -eq 0) {
+                                        $results.PackagesInstalled++
+                                        Write-Verbose "Successfully installed $($packageName) v$($targetVersion)"
+                                    } else {
+                                        $results.PackagesFailed++
+                                        Write-Warning "Failed to install $($packageName) v$($targetVersion) (exit code: $LASTEXITCODE)"
+                                    }
+                                }
+                                catch {
+                                    $results.PackagesFailed++
+                                    Write-Warning "Exception installing $($packageName) v$($targetVersion): $($_.Exception.Message)"
+                                }
+                            } else {
+                                $results.PackagesSkipped++
+                            }
+                        }
+                        
+                        "upgrade" {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) → v$($targetVersion)", "Upgrade package")) {
+                                try {
+                                    $packageSpec = "$($packageName)=$($targetVersion)"
+                                    Write-Information "Upgrading: $($packageName) v$($currentVersion) → v$($targetVersion)" -InformationAction Continue
+                                    & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
+                                    
+                                    if ($LASTEXITCODE -eq 0) {
+                                        $results.PackagesUpgraded++
+                                        Write-Verbose "Successfully upgraded $($packageName) to v$($targetVersion)"
+                                    } else {
+                                        $results.PackagesFailed++
+                                        Write-Warning "Failed to upgrade $($packageName) to v$($targetVersion) (exit code: $LASTEXITCODE)"
+                                    }
+                                }
+                                catch {
+                                    $results.PackagesFailed++
+                                    Write-Warning "Exception upgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
+                                }
+                            } else {
+                                $results.PackagesSkipped++
+                            }
+                        }
+                        
+                        "downgrade" {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) → v$($targetVersion)", "Downgrade package")) {
+                                try {
+                                    $packageSpec = "$($packageName)=$($targetVersion)"
+                                    Write-Information "Downgrading: $($packageName) v$($currentVersion) → v$($targetVersion)" -InformationAction Continue
+                                    
+                                    # For downgrades, we might need to use --force or uninstall first
+                                    & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y --force
+                                    
+                                    if ($LASTEXITCODE -eq 0) {
+                                        $results.PackagesDowngraded++
+                                        Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion)"
+                                    } else {
+                                        # If direct downgrade fails, try uninstall then install
+                                        Write-Verbose "Direct downgrade failed, trying uninstall then install approach"
+                                        & $NipkgCmdPath remove $($packageName) -y
+                                        
+                                        if ($LASTEXITCODE -eq 0) {
+                                            & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
+                                            
+                                            if ($LASTEXITCODE -eq 0) {
+                                                $results.PackagesDowngraded++
+                                                Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
+                                            } else {
+                                                $results.PackagesFailed++
+                                                Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
+                                            }
+                                        } else {
+                                            $results.PackagesFailed++
+                                            Write-Warning "Failed to uninstall $($packageName) for downgrade (exit code: $LASTEXITCODE)"
+                                        }
+                                    }
+                                }
+                                catch {
+                                    $results.PackagesFailed++
+                                    Write-Warning "Exception downgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
+                                }
+                            } else {
+                                $results.PackagesSkipped++
+                            }
+                        }
+                    }
                 }
+                
             } else {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
             }
@@ -1854,7 +1973,7 @@ function Apply-NipkgSnapshot {
             if ($results.SnapshotFeedsRemovalFailed -gt 0) {
                 Write-Information "Snapshot feeds removal failed: $($results.SnapshotFeedsRemovalFailed)" -InformationAction Continue
             }
-            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
+            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesUpgraded) upgraded, $($results.PackagesDowngraded) downgraded, $($results.PackagesUnchanged) unchanged, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
 
             # Return detailed results
             return [PSCustomObject]@{
@@ -1868,6 +1987,9 @@ function Apply-NipkgSnapshot {
                 SnapshotFeedsRemovalFailed = $results.SnapshotFeedsRemovalFailed
                 PackagesTotal = $snapshot.packages.Count
                 PackagesInstalled = $results.PackagesInstalled
+                PackagesUpgraded = $results.PackagesUpgraded
+                PackagesDowngraded = $results.PackagesDowngraded
+                PackagesUnchanged = $results.PackagesUnchanged
                 PackagesSkipped = $results.PackagesSkipped
                 PackagesFailed = $results.PackagesFailed
                 Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0)
@@ -2306,6 +2428,66 @@ function Test-FeedIsLocal {
     return $false
 }
 
+function Compare-PackageVersions {
+    <#
+    .SYNOPSIS
+        Compares two package version strings.
+
+    .DESCRIPTION
+        Compares two version strings and returns:
+        - 1 if Version1 is greater than Version2
+        - 0 if versions are equal
+        - -1 if Version1 is less than Version2
+
+    .PARAMETER Version1
+        First version string to compare.
+
+    .PARAMETER Version2
+        Second version string to compare.
+
+    .EXAMPLE
+        Compare-PackageVersions -Version1 "2.0.0" -Version2 "1.0.0"
+        Returns: 1 (Version1 is greater)
+
+    .EXAMPLE
+        Compare-PackageVersions -Version1 "1.0.0" -Version2 "1.0.0"
+        Returns: 0 (versions are equal)
+
+    .NOTES
+        Attempts to parse as System.Version first, falls back to string comparison.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Version1,
+        
+        [Parameter(Mandatory)]
+        [string]$Version2
+    )
+
+    try {
+        # Try to parse as System.Version for proper semantic versioning
+        $v1 = [System.Version]::Parse($Version1)
+        $v2 = [System.Version]::Parse($Version2)
+        
+        return $v1.CompareTo($v2)
+    }
+    catch {
+        # Fall back to string comparison if version parsing fails
+        Write-Verbose "Failed to parse versions as System.Version, using string comparison"
+        
+        if ($Version1 -eq $Version2) {
+            return 0
+        }
+        elseif ($Version1 -gt $Version2) {
+            return 1
+        }
+        else {
+            return -1
+        }
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -2327,4 +2509,5 @@ Export-ModuleMember -Function `
     ,   New-NipkgSnapshotFromSystem `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
-    ,   Apply-NipkgSnapshot
+    ,   Apply-NipkgSnapshot `
+    ,   Compare-PackageVersions
