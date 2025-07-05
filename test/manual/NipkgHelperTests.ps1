@@ -145,7 +145,7 @@ Write-Host "   Parsed $($parsedPackages.Count) packages" -ForegroundColor Cyan
 
 # Test 3: Compare with the combined function
 Write-Host "3. Comparing with combined Get-PackagesInfo function..." -ForegroundColor Yellow
-$combinedPackages = Get-PackagesInfo -Type 'installed' -NipkgCmdPath $nipkgPath
+$combinedPackages = Get-PackagesInfoFromNipkgCmd -Type 'installed' -NipkgCmdPath $nipkgPath
 Write-Host "   Combined function returned $($combinedPackages.Count) packages" -ForegroundColor Cyan
 
 # Verify results match

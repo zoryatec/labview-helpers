@@ -56,7 +56,6 @@ try {
         'Get-NipkgCommandOutput',
         'ConvertFrom-NipkgOutput',
         'ConvertFrom-NipkgPackagesFile',
-        'Get-PackagesInfo',
         'Get-PackagesInfoFromNipkgCmd',
         'Get-PackagesInfoFromPackagesFile',
         'Get-DriverPackages',

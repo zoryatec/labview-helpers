@@ -52,7 +52,7 @@ function Install-LabView {
         try {
             Write-Information "Installing LabVIEW packages..." -InformationAction Continue
 
-            $packagesInfo = Get-PackagesInfo `
+            $packagesInfo = Get-PackagesInfoFromNipkgCmd `
                 -NipkgCmdPath $NipkgCmdPath `
                 -Type 'available' # 'installed' or 'available'
 

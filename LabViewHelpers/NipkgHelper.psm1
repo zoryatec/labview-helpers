@@ -13,8 +13,7 @@
     - Get-NipkgCommandOutput: Executes NIPKG commands and returns raw output
     - ConvertFrom-NipkgOutput: Parses raw NIPKG command output (3+ blank line separators)
     - ConvertFrom-NipkgPackagesFile: Parses NIPKG Packages files (single blank line separators)
-    - Get-PackagesInfo: Convenience function combining command execution and parsing
-    - Get-PackagesInfoFromNipkgCmd: Parses NIPKG command output from saved files
+    - Get-PackagesInfoFromNipkgCmd: Convenience function combining command execution and parsing
     - Get-PackagesInfoFromPackagesFile: Parses NIPKG feed Packages files
     - New-NipkgSnapshotFromInstaller: Creates snapshots from installer directory structures
     - New-NipkgSnapshotFromSystem: Creates snapshots from current system state
@@ -526,7 +525,7 @@ function ConvertFrom-NipkgPackagesFile {
     }
 }
 
-function Get-PackagesInfo {
+function Get-PackagesInfoFromNipkgCmd {
     <#
     .SYNOPSIS
         Retrieves package information from NI Package Manager.
@@ -543,10 +542,10 @@ function Get-PackagesInfo {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .EXAMPLE
-        Get-PackagesInfo -Type "installed"
+        Get-PackagesInfoFromNipkgCmd -Type "installed"
 
     .EXAMPLE
-        Get-PackagesInfo -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        Get-PackagesInfoFromNipkgCmd -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
         Returns an array of PSCustomObjects with package properties parsed from NIPKG output.
@@ -564,7 +563,7 @@ function Get-PackagesInfo {
     )
 
     begin {
-        Write-Verbose "Starting Get-PackagesInfo operation"
+        Write-Verbose "Starting Get-PackagesInfoFromNipkgCmd operation"
     }
     
     process {
@@ -587,77 +586,6 @@ function Get-PackagesInfo {
         catch {
             $errorMessage = "Failed to get packages info - Type: '$Type'. Error: $($_.Exception.Message)"
             Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Type
-            throw
-        }
-    }
-    
-    end {
-        Write-Verbose "Completed Get-PackagesInfo operation"
-    }
-}
-
-function Get-PackagesInfoFromNipkgCmd {
-    <#
-    .SYNOPSIS
-        Retrieves package information from a saved NIPKG command output file.
-
-    .DESCRIPTION
-        Reads NIPKG command output from a file and parses it into structured PSCustomObject format.
-        This is useful for parsing previously saved NIPKG command output or testing with sample data.
-        The file should contain raw output from 'nipkg info' or 'nipkg info-installed' commands.
-
-    .PARAMETER InputPath
-        Path to the file containing NIPKG command output.
-
-    .EXAMPLE
-        Get-PackagesInfoFromNipkgCmd -InputPath "C:\temp\nipkg-output.txt"
-
-    .EXAMPLE
-        # Save command output to file first, then parse it
-        nipkg info-installed > "C:\temp\installed-packages.txt"
-        $packages = Get-PackagesInfoFromNipkgCmd -InputPath "C:\temp\installed-packages.txt"
-
-    .NOTES
-        Returns an array of PSCustomObjects with package properties parsed from the file content.
-        The file should contain raw NIPKG command output in the same format as 'nipkg info' or 'nipkg info-installed'.
-        Uses 3+ consecutive blank lines as package separators (NIPKG command output format).
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNullOrEmpty()]
-        [string]$InputPath
-    )
-
-    begin {
-        Write-Verbose "Starting Get-PackagesInfoFromNipkgCmd operation"
-    }
-    
-    process {
-        try {
-            # Validate input file exists
-            if (-not (Test-Path -Path $InputPath)) {
-                throw "NIPKG command output file not found: $InputPath"
-            }
-
-            Write-Information "Reading NIPKG command output from file..." -InformationAction Continue
-            Write-Verbose "Reading file: $InputPath"
-            
-            # Read file content as array of lines
-            $outputLines = Get-Content -Path $InputPath -Encoding UTF8
-            Write-Verbose "Read $($outputLines.Count) lines from command output file"
-            
-            # Parse the output using the command output parser (3+ blank line separators)
-            $parsedPackages = ConvertFrom-NipkgOutput -OutputLines $outputLines
-            
-            Write-Information "Parsed packages from command output file successfully: $InputPath" -InformationAction Continue
-            Write-Verbose "Parsed $($parsedPackages.Count) packages from command output file"
-            
-            return $parsedPackages
-        }
-        catch {
-            $errorMessage = "Failed to get packages info from NIPKG command output file - InputPath: '$InputPath'. Error: $($_.Exception.Message)"
-            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InputPath
             throw
         }
     }
@@ -746,10 +674,10 @@ function Get-DriverPackages {
         Filters the provided package information to include only packages in the "Drivers" section.
 
     .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
+        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
 
     .EXAMPLE
-        $packages = Get-PackagesInfo -Type "installed"
+        $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
         Get-DriverPackages -PackagesInfo $packages
 
     .NOTES
@@ -774,10 +702,10 @@ function Get-ProgrammingEnvironmentsPackages {
         Filters the provided package information to include only packages in the "Programming Environments" section.
 
     .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
+        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
 
     .EXAMPLE
-        $packages = Get-PackagesInfo -Type "available"
+        $packages = Get-PackagesInfoFromNipkgCmd -Type "available"
         Get-ProgrammingEnvironmentsPackages -PackagesInfo $packages
 
     .NOTES
@@ -802,10 +730,10 @@ function Get-UtilitiesPackages {
         Filters the provided package information to include only packages in the "Utilities" section.
 
     .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
+        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
 
     .EXAMPLE
-        $packages = Get-PackagesInfo -Type "installed"
+        $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
         Get-UtilitiesPackages -PackagesInfo $packages
 
     .NOTES
@@ -831,10 +759,10 @@ function Get-ApplicationSoftwarePackages {
         Filters the provided package information to include only packages in the "Application Software" section.
 
     .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
+        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
 
     .EXAMPLE
-        $packages = Get-PackagesInfo -Type "available"
+        $packages = Get-PackagesInfoFromNipkgCmd -Type "available"
         Get-ApplicationSoftwarePackages -PackagesInfo $packages
 
     .NOTES
@@ -958,11 +886,11 @@ function New-NipkgSnapshot {
         PSCustomObject containing feed information from Get-FeedsInfoFromNipkgCmd.
 
     .PARAMETER PackagesInfo
-        PSCustomObject containing package information from Get-PackagesInfo.
+        PSCustomObject containing package information from Get-PackagesInfoFromNipkgCmd.
 
     .EXAMPLE
         $feeds = Get-FeedsInfoFromNipkgCmd
-        $packages = Get-PackagesInfo -Type "installed"
+        $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
         $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
 
     .NOTES
@@ -1507,7 +1435,7 @@ function New-NipkgSnapshotFromSystem {
             Write-Verbose "Getting packages info for type: $PackageType"
             
             try {
-                $packagesInfo = Get-PackagesInfo -Type $PackageType -NipkgCmdPath $NipkgCmdPath
+                $packagesInfo = Get-PackagesInfoFromNipkgCmd -Type $PackageType -NipkgCmdPath $NipkgCmdPath
                 Write-Verbose "Retrieved $($packagesInfo.Count) packages from system"
                 Write-Information "Found $($packagesInfo.Count) $PackageType package(s)" -InformationAction Continue
             }
@@ -1870,7 +1798,6 @@ Export-ModuleMember -Function `
     ,   Get-NipkgCommandOutput `
     ,   ConvertFrom-NipkgOutput `
     ,   ConvertFrom-NipkgPackagesFile `
-    ,   Get-PackagesInfo `
     ,   Get-PackagesInfoFromNipkgCmd `
     ,   Get-PackagesInfoFromPackagesFile `
     ,   Get-DriverPackages `
