@@ -49,7 +49,6 @@
         'Install-Chocolatey',
         'Install-ChocolateyPackage7zip',
         'Install-Gcd',
-        'Install-LabView',
         'Expand-Iso',
         'Install-LabViewIso',
         'Set-LabViewForCi',

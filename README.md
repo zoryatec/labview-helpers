@@ -34,7 +34,7 @@ Install-Module -Name LabViewHelpers -Scope CurrentUser
 
 ### LabViewInstallationHelper
 
-- `Install-LabView` / `Install-LabViewIso` / `Install-LabViewOffline`
+- `Install-LabViewIso` / `Install-LabViewOffline`
 - `Set-LabViewForCi` / `Expand-Iso`
 - `Install-Chocolatey` / `Install-Gcd`
 

@@ -15,87 +15,6 @@
     Copyright 2025 : LabVIEW Helpers
 #>
 
-function Install-LabView {
-    <#
-    .SYNOPSIS
-        Installs LabVIEW packages using NI Package Manager.
-
-    .DESCRIPTION
-        Automates the installation of LabVIEW programming environments, drivers, 
-        applications, and utilities using NIPKG package manager.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .EXAMPLE
-        Install-LabView
-
-    .EXAMPLE
-        Install-LabView -NipkgCmdPath "C:\Program Files\National Instruments\NI Package Manager\nipkg.exe"
-
-    .NOTES
-        Requires NIPKG to be installed and feeds to be configured.
-        Installs packages in order: Programming Environments, Drivers, Applications, Utilities.
-    #>
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter()]
-        [ValidateNotNullOrEmpty()]
-        [string]$NipkgCmdPath = 'nipkg'
-    )
-    
-    begin {
-        Write-Verbose "Starting Install-LabView operation"
-    }
-    
-    process {
-        try {
-            Write-Information "Installing LabVIEW packages..." -InformationAction Continue
-
-            $packagesInfo = Get-PackagesInfoFromNipkgCmd `
-                -NipkgCmdPath $NipkgCmdPath `
-                -Type 'available' # 'installed' or 'available'
-
-            Write-Host "Installing programming environments packages..." -ForegroundColor Cyan
-            $programingEnvironmentsPackages  = Get-ProgrammingEnvironmentsPackages -PackagesInfo $packagesInfo
-            foreach ($package in $programingEnvironmentsPackages) {
-                Write-Host "Installing package: $($package.Package) version $($package.Version)"
-                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-            }
-
-            Write-Host "Installing drivers packages..." -ForegroundColor Cyan
-            $driversPackages  = Get-DriverPackages -PackagesInfo $packagesInfo
-            foreach ($package in $driversPackages) {
-                Write-Host "Installing package: $($package.Package) version $($package.Version)"
-                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-            }
-
-            Write-Host "Installing application packages..." -ForegroundColor Cyan
-            $applicationPackages  = Get-ApplicationSoftwarePackages -PackagesInfo $packagesInfo
-            foreach ($package in $applicationPackages) {
-                Write-Host "Installing package: $($package.Package) version $($package.Version)"
-                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-            }
-
-            Write-Host "Installing utilities packages..." -ForegroundColor Cyan
-            $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $packagesInfo
-            foreach ($package in $utilitiesPackages ) {
-                Write-Host "Installing package: $($package.Package) version $($package.Version)"
-                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-            }
-        }
-        catch {
-            $errorMessage = "Failed to install LabVIEW packages. Error: $($_.Exception.Message)"
-            Write-Error -Message $errorMessage -Category NotInstalled
-            throw
-        }
-    }
-    
-    end {
-        Write-Verbose "Completed Install-LabView operation"
-    }
-}
-
 function Install-Chocolatey {
     <#
     .SYNOPSIS
@@ -366,29 +285,6 @@ function Install-LabViewOffline {
             
             Apply-NipkgSnapshot @applyParams
 
-            # $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
-            # $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"
-
-            # if ($NipkgInstallerPath -and (Test-Path -Path $NipkgInstallerPath)) {
-            #     Write-Information "Installing NIPKG manager first..." -InformationAction Continue
-            #     Install-NipkgManager -InstallerPath $NipkgInstallerPath
-            # }
-
-            # # Verify NIPKG is available
-            # Write-Information "Verifying NIPKG installation..." -InformationAction Continue
-            # & $NipkgCmdPath --version
-            
-            # if ($LASTEXITCODE -ne 0) {
-            #     throw "NIPKG is not installed or not accessible at: $NipkgCmdPath"
-            # }
-
-            # Write-Information "Adding feed directories..." -InformationAction Continue
-            # Add-FeedDirectories -FeedsDirectory $feedsDirectory -NipkgCmdPath $NipkgCmdPath 
-
-            # Write-Information "Starting LabVIEW installation..." -InformationAction Continue
-            # Install-LabView -NipkgCmdPath $NipkgCmdPath
-            
-            # Write-Information "LabVIEW offline installation completed successfully" -InformationAction Continue
         }
         catch {
             $errorMessage = "Failed to install LabVIEW offline. Error: $($_.Exception.Message)"
@@ -692,7 +588,6 @@ Export-ModuleMember -Function `
     ,   Install-Chocolatey `
     ,   Install-ChocolateyPackage7zip `
     ,   Install-Gcd `
-    ,   Install-LabView `
     ,   Expand-Iso `
     ,   Install-LabViewIso `
     ,   Set-LabViewForCi
