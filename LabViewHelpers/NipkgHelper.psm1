@@ -1571,6 +1571,11 @@ function Apply-NipkgSnapshot {
     .PARAMETER RemoveExistingFeeds
         Remove all existing feeds from the system before applying the snapshot feeds.
 
+    .PARAMETER RemoveSnapshotFeeds
+        Remove the snapshot feeds from the system after package installation is complete.
+        This is useful when you want to install packages from specific feeds but don't want
+        to keep those feeds permanently in the system.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1584,6 +1589,14 @@ function Apply-NipkgSnapshot {
     .EXAMPLE
         # Remove existing feeds before applying snapshot
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds
+
+    .EXAMPLE
+        # Remove snapshot feeds after installation
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveSnapshotFeeds
+
+    .EXAMPLE
+        # Complete workflow: remove existing feeds, apply snapshot, then remove snapshot feeds
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -1609,7 +1622,10 @@ function Apply-NipkgSnapshot {
         [switch]$Force,
         
         [Parameter()]
-        [switch]$RemoveExistingFeeds
+        [switch]$RemoveExistingFeeds,
+        
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds
     )
 
     begin {
@@ -1637,10 +1653,15 @@ function Apply-NipkgSnapshot {
                 FeedsAdded = 0
                 FeedsSkipped = 0
                 FeedsFailed = 0
+                SnapshotFeedsRemoved = 0
+                SnapshotFeedsRemovalFailed = 0
                 PackagesInstalled = 0
                 PackagesSkipped = 0
                 PackagesFailed = 0
             }
+
+            # Track feeds added from the snapshot for potential removal later
+            $snapshotFeedsAdded = @()
 
             # Phase 0: Remove existing feeds if requested
             if ($RemoveExistingFeeds -and -not $SkipFeeds) {
@@ -1682,6 +1703,7 @@ function Apply-NipkgSnapshot {
                             
                             if ($LASTEXITCODE -eq 0) {
                                 $results.FeedsAdded++
+                                $snapshotFeedsAdded += $feed
                                 Write-Verbose "Successfully added feed: $($feed.name)"
                             } else {
                                 $results.FeedsFailed++
@@ -1769,12 +1791,48 @@ function Apply-NipkgSnapshot {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
             }
 
+            # Phase 3: Remove snapshot feeds if requested
+            if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
+                Write-Information "Phase 3: Removing snapshot feeds after package installation..." -InformationAction Continue
+                
+                if ($PSCmdlet.ShouldProcess("$($snapshotFeedsAdded.Count) snapshot feeds", "Remove snapshot feeds")) {
+                    try {
+                        # Convert snapshot feeds to the format expected by Remove-Feeds
+                        $feedsToRemove = $snapshotFeedsAdded | ForEach-Object {
+                            [PSCustomObject]@{
+                                name = $_.name
+                                uri = $_.uri
+                                enabled = $true
+                            }
+                        }
+                        
+                        Write-Information "Removing $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
+                        Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
+                        $results.SnapshotFeedsRemoved = $feedsToRemove.Count
+                        Write-Information "Successfully removed $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
+                    }
+                    catch {
+                        $results.SnapshotFeedsRemovalFailed = $snapshotFeedsAdded.Count
+                        Write-Warning "Failed to remove snapshot feeds: $($_.Exception.Message)"
+                        # Continue - this is not a critical failure
+                    }
+                }
+            } elseif ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -eq 0) {
+                Write-Information "No snapshot feeds were added, nothing to remove" -InformationAction Continue
+            }
+
             # Summary
             Write-Information "Snapshot application completed" -InformationAction Continue
             if ($results.FeedsRemoved -gt 0) {
-                Write-Information "Feeds removed: $($results.FeedsRemoved)" -InformationAction Continue
+                Write-Information "Existing feeds removed: $($results.FeedsRemoved)" -InformationAction Continue
             }
             Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
+            if ($results.SnapshotFeedsRemoved -gt 0) {
+                Write-Information "Snapshot feeds removed: $($results.SnapshotFeedsRemoved)" -InformationAction Continue
+            }
+            if ($results.SnapshotFeedsRemovalFailed -gt 0) {
+                Write-Information "Snapshot feeds removal failed: $($results.SnapshotFeedsRemovalFailed)" -InformationAction Continue
+            }
             Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
 
             # Return detailed results
@@ -1785,11 +1843,13 @@ function Apply-NipkgSnapshot {
                 FeedsAdded = $results.FeedsAdded
                 FeedsSkipped = $results.FeedsSkipped
                 FeedsFailed = $results.FeedsFailed
+                SnapshotFeedsRemoved = $results.SnapshotFeedsRemoved
+                SnapshotFeedsRemovalFailed = $results.SnapshotFeedsRemovalFailed
                 PackagesTotal = $snapshot.packages.Count
                 PackagesInstalled = $results.PackagesInstalled
                 PackagesSkipped = $results.PackagesSkipped
                 PackagesFailed = $results.PackagesFailed
-                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0)
+                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0)
             }
         }
         catch {

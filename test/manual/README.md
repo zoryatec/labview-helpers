@@ -13,16 +13,32 @@ Comprehensive test suite that validates all module functionality including:
 - Help documentation
 
 ### `test-removeexistingfeeds.ps1`
-Specific test for the new RemoveExistingFeeds parameter in Apply-NipkgSnapshot function.
+
+Specific test for the RemoveExistingFeeds parameter in Apply-NipkgSnapshot function.
+
+### `test-removesnapshotfeeds.ps1`
+
+Specific test for the new RemoveSnapshotFeeds parameter in Apply-NipkgSnapshot function.
 
 ## Demo Scripts
 
 ### `demo-removeexistingfeeds.ps1`
+
 Interactive demonstration of the RemoveExistingFeeds functionality, including:
+
 - Usage examples
 - Operation flow explanation
 - Return object documentation
 - Use cases and scenarios
+
+### `demo-removesnapshotfeeds.ps1`
+
+Interactive demonstration of the new RemoveSnapshotFeeds functionality, including:
+
+- Usage examples and scenarios
+- Practical use cases (clean installation, development environment setup)
+- Combined usage with RemoveExistingFeeds
+- Real-world examples
 
 ## Running Tests
 
@@ -36,12 +52,15 @@ Set-Location "c:\Projects\_Repos\labview-helpers\test\manual"
 .\run-tests.ps1                    # Run all tests
 .\run-tests.ps1 -TestName comprehensive     # Run comprehensive test only
 .\run-tests.ps1 -TestName removeexistingfeeds  # Run RemoveExistingFeeds test only
+.\run-tests.ps1 -TestName removesnapshotfeeds  # Run RemoveSnapshotFeeds test only
 .\run-tests.ps1 -TestName demo              # Run demo script only
 
 # Or run individual tests directly
 .\test-comprehensive.ps1
 .\test-removeexistingfeeds.ps1
+.\test-removesnapshotfeeds.ps1
 .\demo-removeexistingfeeds.ps1
+.\demo-removesnapshotfeeds.ps1
 ```
 
 ### Test Runner
@@ -51,6 +70,7 @@ The `run-tests.ps1` script provides a convenient way to run all tests or specifi
 ## Module Path Resolution
 
 All test scripts automatically resolve the module path relative to their location:
+
 - Script location: `test/manual/`
 - Module location: `../../LabViewHelpers/LabViewHelpers.psd1`
 

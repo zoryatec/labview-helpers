@@ -8,7 +8,7 @@
     Runs all the manual tests for the LabViewHelpers module from the test/manual directory.
 
 .PARAMETER TestName
-    Specific test to run. Options: 'comprehensive', 'removeexistingfeeds', 'demo', 'all'
+    Specific test to run. Options: 'comprehensive', 'removeexistingfeeds', 'removesnapshotfeeds', 'demo', 'all'
 
 .EXAMPLE
     .\run-tests.ps1
@@ -17,6 +17,10 @@
 .EXAMPLE
     .\run-tests.ps1 -TestName comprehensive
     Runs only the comprehensive test
+
+.EXAMPLE
+    .\run-tests.ps1 -TestName removesnapshotfeeds
+    Runs the RemoveSnapshotFeeds test
 
 .EXAMPLE
     .\run-tests.ps1 -TestName demo
@@ -30,7 +34,7 @@
 
 param(
     [Parameter()]
-    [ValidateSet('comprehensive', 'removeexistingfeeds', 'demo', 'all')]
+    [ValidateSet('comprehensive', 'removeexistingfeeds', 'removesnapshotfeeds', 'demo', 'all')]
     [string]$TestName = 'all'
 )
 
@@ -45,8 +49,10 @@ Write-Host "Script location: $testDir" -ForegroundColor Gray
 # Verify we have the test files
 $requiredFiles = @(
     'test-comprehensive.ps1',
-    'test-removeexistingfeeds.ps1', 
-    'demo-removeexistingfeeds.ps1'
+    'test-removeexistingfeeds.ps1',
+    'test-removesnapshotfeeds.ps1',
+    'demo-removeexistingfeeds.ps1',
+    'demo-removesnapshotfeeds.ps1'
 )
 
 $missingFiles = @()
@@ -73,9 +79,15 @@ try {
             Write-Host "`nRunning RemoveExistingFeeds tests..." -ForegroundColor Yellow
             & (Join-Path $testDir "test-removeexistingfeeds.ps1")
         }
+        'removesnapshotfeeds' {
+            Write-Host "`nRunning RemoveSnapshotFeeds tests..." -ForegroundColor Yellow
+            & (Join-Path $testDir "test-removesnapshotfeeds.ps1")
+        }
         'demo' {
             Write-Host "`nRunning demo scripts..." -ForegroundColor Yellow
             & (Join-Path $testDir "demo-removeexistingfeeds.ps1")
+            Write-Host "`n--- RemoveSnapshotFeeds Demo ---" -ForegroundColor Magenta
+            & (Join-Path $testDir "demo-removesnapshotfeeds.ps1")
         }
         'all' {
             Write-Host "`nRunning all tests..." -ForegroundColor Yellow
@@ -86,8 +98,14 @@ try {
             Write-Host "`n--- RemoveExistingFeeds Test ---" -ForegroundColor Magenta
             & (Join-Path $testDir "test-removeexistingfeeds.ps1")
             
-            Write-Host "`n--- Demo Script ---" -ForegroundColor Magenta
+            Write-Host "`n--- RemoveSnapshotFeeds Test ---" -ForegroundColor Magenta
+            & (Join-Path $testDir "test-removesnapshotfeeds.ps1")
+            
+            Write-Host "`n--- RemoveExistingFeeds Demo ---" -ForegroundColor Magenta
             & (Join-Path $testDir "demo-removeexistingfeeds.ps1")
+            
+            Write-Host "`n--- RemoveSnapshotFeeds Demo ---" -ForegroundColor Magenta
+            & (Join-Path $testDir "demo-removesnapshotfeeds.ps1")
         }
     }
     
