@@ -17,6 +17,7 @@
     - Get-PackagesInfoFromNipkgCmd: Parses NIPKG command output from saved files
     - Get-PackagesInfoFromPackagesFile: Parses NIPKG feed Packages files
     - New-NipkgSnapshotFromInstaller: Creates snapshots from installer directory structures
+    - New-NipkgSnapshotFromSystem: Creates snapshots from current system state
     
     This separation allows for flexible data sources and easier testing.
 
@@ -997,7 +998,7 @@ function New-NipkgSnapshot {
 
             $filteredPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
 
-            Write-Verbose "Filtered packages: $($outputPackages.Count) total packages from programming environments, drivers, applications, and utilities"
+            Write-Verbose "Filtered packages: $($filteredPackages.Count) total packages from programming environments, drivers, applications, and utilities"
             
             # Convert feeds to desired format
             $feeds = @()
@@ -1420,6 +1421,124 @@ function New-NipkgSnapshotFromInstaller {
     }
 }
 
+function New-NipkgSnapshotFromSystem {
+    <#
+    .SYNOPSIS
+        Creates a NIPKG snapshot from the current system state.
+
+    .DESCRIPTION
+        Creates a snapshot by capturing the current NIPKG configuration including configured feeds
+        and installed packages. This function combines Get-FeedsInfoFromNipkgCmd, Get-PackagesInfo, 
+        and New-NipkgSnapshot to create a complete system state snapshot.
+
+    .PARAMETER PackageType
+        Specifies whether to capture 'installed' or 'available' packages. Defaults to 'installed'.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER IncludeFeeds
+        Whether to include current feed configuration in the snapshot. Defaults to $true.
+
+    .EXAMPLE
+        $snapshot = New-NipkgSnapshotFromSystem
+
+    .EXAMPLE
+        $snapshot = New-NipkgSnapshotFromSystem -PackageType "installed" -IncludeFeeds $true
+
+    .EXAMPLE
+        $snapshot = New-NipkgSnapshotFromSystem -PackageType "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns a hashtable with:
+        - feeds: Array of current feeds with name and uri (if IncludeFeeds is true)
+        - packages: Array of packages with name and version based on PackageType
+        
+        This function is useful for creating backups of the current system state or 
+        for creating snapshots to replicate on other systems.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [ValidateSet("installed", "available")]
+        [string]$PackageType = "installed",
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [bool]$IncludeFeeds = $true
+    )
+
+    begin {
+        Write-Verbose "Starting New-NipkgSnapshotFromSystem operation"
+    }
+    
+    process {
+        try {
+            Write-Information "Creating NIPKG snapshot from current system state..." -InformationAction Continue
+            Write-Verbose "Package type: $PackageType, Include feeds: $IncludeFeeds"
+
+            # Initialize collections
+            $feedsInfo = @()
+            $packagesInfo = @()
+
+            # Get current feeds if requested
+            if ($IncludeFeeds) {
+                Write-Information "Retrieving current feed configuration..." -InformationAction Continue
+                Write-Verbose "Getting feeds info from NIPKG command"
+                
+                try {
+                    $feedsInfo = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    Write-Verbose "Retrieved $($feedsInfo.Count) feeds from system"
+                    Write-Information "Found $($feedsInfo.Count) configured feed(s)" -InformationAction Continue
+                }
+                catch {
+                    Write-Warning "Failed to retrieve feeds information: $($_.Exception.Message)"
+                    $feedsInfo = @()
+                }
+            } else {
+                Write-Information "Skipping feed configuration (IncludeFeeds=$IncludeFeeds)" -InformationAction Continue
+            }
+
+            # Get packages information
+            Write-Information "Retrieving $PackageType packages information..." -InformationAction Continue
+            Write-Verbose "Getting packages info for type: $PackageType"
+            
+            try {
+                $packagesInfo = Get-PackagesInfo -Type $PackageType -NipkgCmdPath $NipkgCmdPath
+                Write-Verbose "Retrieved $($packagesInfo.Count) packages from system"
+                Write-Information "Found $($packagesInfo.Count) $PackageType package(s)" -InformationAction Continue
+            }
+            catch {
+                Write-Error "Failed to retrieve packages information: $($_.Exception.Message)"
+                throw
+            }
+
+            # Create the snapshot using the retrieved information
+            Write-Information "Creating snapshot object..." -InformationAction Continue
+            Write-Verbose "Creating snapshot with $($feedsInfo.Count) feeds and $($packagesInfo.Count) packages"
+            
+            $snapshot = New-NipkgSnapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo
+            
+            Write-Information "System snapshot created successfully" -InformationAction Continue
+            Write-Verbose "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to create system snapshot - PackageType: '$PackageType'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $PackageType
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed New-NipkgSnapshotFromSystem operation"
+    }
+}
+
 function Apply-NipkgSnapshot {
     <#
     .SYNOPSIS
@@ -1662,6 +1781,7 @@ Export-ModuleMember -Function `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `
     ,   New-NipkgSnapshotFromInstaller `
+    ,   New-NipkgSnapshotFromSystem `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
     ,   Apply-NipkgSnapshot

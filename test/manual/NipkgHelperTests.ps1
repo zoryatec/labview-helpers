@@ -14,6 +14,7 @@ $nipkgFunctions = @(
     'ConvertFrom-NipkgPackagesFile',
     'Get-PackagesInfoFromPackagesFile',
     'New-NipkgSnapshotFromInstaller',
+    'New-NipkgSnapshotFromSystem',
     'Apply-NipkgSnapshot',
     'Export-NipkgSnapshotToJson',
     'Import-NipkgSnapshotFromJson'

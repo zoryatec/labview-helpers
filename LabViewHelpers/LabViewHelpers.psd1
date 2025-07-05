@@ -72,6 +72,7 @@
         'Install-NipkgManager',
         'New-NipkgSnapshot',
         'New-NipkgSnapshotFromInstaller',
+        'New-NipkgSnapshotFromSystem',
         "Export-NipkgSnapshotToJson",
         "Import-NipkgSnapshotFromJson",
         "Apply-NipkgSnapshot"
