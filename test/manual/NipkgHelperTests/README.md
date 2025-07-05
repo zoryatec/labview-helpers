@@ -5,6 +5,7 @@ This directory contains individual test scripts for specific functions in the Ni
 ## Test Files
 
 ### Test-PackageInstallationOrder.ps1
+
 Tests the `Get-PackageInstallationOrder` function which sorts packages into correct installation order based on dependencies.
 
 **Features tested:**
@@ -13,6 +14,26 @@ Tests the `Get-PackageInstallationOrder` function which sorts packages into corr
 - Synthetic test data for edge cases
 - Error handling and edge cases
 - Performance and output validation
+
+### Test-CircularDependencies.ps1
+
+Tests the circular dependency handling capabilities of the `Get-PackageInstallationOrder` function.
+
+**Features tested:**
+- Simple circular dependencies (A→B→A)
+- Real-world NI Vision package circular dependencies
+- Complex dependency chains with cycles
+- Updated `New-NipkgSnapshot` function with circular dependency handling
+
+### New-NipkgSnapshotFromSystemTests.ps1
+
+Tests the `New-NipkgSnapshotFromSystem` function which creates snapshots from the current system state.
+
+**Features tested:**
+- System snapshot creation with installed packages
+- NIPKG availability checking
+- Snapshot export to JSON
+- Error handling and reporting
 
 **Requirements:**
 - LabViewHelpers module must be importable

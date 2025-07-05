@@ -917,14 +917,23 @@ function New-NipkgSnapshot {
         try {
             Write-Verbose "Formatting feeds information"
 
-
+            # Order packages for installation, allowing circular dependencies which are common in real systems
+            Write-Verbose "Ordering packages for optimal installation sequence..."
+            try {
+                $filteredPackages = Get-PackageInstallationOrder -PackagesInfo $PackagesInfo -AllowCircularDependencies
+                Write-Verbose "Successfully ordered $($filteredPackages.Count) packages (circular dependencies allowed)"
+            } catch {
+                Write-Warning "Package ordering failed, using original order: $($_.Exception.Message)"
+                $filteredPackages = $PackagesInfo
+            }
+            
             # Filter packages by category
-            $programingEnvironmentsPackages = Get-ProgrammingEnvironmentsPackages -PackagesInfo $PackagesInfo
-            $driversPackages = Get-DriverPackages -PackagesInfo $PackagesInfo
-            $applicationPackages = Get-ApplicationSoftwarePackages -PackagesInfo $PackagesInfo
-            $utilitiesPackages = Get-UtilitiesPackages -PackagesInfo $PackagesInfo
+            # $programingEnvironmentsPackages = Get-ProgrammingEnvironmentsPackages -PackagesInfo $PackagesInfo
+            # $driversPackages = Get-DriverPackages -PackagesInfo $PackagesInfo
+            # $applicationPackages = Get-ApplicationSoftwarePackages -PackagesInfo $PackagesInfo
+            # $utilitiesPackages = Get-UtilitiesPackages -PackagesInfo $PackagesInfo
 
-            $filteredPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
+            # $filteredPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
 
             Write-Verbose "Filtered packages: $($filteredPackages.Count) total packages from programming environments, drivers, applications, and utilities"
             
