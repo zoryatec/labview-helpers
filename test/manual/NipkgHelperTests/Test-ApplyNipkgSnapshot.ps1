@@ -17,6 +17,7 @@ $applyParams = @{
     SnapshotPath = $snapshotFilePath
     NipkgCmdPath = $nipkgCmdPath
     Verbose = $true
+    ValidateCompliance = $true
 }
 
 $applyParams.RemoveExistingFeeds = $true

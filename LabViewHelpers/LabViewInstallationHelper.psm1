@@ -273,6 +273,7 @@ function Install-LabViewOffline {
                 SnapshotPath = $InstallationSnapshotFile
                 NipkgCmdPath = $NipkgCmdPath
                 Verbose = $true
+                ValidateCompliance = $true
             }
             
             if ($RemoveExistingFeeds) {
