@@ -1400,7 +1400,7 @@ function New-NipkgSnapshotFromInstaller {
 
             Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
 
-            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $outputPackages
+            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $allPackages
             
             Write-Verbose "Created snapshot with $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
