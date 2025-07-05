@@ -2047,11 +2047,19 @@ function Apply-NipkgSnapshot {
                             if ($PSCmdlet.ShouldProcess("$($feedToRemove.Name) -> $($feedToRemove.Path)", "Remove unlisted feed")) {
                                 try {
                                     Write-Information "Removing unlisted feed: $($feedToRemove.Name) -> $($feedToRemove.Path)" -InformationAction Continue
-                                    & $NipkgCmdPath feed-remove "$($feedToRemove.Path)"
+                                    & $NipkgCmdPath feed-remove "$($feedToRemove.Name)"
                                     
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.FeedsUnlistedRemoved++
                                         Write-Verbose "Successfully removed unlisted feed $($feedToRemove.Name)"
+                                    } elseif ($LASTEXITCODE -eq -125079) {
+                                        # Feed doesn't exist or is not enabled - this can happen if:
+                                        # 1. Feed was already removed by a previous operation
+                                        # 2. Feed is disabled
+                                        # 3. Feed path no longer exists
+                                        # We'll treat this as a successful removal since the goal is achieved
+                                        $results.FeedsUnlistedRemoved++
+                                        Write-Verbose "Feed '$($feedToRemove.Name)' was already removed or not enabled - goal achieved"
                                     } else {
                                         $results.FeedsUnlistedRemovalFailed++
                                         Write-Warning "Failed to remove unlisted feed '$($feedToRemove.Name)' (exit code: $LASTEXITCODE)"
