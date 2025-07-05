@@ -1568,6 +1568,9 @@ function Apply-NipkgSnapshot {
     .PARAMETER Force
         Force installation of packages even if they are already installed.
 
+    .PARAMETER RemoveExistingFeeds
+        Remove all existing feeds from the system before applying the snapshot feeds.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1577,6 +1580,10 @@ function Apply-NipkgSnapshot {
     .EXAMPLE
         # Only add feeds, don't install packages
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -SkipPackages
+
+    .EXAMPLE
+        # Remove existing feeds before applying snapshot
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -1599,7 +1606,10 @@ function Apply-NipkgSnapshot {
         [switch]$SkipPackages,
         
         [Parameter()]
-        [switch]$Force
+        [switch]$Force,
+        
+        [Parameter()]
+        [switch]$RemoveExistingFeeds
     )
 
     begin {
@@ -1623,12 +1633,39 @@ function Apply-NipkgSnapshot {
             Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
 
             $results = @{
+                FeedsRemoved = 0
                 FeedsAdded = 0
                 FeedsSkipped = 0
                 FeedsFailed = 0
                 PackagesInstalled = 0
                 PackagesSkipped = 0
                 PackagesFailed = 0
+            }
+
+            # Phase 0: Remove existing feeds if requested
+            if ($RemoveExistingFeeds -and -not $SkipFeeds) {
+                Write-Information "Phase 0: Removing existing feeds from NIPKG..." -InformationAction Continue
+                
+                try {
+                    # Get current feeds
+                    $existingFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    
+                    if ($existingFeeds -and $existingFeeds.Count -gt 0) {
+                        Write-Information "Found $($existingFeeds.Count) existing feed(s) to remove" -InformationAction Continue
+                        
+                        if ($PSCmdlet.ShouldProcess("$($existingFeeds.Count) existing feeds", "Remove existing NIPKG feeds")) {
+                            Remove-Feeds -FeedsInfo $existingFeeds -NipkgCmdPath $NipkgCmdPath
+                            $results.FeedsRemoved = $existingFeeds.Count
+                            Write-Information "Removed $($existingFeeds.Count) existing feed(s)" -InformationAction Continue
+                        }
+                    } else {
+                        Write-Information "No existing feeds found to remove" -InformationAction Continue
+                    }
+                }
+                catch {
+                    Write-Warning "Failed to remove existing feeds: $($_.Exception.Message)"
+                    # Continue with the rest of the operation even if feed removal fails
+                }
             }
 
             # Phase 1: Add feeds
@@ -1734,12 +1771,16 @@ function Apply-NipkgSnapshot {
 
             # Summary
             Write-Information "Snapshot application completed" -InformationAction Continue
+            if ($results.FeedsRemoved -gt 0) {
+                Write-Information "Feeds removed: $($results.FeedsRemoved)" -InformationAction Continue
+            }
             Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
             Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
 
             # Return detailed results
             return [PSCustomObject]@{
                 SnapshotPath = $SnapshotPath
+                FeedsRemoved = $results.FeedsRemoved
                 FeedsTotal = $snapshot.feeds.Count
                 FeedsAdded = $results.FeedsAdded
                 FeedsSkipped = $results.FeedsSkipped
