@@ -116,7 +116,7 @@ function Add-FeedDirectories {
     }
 }
 
-function Get-FeedsInfo {
+function Get-FeedsInfoFromNipkgCmd {
     <#
     .SYNOPSIS
         Retrieves information about configured NIPKG feeds.
@@ -132,7 +132,7 @@ function Get-FeedsInfo {
         Get-FeedsInfo
 
     .EXAMPLE
-        Get-FeedsInfo -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        Get-FeedsInfoFromNipkgCmd -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
         Returns PSCustomObject with Name and Path properties for each feed.
@@ -174,14 +174,14 @@ function Remove-Feeds {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .EXAMPLE
-        $feeds = Get-FeedsInfo
+        $feeds = Get-FeedsInfoFromNipkgCmd
         Remove-Feeds -FeedsInfo $feeds
 
     .EXAMPLE
         Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
-        Use Get-FeedsInfo to get the required FeedsInfo object.
+        Use Get-FeedsInfoFromNipkgCmd to get the required FeedsInfo object.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -954,13 +954,13 @@ function New-NipkgSnapshot {
         This object can be serialized to JSON or used for other purposes.
 
     .PARAMETER FeedsInfo
-        PSCustomObject containing feed information from Get-FeedsInfo.
+        PSCustomObject containing feed information from Get-FeedsInfoFromNipkgCmd.
 
     .PARAMETER PackagesInfo
         PSCustomObject containing package information from Get-PackagesInfo.
 
     .EXAMPLE
-        $feeds = Get-FeedsInfo
+        $feeds = Get-FeedsInfoFromNipkgCmd
         $packages = Get-PackagesInfo -Type "installed"
         $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
 
@@ -1657,7 +1657,7 @@ Export-ModuleMember -Function `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
     ,   Get-ApplicationSoftwarePackages `
-    ,   Get-FeedsInfo `
+    ,   Get-FeedsInfoFromNipkgCmd `
     ,   Remove-Feeds `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `

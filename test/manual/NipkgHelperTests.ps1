@@ -58,7 +58,7 @@ Write-Host ""
 #     -NipkgCmdPath 'C:\Program Files\National Instruments\NI Package Manager\nipkg.exe'
 
 
-$feedsInfo = Get-FeedsInfo -NipkgCmdPath $nipkgPath
+$feedsInfo = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $nipkgPath
 
 # Use the packages we already retrieved successfully above
 # If that failed, this will too, so we'll handle it gracefully
@@ -120,7 +120,7 @@ if ($importedSnapshot.packages.Count -gt 0) {
 
 # Your raw output (from file or command)
 
-# $feedInfo = Get-FeedsInfo `
+# $feedInfo = Get-FeedsInfoFromNipkgCmd `
 #     -NipkgCmdPath $nipkgPath
 
 # $feedInfo | Sort-Object Name | Format-Table Name

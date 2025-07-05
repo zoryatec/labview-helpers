@@ -67,7 +67,7 @@
         'Get-ProgrammingEnvironmentsPackages',
         'Get-UtilitiesPackages',
         'Get-ApplicationSoftwarePackages',
-        'Get-FeedsInfo',
+        'Get-FeedsInfoFromNipkgCmd',
         'Remove-Feeds',
         'Install-NipkgManager',
         'New-NipkgSnapshot',
