@@ -10,7 +10,7 @@ $nipkgFunctions = @(
     'Get-NipkgCommandOutput',
     'ConvertFrom-NipkgOutput', 
     'Get-PackagesInfo',
-    'Get-PackagesInfoFromFile',
+    'Get-PackagesInfoFromNipkgCmd',
     'ConvertFrom-NipkgPackagesFile',
     'Get-PackagesInfoFromNipkgFile',
     'New-NipkgSnapshotFromInstaller',
@@ -164,8 +164,8 @@ if ($parsedPackages.Count -gt 0 -and $combinedPackages.Count -gt 0) {
     Write-Host "   Combined: $($firstCombined.Package) v$($firstCombined.Version)" -ForegroundColor White
 }
 
-# Test the new file-based function
-Write-Host "Testing Get-PackagesInfoFromFile function..." -ForegroundColor Green
+# Test the renamed file-based function
+Write-Host "Testing Get-PackagesInfoFromNipkgCmd function..." -ForegroundColor Green
 
 # First, save some raw output to a test file
 $testOutputFile = "$tempDirectory\test-nipkg-output.txt"
@@ -178,7 +178,7 @@ try {
 
     # Test parsing from file
     Write-Host "2. Parsing packages from file..." -ForegroundColor Yellow
-    $filePackages = Get-PackagesInfoFromFile -InputPath $testOutputFile
+    $filePackages = Get-PackagesInfoFromNipkgCmd -InputPath $testOutputFile
     Write-Host "   ✓ Parsed $($filePackages.Count) packages from file" -ForegroundColor Green
 
     # Compare with direct parsing
