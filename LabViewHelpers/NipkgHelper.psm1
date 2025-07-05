@@ -985,6 +985,17 @@ function New-NipkgSnapshot {
     process {
         try {
             Write-Verbose "Formatting feeds information"
+
+
+            # Filter packages by category
+            $programingEnvironmentsPackages = Get-ProgrammingEnvironmentsPackages -PackagesInfo $PackagesInfo
+            $driversPackages = Get-DriverPackages -PackagesInfo $PackagesInfo
+            $applicationPackages = Get-ApplicationSoftwarePackages -PackagesInfo $PackagesInfo
+            $utilitiesPackages = Get-UtilitiesPackages -PackagesInfo $PackagesInfo
+
+            $filteredPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
+
+            Write-Verbose "Filtered packages: $($outputPackages.Count) total packages from programming environments, drivers, applications, and utilities"
             
             # Convert feeds to desired format
             $feeds = @()
@@ -999,7 +1010,7 @@ function New-NipkgSnapshot {
             
             # Convert packages to desired format
             $packages = @()
-            foreach ($package in $PackagesInfo) {
+            foreach ($package in $filteredPackages) {
                 $packages += [ordered]@{
                     name = $package.Package
                     version = $package.Version
@@ -1389,17 +1400,6 @@ function New-NipkgSnapshotFromInstaller {
 
             Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
 
-            # Filter packages by category
-            $programingEnvironmentsPackages = Get-ProgrammingEnvironmentsPackages -PackagesInfo $allPackages
-            $driversPackages = Get-DriverPackages -PackagesInfo $allPackages
-            $applicationPackages = Get-ApplicationSoftwarePackages -PackagesInfo $allPackages
-            $utilitiesPackages = Get-UtilitiesPackages -PackagesInfo $allPackages
-
-            $outputPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
-
-            Write-Verbose "Filtered packages: $($outputPackages.Count) total packages from programming environments, drivers, applications, and utilities"
-            
-            # Reuse New-NipkgSnapshot to create the final snapshot object
             $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $outputPackages
             
             Write-Verbose "Created snapshot with $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
