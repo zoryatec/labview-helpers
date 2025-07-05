@@ -13,6 +13,7 @@ $nipkgFunctions = @(
     'Get-PackagesInfoFromNipkgCmd',
     'ConvertFrom-NipkgPackagesFile',
     'Get-PackagesInfoFromPackagesFile',
+    'Get-PackageInstallationOrder',
     'New-NipkgSnapshotFromInstaller',
     'New-NipkgSnapshotFromSystem',
     'Apply-NipkgSnapshot',
@@ -376,6 +377,133 @@ if (Test-Path "$tempDirectory\snapshot.json") {
 } else {
     Write-Host "✗ No snapshot file found at $tempDirectory\snapshot.json" -ForegroundColor Red
     Write-Host "   Run the snapshot creation tests first to generate a test snapshot" -ForegroundColor Yellow
+}
+
+Write-Host ""
+
+# ===================================================================================
+# Test Get-PackageInstallationOrder Function
+# ===================================================================================
+
+Write-Host "Testing Get-PackageInstallationOrder function..." -ForegroundColor Green
+
+# Check if Packages file exists in test-temp
+$packagesTestFile = "$tempDirectory\Packages"
+
+if (Test-Path $packagesTestFile) {
+    Write-Host "Found Packages file: $packagesTestFile" -ForegroundColor Cyan
+    
+    try {
+        # Load packages from the Packages file
+        Write-Host "Loading packages from Packages file..." -ForegroundColor Yellow
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath $packagesTestFile
+        Write-Host "✓ Loaded $($packages.Count) packages from Packages file" -ForegroundColor Green
+        
+        # Test dependency ordering
+        Write-Host "Analyzing package dependencies and determining installation order..." -ForegroundColor Yellow
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages
+        Write-Host "✓ Successfully ordered $($orderedPackages.Count) packages for installation" -ForegroundColor Green
+        
+        # Display first 10 packages in installation order
+        Write-Host ""
+        Write-Host "First 10 packages in installation order (dependencies first):" -ForegroundColor Cyan
+        $orderedPackages | Select-Object -First 10 | ForEach-Object -Begin { $i = 1 } -Process {
+            $dependsCount = 0
+            $dependsFields = @('Depends', 'Recommends')
+            foreach ($field in $dependsFields) {
+                if ($_.PSObject.Properties.Name -contains $field -and $_.$field) {
+                    $dependsCount++
+                }
+            }
+            Write-Host "  $i. $($_.Package) ($($_.Version)) - Dependencies: $dependsCount field(s)" -ForegroundColor White
+            $i++
+        }
+        
+        # Display last 10 packages (most dependent)
+        Write-Host ""
+        Write-Host "Last 10 packages in installation order (most dependent):" -ForegroundColor Cyan
+        $orderedPackages | Select-Object -Last 10 | ForEach-Object -Begin { $i = $orderedPackages.Count - 9 } -Process {
+            $dependsCount = 0
+            $dependsFields = @('Depends', 'Recommends')
+            foreach ($field in $dependsFields) {
+                if ($_.PSObject.Properties.Name -contains $field -and $_.$field) {
+                    $dependsCount++
+                }
+            }
+            Write-Host "  $i. $($_.Package) ($($_.Version)) - Dependencies: $dependsCount field(s)" -ForegroundColor White
+            $i++
+        }
+        
+        # Test with different dependency types
+        Write-Host ""
+        Write-Host "Testing with only 'Depends' dependencies..." -ForegroundColor Yellow
+        $strictOrderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -IncludeDependencyTypes @('Depends')
+        Write-Host "✓ Ordered $($strictOrderedPackages.Count) packages with strict dependencies only" -ForegroundColor Green
+        
+        # Test with all dependency types
+        Write-Host "Testing with all dependency types..." -ForegroundColor Yellow
+        $allDepsOrderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -IncludeDependencyTypes @('Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements')
+        Write-Host "✓ Ordered $($allDepsOrderedPackages.Count) packages with all dependency types" -ForegroundColor Green
+        
+        # Save ordered packages to file for manual inspection
+        $orderedPackagesFile = "$tempDirectory\ordered-packages.json"
+        $orderedPackagesData = @{
+            TotalPackages = $orderedPackages.Count
+            InstallationOrder = $orderedPackages | ForEach-Object {
+                @{
+                    Package = $_.Package
+                    Version = $_.Version
+                    Section = $_.Section
+                    Dependencies = @{
+                        Depends = if ($_.PSObject.Properties.Name -contains 'Depends') { $_.Depends } else { $null }
+                        Recommends = if ($_.PSObject.Properties.Name -contains 'Recommends') { $_.Recommends } else { $null }
+                        Suggests = if ($_.PSObject.Properties.Name -contains 'Suggests') { $_.Suggests } else { $null }
+                    }
+                }
+            }
+        }
+        
+        $orderedPackagesData | ConvertTo-Json -Depth 5 | Out-File -FilePath $orderedPackagesFile -Encoding UTF8
+        Write-Host "✓ Saved installation order to: $orderedPackagesFile" -ForegroundColor Green
+        
+        # Analyze dependency distribution
+        Write-Host ""
+        Write-Host "Dependency Analysis:" -ForegroundColor Cyan
+        $packagesWithDepends = ($packages | Where-Object { $_.PSObject.Properties.Name -contains 'Depends' -and $_.Depends }).Count
+        $packagesWithRecommends = ($packages | Where-Object { $_.PSObject.Properties.Name -contains 'Recommends' -and $_.Recommends }).Count
+        $packagesWithSuggests = ($packages | Where-Object { $_.PSObject.Properties.Name -contains 'Suggests' -and $_.Suggests }).Count
+        
+        Write-Host "  Packages with 'Depends': $packagesWithDepends" -ForegroundColor White
+        Write-Host "  Packages with 'Recommends': $packagesWithRecommends" -ForegroundColor White
+        Write-Host "  Packages with 'Suggests': $packagesWithSuggests" -ForegroundColor White
+        
+        Write-Host ""
+        Write-Host "✓ Get-PackageInstallationOrder function test completed successfully" -ForegroundColor Green
+        
+        # Usage examples
+        Write-Host ""
+        Write-Host "USAGE EXAMPLES:" -ForegroundColor Yellow
+        Write-Host "  # Basic usage - order packages for installation:" -ForegroundColor White
+        Write-Host "  `$packages = Get-PackagesInfoFromPackagesFile -InputPath 'Packages'" -ForegroundColor Gray
+        Write-Host "  `$ordered = Get-PackageInstallationOrder -PackagesInfo `$packages" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  # Only consider hard dependencies:" -ForegroundColor White
+        Write-Host "  `$ordered = Get-PackageInstallationOrder -PackagesInfo `$packages -IncludeDependencyTypes @('Depends')" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  # Include all dependency types:" -ForegroundColor White
+        Write-Host "  `$ordered = Get-PackageInstallationOrder -PackagesInfo `$packages -IncludeDependencyTypes @('Depends', 'Recommends', 'Suggests')" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  # Allow circular dependencies (break cycles):" -ForegroundColor White
+        Write-Host "  `$ordered = Get-PackageInstallationOrder -PackagesInfo `$packages -AllowCircularDependencies" -ForegroundColor Gray
+        
+    } catch {
+        Write-Host "✗ Error testing Get-PackageInstallationOrder: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Error details: $($_.Exception)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "✗ No Packages file found at $packagesTestFile" -ForegroundColor Red
+    Write-Host "   Please ensure you have a Packages file in the test-temp directory" -ForegroundColor Yellow
+    Write-Host "   You can copy one from an NIPKG feed or installer directory" -ForegroundColor Yellow
 }
 
 Write-Host ""

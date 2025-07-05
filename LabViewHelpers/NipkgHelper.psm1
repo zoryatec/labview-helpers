@@ -1792,6 +1792,358 @@ function Apply-NipkgSnapshot {
     }
 }
 
+function Get-PackageInstallationOrder {
+    <#
+    .SYNOPSIS
+        Sorts packages into correct installation order based on dependencies.
+
+    .DESCRIPTION
+        Analyzes package dependencies from NIPKG Packages file data and returns packages
+        in the correct installation order. Ensures that all dependencies are installed
+        with exact versions before dependent packages, preventing NIPKG from selecting
+        random compatible versions during installation.
+
+    .PARAMETER PackagesInfo
+        Array of package objects from Get-PackagesInfoFromPackagesFile containing
+        package information including dependencies.
+
+    .PARAMETER IncludeDependencyTypes
+        Array of dependency types to consider for ordering. Valid values are:
+        'Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements'.
+        Defaults to @('Depends', 'Recommends') for critical dependencies.
+
+    .PARAMETER AllowCircularDependencies
+        Allow circular dependencies by breaking cycles at arbitrary points.
+        If false, throws an error when circular dependencies are detected.
+
+    .EXAMPLE
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\Packages"
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages
+
+    .EXAMPLE
+        # Include all dependency types for ordering
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath ".\Packages"
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -IncludeDependencyTypes @('Depends', 'Recommends', 'Suggests')
+
+    .EXAMPLE
+        # Only consider hard dependencies
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -IncludeDependencyTypes @('Depends')
+
+    .NOTES
+        Returns packages ordered from least dependent (no dependencies) to most dependent.
+        Packages with the same dependency level are sorted alphabetically by package name.
+        
+        The function performs topological sorting on the dependency graph to ensure
+        that all dependencies are installed before their dependents.
+        
+        Dependency strings are parsed to extract package names and version constraints.
+        Only packages present in the input list are considered for ordering.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]]$PackagesInfo,
+        
+        [Parameter()]
+        [ValidateSet('Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements')]
+        [string[]]$IncludeDependencyTypes = @('Depends', 'Recommends'),
+        
+        [Parameter()]
+        [switch]$AllowCircularDependencies
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackageInstallationOrder operation"
+    }
+    
+    process {
+        try {
+            if (-not $PackagesInfo -or $PackagesInfo.Count -eq 0) {
+                Write-Warning "No packages provided for ordering"
+                return @()
+            }
+
+            Write-Information "Analyzing dependencies for $($PackagesInfo.Count) packages..." -InformationAction Continue
+            Write-Verbose "Including dependency types: $($IncludeDependencyTypes -join ', ')"
+
+            # Create a lookup table for packages by name
+            $packageLookup = @{}
+            foreach ($package in $PackagesInfo) {
+                $packageLookup[$package.Package] = $package
+            }
+
+            # Parse dependencies for each package
+            $dependencyGraph = @{}
+            $allPackageNames = @($PackagesInfo | ForEach-Object { $_.Package })
+
+            foreach ($package in $PackagesInfo) {
+                $packageName = $package.Package
+                $dependencies = @()
+
+                # Extract dependencies from all specified dependency types
+                foreach ($depType in $IncludeDependencyTypes) {
+                    if ($package.PSObject.Properties.Name -contains $depType -and $package.$depType) {
+                        $depString = $package.$depType
+                        $parsedDeps = Get-ParsedDependencies -DependencyString $depString -AvailablePackages $allPackageNames
+                        $dependencies += $parsedDeps
+                    }
+                }
+
+                $dependencyGraph[$packageName] = @{
+                    Package = $package
+                    Dependencies = $dependencies | Sort-Object -Unique
+                    Visited = $false
+                    InStack = $false
+                }
+
+                Write-Verbose "Package '$packageName' depends on: $($dependencies -join ', ')"
+            }
+
+            Write-Verbose "Built dependency graph for $($dependencyGraph.Count) packages"
+
+            # Perform topological sort using DFS
+            $sortedPackages = @()
+            $visitStack = @()
+
+            foreach ($packageName in $dependencyGraph.Keys) {
+                if (-not $dependencyGraph[$packageName].Visited) {
+                    $result = Invoke-TopologicalSort -DependencyGraph $dependencyGraph -PackageName $packageName -SortedList ([ref]$sortedPackages) -VisitStack ([ref]$visitStack) -AllowCircular $AllowCircularDependencies
+                    
+                    if (-not $result.Success) {
+                        if ($AllowCircularDependencies) {
+                            Write-Warning "Circular dependency detected: $($result.ErrorMessage). Continuing with partial ordering."
+                        } else {
+                            throw "Circular dependency detected: $($result.ErrorMessage)"
+                        }
+                    }
+                }
+            }
+
+            # Return the packages in installation order (DFS post-order is correct)
+            # Dependencies are added first, then dependents
+            
+            Write-Information "Successfully ordered $($sortedPackages.Count) packages for installation" -InformationAction Continue
+            Write-Verbose "Installation order: $($sortedPackages | ForEach-Object { $_.Package } | Join-String -Separator ', ')"
+
+            return $sortedPackages
+        }
+        catch {
+            $errorMessage = "Failed to determine package installation order. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $PackagesInfo
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackageInstallationOrder operation"
+    }
+}
+
+function Get-ParsedDependencies {
+    <#
+    .SYNOPSIS
+        Parses NIPKG dependency strings into package names.
+
+    .DESCRIPTION
+        Internal helper function that parses NIPKG dependency strings and extracts
+        package names that are available in the provided package list.
+
+    .PARAMETER DependencyString
+        The dependency string from a NIPKG package (e.g., "pkg1 (>= 1.0), pkg2, pkg3 | pkg4").
+
+    .PARAMETER AvailablePackages
+        Array of available package names to filter dependencies against.
+
+    .NOTES
+        Handles various NIPKG dependency formats:
+        - Simple: "package-name"
+        - Versioned: "package-name (>= 1.0.0)"
+        - Multiple: "pkg1, pkg2, pkg3"
+        - Alternatives: "pkg1 | pkg2 | pkg3" (returns first available)
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$DependencyString,
+        
+        [Parameter(Mandatory)]
+        [string[]]$AvailablePackages
+    )
+
+    $dependencies = @()
+    
+    if ([string]::IsNullOrWhiteSpace($DependencyString)) {
+        return $dependencies
+    }
+
+    # Split by comma for multiple dependencies
+    $depParts = $DependencyString -split ','
+    
+    foreach ($depPart in $depParts) {
+        $depPart = $depPart.Trim()
+        
+        # Skip empty parts
+        if ([string]::IsNullOrWhiteSpace($depPart)) {
+            continue
+        }
+        
+        # Handle alternative dependencies (pkg1 | pkg2 | pkg3)
+        if ($depPart -match '\|') {
+            $alternatives = $depPart -split '\|'
+            foreach ($alt in $alternatives) {
+                $altTrimmed = $alt.Trim()
+                if ([string]::IsNullOrWhiteSpace($altTrimmed)) {
+                    continue
+                }
+                $cleanAlt = Get-CleanPackageName -PackageSpec $altTrimmed
+                if ($cleanAlt -and $cleanAlt -in $AvailablePackages) {
+                    $dependencies += $cleanAlt
+                    break  # Only take the first available alternative
+                }
+            }
+        } else {
+            # Single dependency
+            $cleanDep = Get-CleanPackageName -PackageSpec $depPart
+            if ($cleanDep -and $cleanDep -in $AvailablePackages) {
+                $dependencies += $cleanDep
+            }
+        }
+    }
+
+    return $dependencies
+}
+
+function Get-CleanPackageName {
+    <#
+    .SYNOPSIS
+        Extracts clean package name from package specification.
+
+    .DESCRIPTION
+        Internal helper function that removes version constraints and other
+        specifications from package names.
+
+    .PARAMETER PackageSpec
+        Package specification that may include version constraints.
+
+    .NOTES
+        Handles formats like:
+        - "package-name"
+        - "package-name (>= 1.0.0)"
+        - "package-name (<< 2.0)"
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$PackageSpec
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PackageSpec)) {
+        return $null
+    }
+
+    # Remove version constraints in parentheses
+    $cleanName = $PackageSpec -replace '\s*\([^)]*\)\s*', ''
+    
+    # Remove any remaining whitespace
+    $cleanName = $cleanName.Trim()
+    
+    # Return null if empty after cleaning
+    if ([string]::IsNullOrWhiteSpace($cleanName)) {
+        return $null
+    }
+
+    return $cleanName
+}
+
+function Invoke-TopologicalSort {
+    <#
+    .SYNOPSIS
+        Performs depth-first search topological sorting.
+
+    .DESCRIPTION
+        Internal helper function that performs DFS-based topological sorting
+        to determine dependency order.
+
+    .PARAMETER DependencyGraph
+        Hashtable representing the dependency graph.
+
+    .PARAMETER PackageName
+        Current package name being processed.
+
+    .PARAMETER SortedList
+        Reference to the sorted list being built.
+
+    .PARAMETER VisitStack
+        Reference to the current visit stack for cycle detection.
+
+    .PARAMETER AllowCircular
+        Whether to allow circular dependencies.
+
+    .NOTES
+        Returns a result object with Success boolean and ErrorMessage if applicable.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [hashtable]$DependencyGraph,
+        
+        [Parameter(Mandatory)]
+        [string]$PackageName,
+        
+        [Parameter(Mandatory)]
+        [ref]$SortedList,
+        
+        [Parameter(Mandatory)]
+        [ref]$VisitStack,
+        
+        [Parameter()]
+        [bool]$AllowCircular = $false
+    )
+
+    $node = $DependencyGraph[$PackageName]
+    
+    # Check for circular dependency
+    if ($node.InStack) {
+        $cycleStart = $VisitStack.Value.IndexOf($PackageName)
+        $cycle = $VisitStack.Value[$cycleStart..($VisitStack.Value.Count - 1)] + @($PackageName)
+        return @{
+            Success = $false
+            ErrorMessage = "Circular dependency detected: $($cycle -join ' -> ')"
+        }
+    }
+
+    # Skip if already visited
+    if ($node.Visited) {
+        return @{ Success = $true }
+    }
+
+    # Mark as in current path and add to stack
+    $node.InStack = $true
+    $VisitStack.Value += $PackageName
+
+    # Visit all dependencies first
+    foreach ($depName in $node.Dependencies) {
+        if ($DependencyGraph.ContainsKey($depName)) {
+            $result = Invoke-TopologicalSort -DependencyGraph $DependencyGraph -PackageName $depName -SortedList $SortedList -VisitStack $VisitStack -AllowCircular $AllowCircular
+            
+            if (-not $result.Success -and -not $AllowCircular) {
+                return $result
+            }
+        }
+    }
+
+    # Mark as visited and remove from current path
+    $node.Visited = $true
+    $node.InStack = $false
+    $VisitStack.Value = $VisitStack.Value[0..($VisitStack.Value.Count - 2)]  # Remove last element
+
+    # Add to sorted list (will be reversed later)
+    $SortedList.Value += $node.Package
+
+    return @{ Success = $true }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -1800,6 +2152,7 @@ Export-ModuleMember -Function `
     ,   ConvertFrom-NipkgPackagesFile `
     ,   Get-PackagesInfoFromNipkgCmd `
     ,   Get-PackagesInfoFromPackagesFile `
+    ,   Get-PackageInstallationOrder `
     ,   Get-DriverPackages `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `

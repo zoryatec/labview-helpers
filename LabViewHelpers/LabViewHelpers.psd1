@@ -61,6 +61,7 @@
         'ConvertFrom-NipkgPackagesFile',
         'Get-PackagesInfoFromNipkgCmd',
         'Get-PackagesInfoFromPackagesFile',
+        'Get-PackageInstallationOrder',
         'Get-DriverPackages',
         'Get-ProgrammingEnvironmentsPackages',
         'Get-UtilitiesPackages',
