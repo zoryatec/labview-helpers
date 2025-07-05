@@ -2286,7 +2286,8 @@ function Apply-NipkgSnapshot {
                         Write-Information "✓ System is compliant with snapshot" -InformationAction Continue
                     } else {
                         Write-Warning "✗ System is not fully compliant with snapshot"
-                        Write-Warning "Compliance issues found: $($complianceResult.TotalIssues)"
+                        $warningMessage = [string]::Concat("Compliance issues found: ", $complianceResult.TotalIssues)
+                        Write-Warning $warningMessage
                         # Note: If FailOnNonCompliance was set, Test-NipkgSnapshotCompliance would have already thrown
                     }
                 }
@@ -2449,7 +2450,7 @@ function Test-NipkgSnapshotCompliance {
                 $currentFeedsByName = @{}
                 foreach ($feed in $currentFeeds) {
                     $normalizedPath = $feed.Path -replace '\\', '/' -replace '/$', ''
-                    $feedKey = $feed.Name + "|" + $normalizedPath
+                    $feedKey = [string]::Concat($feed.Name, "|", $normalizedPath)
                     $currentFeedsLookup[$feedKey] = $feed
                     $currentFeedsByName[$feed.Name] = $feed
                 }
@@ -2458,7 +2459,7 @@ function Test-NipkgSnapshotCompliance {
                 $snapshotFeedsByName = @{}
                 foreach ($feed in $snapshot.feeds) {
                     $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
-                    $feedKey = $feed.name + "|" + $normalizedUri
+                    $feedKey = [string]::Concat($feed.name, "|", $normalizedUri)
                     $snapshotFeedsLookup[$feedKey] = $feed
                     $snapshotFeedsByName[$feed.name] = $feed
                 }
@@ -2466,14 +2467,24 @@ function Test-NipkgSnapshotCompliance {
                 # Check for missing feeds (in snapshot but not in current system)
                 foreach ($snapshotFeed in $snapshot.feeds) {
                     $normalizedUri = $snapshotFeed.uri -replace '\\', '/' -replace '/$', ''
-                    $feedKey = $snapshotFeed.name + "|" + $normalizedUri
+                    $feedKey = [string]::Concat($snapshotFeed.name, "|", $normalizedUri)
                     
                     if (-not $currentFeedsLookup.ContainsKey($feedKey)) {
+                        # Pre-calculate values for the custom object
+                        $feedNotConfiguredText = "Feed not configured"
+                        $uriMismatchText = "URI mismatch"
+                        $issueText = $feedNotConfiguredText
+                        $actualUriValue = $null
+                        if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) {
+                            $issueText = $uriMismatchText
+                            $actualUriValue = $currentFeedsByName[$snapshotFeed.name].Path
+                        }
+
                         $complianceReport.MissingFeeds += [PSCustomObject]@{
                             Name = $snapshotFeed.name
                             ExpectedUri = $snapshotFeed.uri
-                            ActualUri = if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) { $currentFeedsByName[$snapshotFeed.name].Path } else { $null }
-                            Issue = if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) { "URI mismatch" } else { "Feed not configured" }
+                            ActualUri = $actualUriValue
+                            Issue = $issueText
                         }
                         $complianceReport.FeedsCompliant = $false
                         $complianceReport.OverallCompliant = $false
@@ -2484,13 +2495,14 @@ function Test-NipkgSnapshotCompliance {
                 if (-not $AllowExtraFeeds) {
                     foreach ($currentFeed in $currentFeeds) {
                         $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
-                        $feedKey = $currentFeed.Name + "|" + $normalizedPath
+                        $feedKey = [string]::Concat($currentFeed.Name, "|", $normalizedPath)
                         
                         if (-not $snapshotFeedsLookup.ContainsKey($feedKey)) {
+                            $extraFeedIssueText = "Extra feed not in snapshot"
                             $complianceReport.ExtraFeeds += [PSCustomObject]@{
                                 Name = $currentFeed.Name
                                 Uri = $currentFeed.Path
-                                Issue = "Extra feed not in snapshot"
+                                Issue = $extraFeedIssueText
                             }
                             $complianceReport.FeedsCompliant = $false
                             $complianceReport.OverallCompliant = $false
@@ -2517,12 +2529,14 @@ function Test-NipkgSnapshotCompliance {
                 }
                 
                 # Create lookup tables for comparison
-                $installedLookup = @{}
+                $installedLookup = @{
+                }
                 foreach ($pkg in $installedPackages) {
                     $installedLookup[$pkg.Package] = $pkg.Version
                 }
                 
-                $snapshotPackageLookup = @{}
+                $snapshotPackageLookup = @{
+                }
                 foreach ($pkg in $snapshot.packages) {
                     $snapshotPackageLookup[$pkg.name] = $pkg.version
                 }
@@ -2545,11 +2559,14 @@ function Test-NipkgSnapshotCompliance {
                             $versionComparison = Compare-PackageVersions -Version1 $snapshotPackage.version -Version2 $installedVersion
                             
                             if ($versionComparison -ne 0) {
+                                # Pre-calculate the issue description
+                                $issueDescription = if ($versionComparison -gt 0) { "Version too low" } else { "Version too high" }
+                                
                                 $complianceReport.WrongVersionPackages += [PSCustomObject]@{
                                     Name = $snapshotPackage.name
                                     ExpectedVersion = $snapshotPackage.version
                                     ActualVersion = $installedVersion
-                                    Issue = if ($versionComparison -gt 0) { "Version too low" } else { "Version too high" }
+                                    Issue = $issueDescription
                                 }
                                 $complianceReport.PackagesCompliant = $false
                                 $complianceReport.OverallCompliant = $false
@@ -2588,7 +2605,8 @@ function Test-NipkgSnapshotCompliance {
                     $summaryParts += "Feeds: COMPLIANT"
                 } else {
                     $issueCount = $complianceReport.MissingFeeds.Count + $complianceReport.ExtraFeeds.Count
-                    $summaryParts += "Feeds: NON-COMPLIANT ($issueCount issues)"
+                    $summary = [string]::Concat("Feeds: NON-COMPLIANT (", $issueCount, " issues)")
+                    $summaryParts += $summary
                 }
             }
             
@@ -2597,7 +2615,8 @@ function Test-NipkgSnapshotCompliance {
                     $summaryParts += "Packages: COMPLIANT"
                 } else {
                     $issueCount = $complianceReport.MissingPackages.Count + $complianceReport.ExtraPackages.Count + $complianceReport.WrongVersionPackages.Count
-                    $summaryParts += "Packages: NON-COMPLIANT ($issueCount issues)"
+                    $summary = [string]::Concat("Packages: NON-COMPLIANT (", $issueCount, " issues)")
+                    $summaryParts += $summary
                 }
             }
             
@@ -2610,29 +2629,40 @@ function Test-NipkgSnapshotCompliance {
             } else {
                 Write-Warning "✗ System is NOT COMPLIANT with snapshot"
                 Write-Warning $complianceReport.Summary
-                Write-Warning "Total issues found: $($complianceReport.TotalIssues)"
+                $warningMessage = [string]::Concat("Total issues found: ", $complianceReport.TotalIssues)
+                Write-Warning $warningMessage
                 
                 # Output detailed issues
                 if ($complianceReport.MissingFeeds.Count -gt 0) {
-                    Write-Warning "Missing feeds: $($complianceReport.MissingFeeds.Name -join ', ')"
+                    $feedNames = $complianceReport.MissingFeeds.Name -join ', '
+                    $warningMessage = [string]::Concat("Missing feeds: ", $feedNames)
+                    Write-Warning $warningMessage
                 }
                 if ($complianceReport.ExtraFeeds.Count -gt 0) {
-                    Write-Warning "Extra feeds: $($complianceReport.ExtraFeeds.Name -join ', ')"
+                    $feedNames = $complianceReport.ExtraFeeds.Name -join ', '
+                    $warningMessage = [string]::Concat("Extra feeds: ", $feedNames)
+                    Write-Warning $warningMessage
                 }
                 if ($complianceReport.MissingPackages.Count -gt 0) {
-                    Write-Warning "Missing packages: $($complianceReport.MissingPackages.Name -join ', ')"
+                    $packageNames = $complianceReport.MissingPackages.Name -join ', '
+                    $warningMessage = [string]::Concat("Missing packages: ", $packageNames)
+                    Write-Warning $warningMessage
                 }
                 if ($complianceReport.WrongVersionPackages.Count -gt 0) {
-                    Write-Warning "Wrong version packages: $($complianceReport.WrongVersionPackages.Name -join ', ')"
+                    $packageNames = $complianceReport.WrongVersionPackages.Name -join ', '
+                    $warningMessage = [string]::Concat("Wrong version packages: ", $packageNames)
+                    Write-Warning $warningMessage
                 }
                 if ($complianceReport.ExtraPackages.Count -gt 0) {
-                    Write-Warning "Extra packages: $($complianceReport.ExtraPackages.Name -join ', ')"
+                    $packageNames = $complianceReport.ExtraPackages.Name -join ', '
+                    $warningMessage = [string]::Concat("Extra packages: ", $packageNames)
+                    Write-Warning $warningMessage
                 }
             }
 
             # Fail if requested and non-compliant
             if ($FailOnNonCompliance -and -not $complianceReport.OverallCompliant) {
-                $errorMessage = "System is not compliant with snapshot '$SnapshotPath'. $($complianceReport.TotalIssues) issues found. $($complianceReport.Summary)"
+                $errorMessage = [string]::Concat("System is not compliant with snapshot '", $SnapshotPath, "'. ", $complianceReport.TotalIssues, " issues found. ", $complianceReport.Summary)
                 Write-Error -Message $errorMessage -Category InvalidData -TargetObject $SnapshotPath
                 throw $errorMessage
             }

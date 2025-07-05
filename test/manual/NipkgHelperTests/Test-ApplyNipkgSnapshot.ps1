@@ -19,7 +19,7 @@ $applyParams = @{
     Verbose = $true
 }
 
-$applyParams.RemoveExistingFeeds = $false
+$applyParams.RemoveExistingFeeds = $true
 $applyParams.RemoveSnapshotFeeds = $false
 $applyParams.RemoveUnlistedFeeds = $true
 
