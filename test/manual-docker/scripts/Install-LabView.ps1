@@ -13,7 +13,10 @@ $gcdCmdPath = "$gcdCmdContainingDir\\gcd.exe"
 
 Install-LabViewIso `
     -NipkgInstallerPath $nipkgInstallerPath `
-    -IsoFilePath $installerIsoPath
+    -IsoFilePath $installerIsoPath `
+    -RemoveIsoFile `
+    -RemoveTemporaryDirectory
+
 
 Set-LabViewForCi `
     -LabViewDirectory $labViewDirectory `

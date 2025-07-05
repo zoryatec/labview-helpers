@@ -408,6 +408,14 @@ function Install-LabViewIso {
         This is useful when you want to install packages from the installer but don't want
         to keep those feeds permanently in the system.
 
+    .PARAMETER RemoveIsoFile
+        Remove the ISO file immediately after successful extraction to free up disk space.
+        This is especially useful for large ISO files (40GB+) to prevent disk space issues.
+
+    .PARAMETER RemoveTemporaryDirectory
+        Remove the temporary extraction directory after installation completes.
+        This happens regardless of installation success or failure.
+
     .EXAMPLE
         Install-LabViewIso -IsoFilePath "C:\labview.iso"
 
@@ -420,9 +428,16 @@ function Install-LabViewIso {
     .EXAMPLE
         Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveExistingFeeds -RemoveSnapshotFeeds
 
+    .EXAMPLE
+        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveIsoFile -RemoveTemporaryDirectory
+
+    .EXAMPLE
+        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveExistingFeeds -RemoveSnapshotFeeds -RemoveIsoFile -RemoveTemporaryDirectory
+
     .NOTES
         Requires administrative privileges and sufficient disk space for extraction.
         Temporary directory will be created if it doesn't exist.
+        Cleanup operations in finally block ensure temporary files are removed even on failure.
     #>
     [CmdletBinding()]
     param (
@@ -445,7 +460,13 @@ function Install-LabViewIso {
         [switch]$RemoveExistingFeeds,
 
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$RemoveIsoFile,
+
+        [Parameter()]
+        [switch]$RemoveTemporaryDirectory
     )
     
     begin {
@@ -458,6 +479,18 @@ function Install-LabViewIso {
             
             Write-Information "Step 1: Extracting ISO file..." -InformationAction Continue
             Expand-Iso -IsoFilePath $IsoFilePath -OutputDirectoryPath $TemporaryExpandDirectory
+
+            # Remove ISO file immediately after extraction if requested to free up disk space
+            if ($RemoveIsoFile -and (Test-Path $IsoFilePath)) {
+                try {
+                    Write-Information "Removing ISO file to free up disk space: $IsoFilePath" -InformationAction Continue
+                    Remove-Item -Path $IsoFilePath -Force
+                    Write-Verbose "Successfully removed ISO file after extraction"
+                }
+                catch {
+                    Write-Warning "Failed to remove ISO file after extraction: $($_.Exception.Message)"
+                }
+            }
 
             Write-Information "Step 2: Installing LabVIEW from extracted files..." -InformationAction Continue
             
@@ -489,9 +522,34 @@ function Install-LabViewIso {
             throw
         }
         finally {
-            # Optional: Clean up temporary directory
-            if (Test-Path $TemporaryExpandDirectory) {
+            # Perform cleanup operations if requested
+            Write-Verbose "Performing cleanup operations..."
+            
+            # Remove temporary directory if requested
+            if ($RemoveTemporaryDirectory -and (Test-Path $TemporaryExpandDirectory)) {
+                try {
+                    Write-Information "Removing temporary directory: $TemporaryExpandDirectory" -InformationAction Continue
+                    Remove-Item -Path $TemporaryExpandDirectory -Recurse -Force
+                    Write-Verbose "Successfully removed temporary directory"
+                }
+                catch {
+                    Write-Warning "Failed to remove temporary directory: $($_.Exception.Message)"
+                }
+            }
+            elseif (Test-Path $TemporaryExpandDirectory) {
                 Write-Verbose "Temporary directory remains at: $TemporaryExpandDirectory"
+            }
+            
+            # Remove ISO file if it still exists (in case extraction failed and RemoveIsoFile was requested)
+            if ($RemoveIsoFile -and (Test-Path $IsoFilePath)) {
+                try {
+                    Write-Information "Removing remaining ISO file: $IsoFilePath" -InformationAction Continue
+                    Remove-Item -Path $IsoFilePath -Force
+                    Write-Verbose "Successfully removed remaining ISO file"
+                }
+                catch {
+                    Write-Warning "Failed to remove remaining ISO file: $($_.Exception.Message)"
+                }
             }
         }
     }
