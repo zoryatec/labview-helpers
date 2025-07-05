@@ -1671,6 +1671,10 @@ function Apply-NipkgSnapshot {
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
         The operation can take significant time depending on the number of packages.
+        Packages are installed with hardcoded flags (--allow-downgrade --allow-uninstall --install-also-upgrades)
+        to give NIPKG maximum flexibility in resolving dependencies while maintaining strict installation order.
+        The --include-recommended flag is NOT used to prevent automatic installation of dependencies
+        that should be installed in the intended order.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -1899,25 +1903,45 @@ function Apply-NipkgSnapshot {
                 
                 # Process each package in the snapshot in installation order
                 Write-Information "Processing $($snapshot.packages.Count) packages in dependency order..." -InformationAction Continue
+                Write-Warning "Using strict installation order to prevent dependency conflicts - packages will be installed one by one without automatic recommended packages" -WarningAction Continue
                 
                 foreach ($snapshotPackage in $snapshot.packages) {
                     $packageName = $snapshotPackage.name
                     $targetVersion = $snapshotPackage.version
                     
+                    # Check if package is already installed at the correct version before processing
+                    # This prevents unnecessary work and avoids issues with packages that were auto-installed
+                    $currentlyInstalled = $false
+                    $currentInstalledVersion = $null
+                    
+                    try {
+                        # Re-check current installation status for this specific package
+                        $checkResult = & $NipkgCmdPath info-installed $packageName 2>$null
+                        if ($LASTEXITCODE -eq 0 -and $checkResult) {
+                            # Parse the output to get the installed version
+                            $versionLine = $checkResult | Where-Object { $_ -match "Version:\s*(.+)" }
+                            if ($versionLine) {
+                                $currentInstalledVersion = ($versionLine -split "Version:\s*")[1].Trim()
+                                $currentlyInstalled = $true
+                                Write-Verbose "Current status check: $packageName is installed at version $currentInstalledVersion"
+                            }
+                        }
+                    }
+                    catch {
+                        Write-Verbose "Failed to check current status for $packageName : $($_.Exception.Message)"
+                    }
+                    
                     # Determine what action is needed for this package
                     $action = "none"
-                    $currentVersion = $null
                     
-                    if ($installedLookup.ContainsKey($packageName)) {
-                        $currentVersion = $installedLookup[$packageName]
-                        
-                        if ($currentVersion -eq $targetVersion) {
-                            # Same version - no action needed
+                    if ($currentlyInstalled) {
+                        if ($currentInstalledVersion -eq $targetVersion) {
+                            # Exact version match - no action needed
                             $action = "none"
                             Write-Verbose "Package '$packageName' is already at target version ($targetVersion)"
                         }
                         else {
-                            $versionComparison = Compare-PackageVersions -Version1 $targetVersion -Version2 $currentVersion
+                            $versionComparison = Compare-PackageVersions -Version1 $targetVersion -Version2 $currentInstalledVersion
                             
                             if ($versionComparison -gt 0) {
                                 # Upgrade needed (target version is higher)
@@ -1954,7 +1978,10 @@ function Apply-NipkgSnapshot {
                                 try {
                                     $packageSpec = "$($packageName)=$($targetVersion)"
                                     Write-Information "Installing: $($packageName) v$($targetVersion)" -InformationAction Continue
-                                    & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
+                                    
+                                    # Install with strict control to maintain package installation order
+                                    # Use flags to allow NIPKG flexibility in resolving dependencies while maintaining order
+                                    & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
                                     
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.PackagesInstalled++
@@ -1974,11 +2001,13 @@ function Apply-NipkgSnapshot {
                         }
                         
                         "upgrade" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) -> v$($targetVersion)", "Upgrade package")) {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentInstalledVersion) -> v$($targetVersion)", "Upgrade package")) {
                                 try {
                                     $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Upgrading: $($packageName) v$($currentVersion) -> v$($targetVersion)" -InformationAction Continue
-                                    & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
+                                    Write-Information "Upgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
+                                    
+                                    # Upgrade with strict control - no automatic recommended packages
+                                    & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
                                     
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.PackagesUpgraded++
@@ -1998,13 +2027,13 @@ function Apply-NipkgSnapshot {
                         }
                         
                         "downgrade" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentVersion) -> v$($targetVersion)", "Downgrade package")) {
+                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentInstalledVersion) -> v$($targetVersion)", "Downgrade package")) {
                                 try {
                                     $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Downgrading: $($packageName) v$($currentVersion) -> v$($targetVersion)" -InformationAction Continue
+                                    Write-Information "Downgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
                                     
-                                    # For downgrades, we might need to use --force or uninstall first
-                                    & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y --force
+                                    # For downgrades, use all flags for maximum flexibility
+                                    & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
                                     
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.PackagesDowngraded++
@@ -2015,14 +2044,14 @@ function Apply-NipkgSnapshot {
                                         & $NipkgCmdPath remove $($packageName) -y
                                         
                                         if ($LASTEXITCODE -eq 0) {
-                                            & $NipkgCmdPath install $packageSpec --accept-eulas --include-recommended -y
+                                            & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
                                             
                                             if ($LASTEXITCODE -eq 0) {
                                                 $results.PackagesDowngraded++
                                                 Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
                                             } else {
                                                 $results.PackagesFailed++
-                                                Write-Warning "Failed to downgrade $($packageName) to v$$targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
+                                                Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
                                             }
                                         } else {
                                             $results.PackagesFailed++
