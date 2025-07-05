@@ -8,7 +8,7 @@
     Runs all the manual tests for the LabViewHelpers module from the test/manual directory.
 
 .PARAMETER TestName
-    Specific test to run. Options: 'comprehensive', 'removeexistingfeeds', 'removesnapshotfeeds', 'demo', 'all'
+    Specific test to run. Options: 'comprehensive', 'removeexistingfeeds', 'removesnapshotfeeds', 'installfunctions', 'demo', 'all'
 
 .EXAMPLE
     .\run-tests.ps1
@@ -34,7 +34,7 @@
 
 param(
     [Parameter()]
-    [ValidateSet('comprehensive', 'removeexistingfeeds', 'removesnapshotfeeds', 'demo', 'all')]
+    [ValidateSet('comprehensive', 'removeexistingfeeds', 'removesnapshotfeeds', 'installfunctions', 'demo', 'all')]
     [string]$TestName = 'all'
 )
 
@@ -51,6 +51,7 @@ $requiredFiles = @(
     'test-comprehensive.ps1',
     'test-removeexistingfeeds.ps1',
     'test-removesnapshotfeeds.ps1',
+    'test-install-functions-feedmanagement.ps1',
     'demo-removeexistingfeeds.ps1',
     'demo-removesnapshotfeeds.ps1'
 )
@@ -83,6 +84,10 @@ try {
             Write-Host "`nRunning RemoveSnapshotFeeds tests..." -ForegroundColor Yellow
             & (Join-Path $testDir "test-removesnapshotfeeds.ps1")
         }
+        'installfunctions' {
+            Write-Host "`nRunning Install Functions Feed Management tests..." -ForegroundColor Yellow
+            & (Join-Path $testDir "test-install-functions-feedmanagement.ps1")
+        }
         'demo' {
             Write-Host "`nRunning demo scripts..." -ForegroundColor Yellow
             & (Join-Path $testDir "demo-removeexistingfeeds.ps1")
@@ -100,6 +105,9 @@ try {
             
             Write-Host "`n--- RemoveSnapshotFeeds Test ---" -ForegroundColor Magenta
             & (Join-Path $testDir "test-removesnapshotfeeds.ps1")
+            
+            Write-Host "`n--- Install Functions Feed Management Test ---" -ForegroundColor Magenta
+            & (Join-Path $testDir "test-install-functions-feedmanagement.ps1")
             
             Write-Host "`n--- RemoveExistingFeeds Demo ---" -ForegroundColor Magenta
             & (Join-Path $testDir "demo-removeexistingfeeds.ps1")

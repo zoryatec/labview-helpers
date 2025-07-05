@@ -20,6 +20,11 @@ Specific test for the RemoveExistingFeeds parameter in Apply-NipkgSnapshot funct
 
 Specific test for the new RemoveSnapshotFeeds parameter in Apply-NipkgSnapshot function.
 
+### `test-install-functions-feedmanagement.ps1`
+
+Tests the feed management parameters (RemoveExistingFeeds and RemoveSnapshotFeeds)
+propagation through the installation function chain: Install-LabViewIso → Install-LabViewOffline → Apply-NipkgSnapshot.
+
 ## Demo Scripts
 
 ### `demo-removeexistingfeeds.ps1`
@@ -52,7 +57,7 @@ Set-Location "c:\Projects\_Repos\labview-helpers\test\manual"
 .\run-tests.ps1                    # Run all tests
 .\run-tests.ps1 -TestName comprehensive     # Run comprehensive test only
 .\run-tests.ps1 -TestName removeexistingfeeds  # Run RemoveExistingFeeds test only
-.\run-tests.ps1 -TestName removesnapshotfeeds  # Run RemoveSnapshotFeeds test only
+.\run-tests.ps1 -TestName installfunctions      # Run Install Functions test only
 .\run-tests.ps1 -TestName demo              # Run demo script only
 
 # Or run individual tests directly

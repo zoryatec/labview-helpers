@@ -50,38 +50,39 @@ function Install-LabView {
     
     process {
         try {
+            Write-Information "Installing LabVIEW packages..." -InformationAction Continue
 
-    $packagesInfo = Get-PackagesInfo `
-        -NipkgCmdPath $NipkgCmdPath `
-        -Type 'available' # 'installed' or 'available'
+            $packagesInfo = Get-PackagesInfo `
+                -NipkgCmdPath $NipkgCmdPath `
+                -Type 'available' # 'installed' or 'available'
 
-    Write-Host "Installing programming environments packages..." -ForegroundColor Cyan
-    $programingEnvironmentsPackages  = Get-ProgrammingEnvironmentsPackages -PackagesInfo $packagesInfo
-    foreach ($package in $programingEnvironmentsPackages) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
+            Write-Host "Installing programming environments packages..." -ForegroundColor Cyan
+            $programingEnvironmentsPackages  = Get-ProgrammingEnvironmentsPackages -PackagesInfo $packagesInfo
+            foreach ($package in $programingEnvironmentsPackages) {
+                Write-Host "Installing package: $($package.Package) version $($package.Version)"
+                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
+            }
 
-    Write-Host "Installing drivers packages..." -ForegroundColor Cyan
-    $driversPackages  = Get-DriverPackages -PackagesInfo $packagesInfo
-    foreach ($package in $driversPackages) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
+            Write-Host "Installing drivers packages..." -ForegroundColor Cyan
+            $driversPackages  = Get-DriverPackages -PackagesInfo $packagesInfo
+            foreach ($package in $driversPackages) {
+                Write-Host "Installing package: $($package.Package) version $($package.Version)"
+                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
+            }
 
-    Write-Host "Installing application packages..." -ForegroundColor Cyan
-    $applicationPackages  = Get-ApplicationSoftwarePackages -PackagesInfo $packagesInfo
-    foreach ($package in $applicationPackages) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
+            Write-Host "Installing application packages..." -ForegroundColor Cyan
+            $applicationPackages  = Get-ApplicationSoftwarePackages -PackagesInfo $packagesInfo
+            foreach ($package in $applicationPackages) {
+                Write-Host "Installing package: $($package.Package) version $($package.Version)"
+                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
+            }
 
-    Write-Host "Installing utilities packages..." -ForegroundColor Cyan
-    $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $packagesInfo
-    foreach ($package in $utilitiesPackages ) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
+            Write-Host "Installing utilities packages..." -ForegroundColor Cyan
+            $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $packagesInfo
+            foreach ($package in $utilitiesPackages ) {
+                Write-Host "Installing package: $($package.Package) version $($package.Version)"
+                & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
+            }
         }
         catch {
             $errorMessage = "Failed to install LabVIEW packages. Error: $($_.Exception.Message)"
@@ -276,11 +277,28 @@ function Install-LabViewOffline {
     .PARAMETER NipkgInstallerPath
         Optional path to NIPKG installer if it needs to be installed first.
 
+    .PARAMETER InstallationSnapshotFile
+        Optional path to save the installation snapshot file.
+
+    .PARAMETER RemoveExistingFeeds
+        Remove all existing feeds from the system before applying the installer feeds.
+
+    .PARAMETER RemoveSnapshotFeeds
+        Remove the installer feeds from the system after package installation is complete.
+        This is useful when you want to install packages from the installer but don't want
+        to keep those feeds permanently in the system.
+
     .EXAMPLE
         Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview"
 
     .EXAMPLE
         Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -NipkgInstallerPath "C:\installers\nipkg\Install.exe"
+
+    .EXAMPLE
+        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -RemoveSnapshotFeeds
+
+    .EXAMPLE
+        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -RemoveExistingFeeds -RemoveSnapshotFeeds
 
     .NOTES
         Requires administrative privileges.
@@ -300,7 +318,13 @@ function Install-LabViewOffline {
         [string]$NipkgInstallerPath,
 
         [Parameter()]
-        [string]$InstallationSnapshotFile
+        [string]$InstallationSnapshotFile,
+
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds
     )
     
     begin {
@@ -324,7 +348,23 @@ function Install-LabViewOffline {
             }
             $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
-            Apply-NipkgSnapshot -SnapshotPath $InstallationSnapshotFile  -NipkgCmdPath $NipkgCmdPath -Verbose
+            
+            # Build parameters for Apply-NipkgSnapshot
+            $applyParams = @{
+                SnapshotPath = $InstallationSnapshotFile
+                NipkgCmdPath = $NipkgCmdPath
+                Verbose = $true
+            }
+            
+            if ($RemoveExistingFeeds) {
+                $applyParams.RemoveExistingFeeds = $true
+            }
+            
+            if ($RemoveSnapshotFeeds) {
+                $applyParams.RemoveSnapshotFeeds = $true
+            }
+            
+            Apply-NipkgSnapshot @applyParams
 
             # $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
             # $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"
@@ -463,11 +503,25 @@ function Install-LabViewIso {
     .PARAMETER TemporaryExpandDirectory
         Directory to temporarily extract ISO contents. Defaults to C:\installer-labview.
 
+    .PARAMETER RemoveExistingFeeds
+        Remove all existing feeds from the system before applying the installer feeds.
+
+    .PARAMETER RemoveSnapshotFeeds
+        Remove the installer feeds from the system after package installation is complete.
+        This is useful when you want to install packages from the installer but don't want
+        to keep those feeds permanently in the system.
+
     .EXAMPLE
         Install-LabViewIso -IsoFilePath "C:\labview.iso"
 
     .EXAMPLE
         Install-LabViewIso -IsoFilePath "C:\labview.iso" -NipkgInstallerPath "C:\nipkg\Install.exe" -TemporaryExpandDirectory "D:\temp"
+
+    .EXAMPLE
+        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveSnapshotFeeds
+
+    .EXAMPLE
+        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveExistingFeeds -RemoveSnapshotFeeds
 
     .NOTES
         Requires administrative privileges and sufficient disk space for extraction.
@@ -488,7 +542,13 @@ function Install-LabViewIso {
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$TemporaryExpandDirectory = "C:\installer-labview"
+        [string]$TemporaryExpandDirectory = "C:\installer-labview",
+
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds
     )
     
     begin {
@@ -503,7 +563,26 @@ function Install-LabViewIso {
             Expand-Iso -IsoFilePath $IsoFilePath -OutputDirectoryPath $TemporaryExpandDirectory
 
             Write-Information "Step 2: Installing LabVIEW from extracted files..." -InformationAction Continue
-            Install-LabViewOffline -NipkgCmdPath $NipkgCmdPath -LabViewInstallerDirectory $TemporaryExpandDirectory -NipkgInstallerPath $NipkgInstallerPath
+            
+            # Build parameters for Install-LabViewOffline
+            $installParams = @{
+                NipkgCmdPath = $NipkgCmdPath
+                LabViewInstallerDirectory = $TemporaryExpandDirectory
+            }
+            
+            if ($NipkgInstallerPath) {
+                $installParams.NipkgInstallerPath = $NipkgInstallerPath
+            }
+            
+            if ($RemoveExistingFeeds) {
+                $installParams.RemoveExistingFeeds = $true
+            }
+            
+            if ($RemoveSnapshotFeeds) {
+                $installParams.RemoveSnapshotFeeds = $true
+            }
+            
+            Install-LabViewOffline @installParams
             
             Write-Information "LabVIEW ISO installation completed successfully" -InformationAction Continue
         }
