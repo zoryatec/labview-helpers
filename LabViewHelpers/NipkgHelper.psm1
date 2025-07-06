@@ -1918,12 +1918,15 @@ function Apply-NipkgSnapshot {
                         # Re-check current installation status for this specific package
                         $checkResult = & $NipkgCmdPath info-installed $packageName 2>$null
                         if ($LASTEXITCODE -eq 0 -and $checkResult) {
-                            # Parse the output to get the installed version
+                            # Parse the output to get the installed version - preserve full version string
                             $versionLine = $checkResult | Where-Object { $_ -match "Version:\s*(.+)" }
                             if ($versionLine) {
-                                $currentInstalledVersion = ($versionLine -split "Version:\s*")[1].Trim()
-                                $currentlyInstalled = $true
-                                Write-Verbose "Current status check: $packageName is installed at version $currentInstalledVersion"
+                                # Extract the full version string using regex to preserve all version components
+                                if ($versionLine -match "Version:\s*(.+)") {
+                                    $currentInstalledVersion = $matches[1]
+                                    $currentlyInstalled = $true
+                                    Write-Verbose "Current status check: $packageName is installed at version $currentInstalledVersion"
+                                }
                             }
                         }
                     }
