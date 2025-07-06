@@ -1946,17 +1946,17 @@ function Apply-NipkgSnapshot {
                             if ($versionComparison -gt 0) {
                                 # Upgrade needed (target version is higher)
                                 $action = "upgrade"
-                                Write-Verbose "Package '$packageName' needs upgrade: $currentVersion -> $targetVersion"
+                                Write-Verbose "Package '$packageName' needs upgrade: $currentInstalledVersion -> $targetVersion"
                             }
                             elseif ($versionComparison -lt 0) {
                                 # Downgrade needed (target version is lower)
                                 $action = "downgrade"
-                                Write-Verbose "Package '$packageName' needs downgrade: $currentVersion -> $targetVersion"
+                                Write-Verbose "Package '$packageName' needs downgrade: $currentInstalledVersion -> $targetVersion"
                             }
                             else {
                                 # Versions are considered equal by our comparison
                                 $action = "none"
-                                Write-Verbose "Package '$packageName' is already at equivalent version ($currentVersion = $targetVersion)"
+                                Write-Verbose "Package '$packageName' is already at equivalent version ($currentInstalledVersion = $targetVersion)"
                             }
                         }
                     }
@@ -2807,7 +2807,9 @@ function Compare-PackageVersions {
         Returns: 0 (versions are equal)
 
     .NOTES
-        Attempts to parse as System.Version first, falls back to string comparison.
+        Handles NIPKG version formats including build metadata (e.g., 24.0.0.49212-0+f60).
+        Attempts to parse as System.Version first, then strips build metadata and retries.
+        Falls back to string comparison as last resort.
     #>
     [CmdletBinding()]
     param (
@@ -2820,28 +2822,62 @@ function Compare-PackageVersions {
 
     begin {
         Write-Verbose "Starting Compare-PackageVersions operation"
+        Write-Verbose "Comparing versions: '$Version1' vs '$Version2'"
     }
     
     process {
+        # Quick equality check first
+        if ($Version1 -eq $Version2) {
+            Write-Verbose "Versions are identical strings"
+            return 0
+        }
+        
         try {
-            # Try to parse as System.Version for proper semantic versioning
+            # Try to parse as System.Version first (works for standard formats)
             $v1 = [System.Version]::Parse($Version1)
             $v2 = [System.Version]::Parse($Version2)
             
+            Write-Verbose "Successfully parsed as System.Version"
             return $v1.CompareTo($v2)
         }
         catch {
-            # Fall back to string comparison if version parsing fails
-            Write-Verbose "Failed to parse versions as System.Version, using string comparison"
+            Write-Verbose "Failed to parse as System.Version: $($_.Exception.Message)"
             
-            if ($Version1 -eq $Version2) {
-                return 0
+            # Strip build metadata (+xxx) and pre-release info (-xxx) for NIPKG versions
+            $cleanVersion1 = $Version1 -replace '\+.*$', '' -replace '-.*$', ''
+            $cleanVersion2 = $Version2 -replace '\+.*$', '' -replace '-.*$', ''
+            
+            Write-Verbose "Cleaned versions: '$cleanVersion1' vs '$cleanVersion2'"
+            
+            try {
+                $v1 = [System.Version]::Parse($cleanVersion1)
+                $v2 = [System.Version]::Parse($cleanVersion2)
+                
+                Write-Verbose "Successfully parsed cleaned versions as System.Version"
+                $result = $v1.CompareTo($v2)
+                
+                # If core versions are equal, compare the original strings to handle pre-release/build info
+                if ($result -eq 0 -and $Version1 -ne $Version2) {
+                    Write-Verbose "Core versions equal, comparing full version strings"
+                    if ($Version1 -gt $Version2) {
+                        return 1
+                    } else {
+                        return -1
+                    }
+                }
+                
+                return $result
             }
-            elseif ($Version1 -gt $Version2) {
-                return 1
-            }
-            else {
-                return -1
+            catch {
+                # Fall back to string comparison if all version parsing fails
+                Write-Verbose "Failed to parse cleaned versions, using string comparison"
+                
+                if ($Version1 -gt $Version2) {
+                    return 1
+                }
+                else {
+                    return -1
+                }
             }
         }
     }
