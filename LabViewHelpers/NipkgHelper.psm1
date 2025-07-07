@@ -1626,6 +1626,14 @@ function Apply-NipkgSnapshot {
         When ValidateCompliance is enabled, allow extra packages beyond those in the snapshot.
         If false, extra packages cause non-compliance. Defaults to $false.
 
+    .PARAMETER LockDuringInstallation
+        Lock each package after it is successfully installed, upgraded, downgraded, or if it's already 
+        at the correct version to prevent later packages in the snapshot from modifying it. This ensures 
+        that the installation order is strictly maintained and packages cannot be automatically upgraded 
+        or downgraded by dependency resolution of subsequent packages. All locked packages are 
+        automatically unlocked at the end of the installation process. Use this when package 
+        installation order is critical.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1665,6 +1673,10 @@ function Apply-NipkgSnapshot {
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance -AllowExtraPackages $true
 
     .EXAMPLE
+        # Lock packages during installation to prevent dependency conflicts
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -LockDuringInstallation
+
+    .EXAMPLE
         # Complete workflow: clean slate approach
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
 
@@ -1675,6 +1687,12 @@ function Apply-NipkgSnapshot {
         to give NIPKG maximum flexibility in resolving dependencies while maintaining strict installation order.
         The --include-recommended flag is NOT used to prevent automatic installation of dependencies
         that should be installed in the intended order.
+        
+        When LockDuringInstallation is enabled, packages are locked after each successful installation,
+        upgrade, downgrade, or if they're already at the correct version, using 'nipkg lock <package-name>' 
+        to prevent later packages from modifying them through dependency resolution. This ensures strict 
+        package installation order is maintained. All locked packages are automatically unlocked at the 
+        end of the process using 'nipkg unlock <package-name>'.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -1717,7 +1735,10 @@ function Apply-NipkgSnapshot {
         [bool]$AllowExtraFeeds = $false,
         
         [Parameter()]
-        [bool]$AllowExtraPackages = $false
+        [bool]$AllowExtraPackages = $false,
+        
+        [Parameter()]
+        [switch]$LockDuringInstallation
     )
 
     begin {
@@ -1762,6 +1783,9 @@ function Apply-NipkgSnapshot {
 
             # Track feeds added from the snapshot for potential removal later
             $snapshotFeedsAdded = @()
+            
+            # Track packages locked during installation for unlocking at the end
+            $packagesLocked = @()
 
             # Phase 0: Remove existing feeds if requested
             if ($RemoveExistingFeeds -and -not $SkipFeeds) {
@@ -1974,6 +1998,18 @@ function Apply-NipkgSnapshot {
                         "none" {
                             $results.PackagesUnchanged++
                             Write-Verbose "Skipping '$packageName' - already at correct version ($targetVersion)"
+                            
+                            # Lock unchanged packages if requested to prevent later packages from modifying them
+                            if ($LockDuringInstallation) {
+                                Write-Verbose "Locking unchanged package $($packageName) to prevent modifications by later packages"
+                                & $NipkgCmdPath lock $packageName
+                                if ($LASTEXITCODE -eq 0) {
+                                    Write-Verbose "Successfully locked unchanged package $($packageName)"
+                                    $packagesLocked += $packageName
+                                } else {
+                                    Write-Warning "Failed to lock unchanged package $($packageName) (exit code: $LASTEXITCODE)"
+                                }
+                            }
                         }
                         
                         "install" {
@@ -1989,6 +2025,18 @@ function Apply-NipkgSnapshot {
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.PackagesInstalled++
                                         Write-Verbose "Successfully installed $($packageName) v$($targetVersion)"
+                                        
+                                        # Lock the package if requested to prevent later packages from modifying it
+                                        if ($LockDuringInstallation) {
+                                            Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                            & $NipkgCmdPath lock $packageName
+                                            if ($LASTEXITCODE -eq 0) {
+                                                Write-Verbose "Successfully locked package $($packageName)"
+                                                $packagesLocked += $packageName
+                                            } else {
+                                                Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
+                                            }
+                                        }
                                     } else {
                                         $results.PackagesFailed++
                                         Write-Warning "Failed to install $($packageName) v$($targetVersion) (exit code: $LASTEXITCODE)"
@@ -2015,6 +2063,18 @@ function Apply-NipkgSnapshot {
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.PackagesUpgraded++
                                         Write-Verbose "Successfully upgraded $($packageName) to v$($targetVersion)"
+                                        
+                                        # Lock the package if requested to prevent later packages from modifying it
+                                        if ($LockDuringInstallation) {
+                                            Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                            & $NipkgCmdPath lock $packageName
+                                            if ($LASTEXITCODE -eq 0) {
+                                                Write-Verbose "Successfully locked package $($packageName)"
+                                                $packagesLocked += $packageName
+                                            } else {
+                                                Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
+                                            }
+                                        }
                                     } else {
                                         $results.PackagesFailed++
                                         Write-Warning "Failed to upgrade $($packageName) to v$($targetVersion) (exit code: $LASTEXITCODE)"
@@ -2041,6 +2101,18 @@ function Apply-NipkgSnapshot {
                                     if ($LASTEXITCODE -eq 0) {
                                         $results.PackagesDowngraded++
                                         Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion)"
+                                        
+                                        # Lock the package if requested to prevent later packages from modifying it
+                                        if ($LockDuringInstallation) {
+                                            Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                            & $NipkgCmdPath lock $packageName
+                                            if ($LASTEXITCODE -eq 0) {
+                                                Write-Verbose "Successfully locked package $($packageName)"
+                                                $packagesLocked += $packageName
+                                            } else {
+                                                Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
+                                            }
+                                        }
                                     } else {
                                         # If direct downgrade fails, try uninstall then install
                                         Write-Verbose "Direct downgrade failed, trying uninstall then install approach"
@@ -2052,6 +2124,18 @@ function Apply-NipkgSnapshot {
                                             if ($LASTEXITCODE -eq 0) {
                                                 $results.PackagesDowngraded++
                                                 Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
+                                                
+                                                # Lock the package if requested to prevent later packages from modifying it
+                                                if ($LockDuringInstallation) {
+                                                    Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                                    & $NipkgCmdPath lock $packageName
+                                                    if ($LASTEXITCODE -eq 0) {
+                                                        Write-Verbose "Successfully locked package $($packageName)"
+                                                        $packagesLocked += $packageName
+                                                    } else {
+                                                        Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
+                                                    }
+                                                }
                                             } else {
                                                 $results.PackagesFailed++
                                                 Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
@@ -2298,6 +2382,28 @@ function Apply-NipkgSnapshot {
                 SystemCompliant = $null
                 ComplianceSummary = "Compliance validation not requested"
                 ComplianceIssues = $null
+            }
+
+            # Unlock packages that were locked during installation
+            if ($LockDuringInstallation -and $packagesLocked.Count -gt 0) {
+                Write-Information "Unlocking $($packagesLocked.Count) packages that were locked during installation..." -InformationAction Continue
+                
+                foreach ($packageToUnlock in $packagesLocked) {
+                    try {
+                        Write-Verbose "Unlocking package: $packageToUnlock"
+                        & $NipkgCmdPath unlock $packageToUnlock
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Verbose "Successfully unlocked package $packageToUnlock"
+                        } else {
+                            Write-Warning "Failed to unlock package $packageToUnlock (exit code: $LASTEXITCODE)"
+                        }
+                    }
+                    catch {
+                        Write-Warning "Exception unlocking package $packageToUnlock : $($_.Exception.Message)"
+                    }
+                }
+                
+                Write-Information "Package unlocking completed" -InformationAction Continue
             }
 
             # Phase 6: Validate compliance if requested
