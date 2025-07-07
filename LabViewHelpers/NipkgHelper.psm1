@@ -1634,6 +1634,12 @@ function Apply-NipkgSnapshot {
         automatically unlocked at the end of the installation process. Use this when package 
         installation order is critical.
 
+    .PARAMETER UseBatchInstallation
+        Install all packages in a single batch operation instead of one-by-one. This allows NIPKG 
+        to resolve version conflicts and dependencies across the entire snapshot, which can solve 
+        compatibility issues that occur with individual package installation. When enabled, 
+        LockDuringInstallation is automatically disabled as it's incompatible with batch operations.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1677,22 +1683,31 @@ function Apply-NipkgSnapshot {
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -LockDuringInstallation
 
     .EXAMPLE
+        # Use batch installation to resolve version conflicts
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -UseBatchInstallation
+
+    .EXAMPLE
         # Complete workflow: clean slate approach
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
         The operation can take significant time depending on the number of packages.
-        Packages are installed with hardcoded flags (--allow-downgrade --allow-uninstall --install-also-upgrades)
+        
+        By default, packages are installed individually with hardcoded flags (--allow-downgrade --allow-uninstall --install-also-upgrades)
         to give NIPKG maximum flexibility in resolving dependencies while maintaining strict installation order.
         The --include-recommended flag is NOT used to prevent automatic installation of dependencies
         that should be installed in the intended order.
+        
+        Use -UseBatchInstallation when encountering version conflicts or complex dependency chains that
+        require NIPKG to resolve conflicts across the entire snapshot as a single operation.
         
         When LockDuringInstallation is enabled, packages are locked after each successful installation,
         upgrade, downgrade, or if they're already at the correct version, using 'nipkg lock <package-name>' 
         to prevent later packages from modifying them through dependency resolution. This ensures strict 
         package installation order is maintained. All locked packages are automatically unlocked at the 
-        end of the process using 'nipkg unlock <package-name>'.
+        end of the process using 'nipkg unlock <package-name>'. Note: LockDuringInstallation is 
+        incompatible with UseBatchInstallation.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -1738,7 +1753,10 @@ function Apply-NipkgSnapshot {
         [bool]$AllowExtraPackages = $false,
         
         [Parameter()]
-        [switch]$LockDuringInstallation
+        [switch]$LockDuringInstallation,
+        
+        [Parameter()]
+        [switch]$UseBatchInstallation
     )
 
     begin {
@@ -1925,11 +1943,52 @@ function Apply-NipkgSnapshot {
                     $installedLookup[$pkg.Package] = $pkg.Version
                 }
                 
-                # Process each package in the snapshot in installation order
-                Write-Information "Processing $($snapshot.packages.Count) packages in dependency order..." -InformationAction Continue
-                Write-Warning "Using strict installation order to prevent dependency conflicts - packages will be installed one by one without automatic recommended packages" -WarningAction Continue
+                # Disable locking if batch installation is requested (incompatible modes)
+                if ($UseBatchInstallation -and $LockDuringInstallation) {
+                    Write-Warning "LockDuringInstallation is incompatible with UseBatchInstallation - disabling locking"
+                    $LockDuringInstallation = $false
+                }
                 
-                foreach ($snapshotPackage in $snapshot.packages) {
+                if ($UseBatchInstallation) {
+                    # Batch installation approach - let NIPKG resolve all conflicts
+                    Write-Information "Using batch installation mode to resolve version conflicts..." -InformationAction Continue
+                    
+                    # Build package specifications for all packages
+                    $packageSpecs = @()
+                    foreach ($snapshotPackage in $snapshot.packages) {
+                        $packageSpecs += "$($snapshotPackage.name)=$($snapshotPackage.version)"
+                    }
+                    
+                    Write-Information "Installing $($packageSpecs.Count) packages in batch mode..." -InformationAction Continue
+                    Write-Information "Package specifications: $($packageSpecs -join ', ')" -InformationAction Continue
+                    
+                    if ($PSCmdlet.ShouldProcess("$($packageSpecs.Count) packages", "Batch install packages")) {
+                        try {
+                            # Install all packages in one command - let NIPKG resolve conflicts
+                            & $NipkgCmdPath install $packageSpecs --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                $results.PackagesInstalled = $packageSpecs.Count
+                                Write-Information "Successfully installed $($packageSpecs.Count) packages in batch mode" -InformationAction Continue
+                            } else {
+                                $results.PackagesFailed = $packageSpecs.Count
+                                Write-Warning "Batch installation failed (exit code: $LASTEXITCODE)"
+                            }
+                        }
+                        catch {
+                            $results.PackagesFailed = $packageSpecs.Count
+                            Write-Warning "Exception during batch installation: $($_.Exception.Message)"
+                        }
+                    } else {
+                        $results.PackagesSkipped = $packageSpecs.Count
+                    }
+                } else {
+                    # Individual package installation approach (existing logic)
+                    Write-Information "Using individual package installation mode..." -InformationAction Continue
+                    Write-Information "Processing $($snapshot.packages.Count) packages in dependency order..." -InformationAction Continue
+                    Write-Warning "Using strict installation order to prevent dependency conflicts - packages will be installed one by one without automatic recommended packages" -WarningAction Continue
+                    
+                    foreach ($snapshotPackage in $snapshot.packages) {
                     $packageName = $snapshotPackage.name
                     $targetVersion = $snapshotPackage.version
                     
@@ -2156,6 +2215,7 @@ function Apply-NipkgSnapshot {
                         }
                     }
                 }
+                } # End of individual package installation mode
                 
             } else {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue

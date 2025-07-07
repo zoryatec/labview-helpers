@@ -274,6 +274,7 @@ function Install-LabViewOffline {
                 NipkgCmdPath = $NipkgCmdPath
                 Verbose = $true
                 ValidateCompliance = $true
+                UseBatchInstallation = $true
             }
             
             if ($RemoveExistingFeeds) {
