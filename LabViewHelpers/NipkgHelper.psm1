@@ -1710,6 +1710,15 @@ function Apply-NipkgSnapshot {
         This function requires administrator privileges for feed addition and package installation.
         The operation can take significant time depending on the number of packages.
         
+        PACKAGE DATABASE UPDATES:
+        The function automatically runs 'nipkg update' before package installation to ensure
+        the package database contains the latest information from all configured feeds. This
+        happens regardless of whether feeds were added during this operation. If you see 
+        "Missing packages" errors, verify that:
+        1. All required feeds are accessible and contain the missing packages
+        2. The 'nipkg update' command completed successfully (check the output)
+        3. Network connectivity is available for online feeds
+        
         By default, packages are installed individually with hardcoded flags (--allow-downgrade --allow-uninstall --install-also-upgrades)
         to give NIPKG maximum flexibility in resolving dependencies while maintaining strict installation order.
         The --include-recommended flag is NOT used to prevent automatic installation of dependencies
@@ -1950,21 +1959,38 @@ function Apply-NipkgSnapshot {
                     }
                 }
 
-                # Update package database after adding feeds
-                if ($results.FeedsAdded -gt 0) {
+                # Always update package database before package operations
+                if ($PSCmdlet.ShouldProcess("NIPKG", "Update package database")) {
+                    Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
+                    
+                    # Update package database to ensure all packages from all feeds are available
+                    & $NipkgCmdPath update
+                    
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Information "Package database updated successfully" -InformationAction Continue
+                    } else {
+                        Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+                        Write-Warning "This may cause package installation failures due to missing package information"
+                    }
+                }
+            } else {
+                Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
+                
+                # Even if feeds are skipped, update package database before package operations
+                if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
                     if ($PSCmdlet.ShouldProcess("NIPKG", "Update package database")) {
-                        Write-Information "Updating package database..." -InformationAction Continue
+                        Write-Information "Updating package database before package operations..." -InformationAction Continue
+                        
                         & $NipkgCmdPath update
                         
                         if ($LASTEXITCODE -eq 0) {
                             Write-Information "Package database updated successfully" -InformationAction Continue
                         } else {
-                            Write-Warning "Package database update may have failed (exit code: $LASTEXITCODE)"
+                            Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+                            Write-Warning "This may cause package installation failures due to missing package information"
                         }
                     }
                 }
-            } else {
-                Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
             }
 
             # Phase 2: Install packages (declarative approach)
