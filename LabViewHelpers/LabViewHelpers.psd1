@@ -75,7 +75,10 @@
         "Export-NipkgSnapshotToJson",
         "Import-NipkgSnapshotFromJson",
         "Apply-NipkgSnapshot",
-        "Test-NipkgSnapshotCompliance"
+        "Compare-PackageVersions",
+        "Sync-NipkgVersionWithSnapshot",
+        "Test-NipkgSnapshotCompliance",
+        "Test-NipkgSnapshotDependencies"
     )
     
     # Cmdlets to export from this module
