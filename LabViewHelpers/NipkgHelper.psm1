@@ -1318,6 +1318,10 @@ function New-NipkgSnapshotFromInstaller {
         Scans an installer directory for feeds and packages, then creates a snapshot object
         containing all available feeds and packages from the installer. This is useful for
         creating snapshots from offline installers before installation.
+        
+        The function automatically detects and includes:
+        - Standard feeds in the 'feeds' subdirectory
+        - Special NIPKG feed in 'bin/ni-package-manager-packages' (for offline installers)
 
     .PARAMETER InstallerDirectory
         Path to the installer directory containing the feeds subdirectory.
@@ -1336,7 +1340,9 @@ function New-NipkgSnapshotFromInstaller {
         - feeds: Array of feeds with name and uri (if IncludeFeeds is true)
         - packages: Array of packages with name and version from all feeds
         
-        The function looks for a 'feeds' subdirectory and scans all subdirectories for Packages files.
+        The function looks for:
+        1. A 'feeds' subdirectory and scans all subdirectories for Packages files
+        2. A special 'bin/ni-package-manager-packages' directory for NIPKG packages (offline installers)
     #>
     [CmdletBinding()]
     param (
@@ -1386,6 +1392,43 @@ function New-NipkgSnapshotFromInstaller {
             # Initialize collections
             $allPackages = @()
             $allFeeds = @()
+
+            # Check for special NIPKG feed in bin directory (for offline installers)
+            $nipkgFeedDirectory = Join-Path -Path $InstallerDirectory -ChildPath "bin\ni-package-manager-packages"
+            if (Test-Path -Path $nipkgFeedDirectory -PathType Container) {
+                Write-Information "Found special NIPKG feed in bin directory" -InformationAction Continue
+                Write-Verbose "Processing special NIPKG feed: $nipkgFeedDirectory"
+                
+                $nipkgPackagesFile = Join-Path -Path $nipkgFeedDirectory -ChildPath "Packages"
+                if (Test-Path -Path $nipkgPackagesFile -PathType Leaf) {
+                    try {
+                        # Parse packages from the NIPKG feed
+                        $nipkgPackages = Get-PackagesInfoFromPackagesFile -InputPath $nipkgPackagesFile
+                        Write-Verbose "Found $($nipkgPackages.Count) packages in NIPKG feed"
+                        
+                        # Add packages to the combined collection
+                        $allPackages += $nipkgPackages
+                        
+                        # Add feed information if requested
+                        if ($IncludeFeeds) {
+                            $nipkgFeedInfo = [PSCustomObject]@{
+                                Name = "ni-package-manager-packages"
+                                Path = $nipkgFeedDirectory
+                            }
+                            $allFeeds += $nipkgFeedInfo
+                        }
+                        
+                        Write-Information "Successfully processed NIPKG feed with $($nipkgPackages.Count) packages" -InformationAction Continue
+                    }
+                    catch {
+                        Write-Warning "Failed to parse packages from NIPKG feed: $($_.Exception.Message)"
+                    }
+                } else {
+                    Write-Warning "No Packages file found in NIPKG feed directory: $nipkgFeedDirectory"
+                }
+            } else {
+                Write-Verbose "No special NIPKG feed found in bin directory"
+            }
 
             # Process each feed subdirectory
             foreach ($feedDir in $feedSubdirectories) {
