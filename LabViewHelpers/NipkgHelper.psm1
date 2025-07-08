@@ -3796,9 +3796,9 @@ function Sync-NipkgVersionWithSnapshot {
 
     .DESCRIPTION
         Compares the current NIPKG installation version with the ni-package-manager version
-        specified in the provided snapshot. If they differ, attempts to update NIPKG to 
-        match the snapshot version. This ensures compatibility between the snapshot 
-        requirements and the package manager version.
+        specified in the provided snapshot. If they differ, installs the exact version from 
+        the snapshot to ensure reproducible builds and compatibility. This function always
+        enforces exact version matching, upgrading or downgrading as needed.
 
     .PARAMETER Snapshot
         The snapshot object containing package information, including ni-package-manager version.
@@ -3807,7 +3807,8 @@ function Sync-NipkgVersionWithSnapshot {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .PARAMETER Force
-        Force version alignment even if the current version is newer than snapshot version.
+        This parameter is retained for compatibility but is no longer required. The function
+        always enforces exact version matching for reproducible builds.
 
     .OUTPUTS
         PSCustomObject with:
@@ -3825,7 +3826,8 @@ function Sync-NipkgVersionWithSnapshot {
 
     .NOTES
         This function looks for 'ni-package-manager' packages in the snapshot and
-        attempts to align the current installation with the snapshot version.
+        ensures the current installation matches the exact snapshot version.
+        Always uses --allow-downgrade to support both upgrades and downgrades.
         Requires administrative privileges for NIPKG installation/upgrade.
     #>
     [CmdletBinding(SupportsShouldProcess)]
@@ -3924,22 +3926,27 @@ function Sync-NipkgVersionWithSnapshot {
                     $versionComparison = Compare-PackageVersions -Version1 $targetNipkgPackage["version"] -Version2 $currentVersion
                     
                     if ($versionComparison -eq 0) {
-                        Write-Verbose "NIPKG version is already correct: $currentVersion"
+                        Write-Information "NIPKG version matches snapshot: $currentVersion" -InformationAction Continue
                         return $result
                     }
                     
-                    if ($versionComparison -lt 0 -and -not $Force) {
-                        Write-Warning "Current NIPKG version ($currentVersion) is newer than snapshot version ($($targetNipkgPackage["version"])). Use -Force to downgrade."
-                        return $result
-                    }
-                    
+                    # Version mismatch detected - always sync to snapshot version for reproducibility
                     Write-Verbose "NIPKG version mismatch - Current: $currentVersion, Target: $($targetNipkgPackage["version"])"
                     
+                    if ($versionComparison -lt 0) {
+                        Write-Information "Downgrading NIPKG from $currentVersion to $($targetNipkgPackage["version"]) to match snapshot..." -InformationAction Continue
+                    } else {
+                        Write-Information "Upgrading NIPKG from $currentVersion to $($targetNipkgPackage["version"]) to match snapshot..." -InformationAction Continue
+                    }
+                    
                     if ($PSCmdlet.ShouldProcess("NIPKG v$currentVersion -> v$($targetNipkgPackage["version"])", "Update NIPKG version")) {
-                        Write-Information "Updating NIPKG to version $($targetNipkgPackage["version"])..." -InformationAction Continue
+                        Write-Information "Installing NIPKG version $($targetNipkgPackage["version"])..." -InformationAction Continue
                         
                         # Install the specific NIPKG version
                         $packageSpec = "$($targetNipkgPackage["name"])=$($targetNipkgPackage["version"])"
+                        
+                        # First attempt: Standard install with downgrade
+                        Write-Verbose "Attempting NIPKG install: $packageSpec"
                         & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall
                         
                         if ($LASTEXITCODE -eq 0) {
@@ -3947,8 +3954,38 @@ function Sync-NipkgVersionWithSnapshot {
                             $result.NewVersion = $targetNipkgPackage["version"]
                             Write-Information "Successfully updated NIPKG to version $($targetNipkgPackage["version"])" -InformationAction Continue
                             Write-Warning "NIPKG has been updated. You may need to restart this process with the new NIPKG version."
+                        } elseif ($LASTEXITCODE -eq -125067) {
+                            # Package or version not found
+                            $errorMsg = "NIPKG version $($targetNipkgPackage["version"]) not found in current feeds. " +
+                                       "This may occur if: 1) The snapshot was created from an offline installer but offline feeds are not available, " +
+                                       "2) The specific version is not in the current feed configuration, or " + 
+                                       "3) The package database needs to be updated. Exact version matching is required for reproducible builds."
+                            throw $errorMsg
+                        } elseif ($LASTEXITCODE -eq 1) {
+                            # Conflicting requests - try explicit removal first
+                            Write-Warning "Conflicting requests detected. Attempting to remove current NIPKG version first..."
+                            Write-Verbose "Removing current NIPKG package: $($targetNipkgPackage["name"])"
+                            
+                            & $NipkgCmdPath remove $targetNipkgPackage["name"] --accept-eulas -y
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                Write-Information "Successfully removed current NIPKG. Installing target version..." -InformationAction Continue
+                                & $NipkgCmdPath install $packageSpec --accept-eulas -y
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $result.VersionChanged = $true
+                                    $result.NewVersion = $targetNipkgPackage["version"]
+                                    Write-Information "Successfully updated NIPKG to version $($targetNipkgPackage["version"])" -InformationAction Continue
+                                    Write-Warning "NIPKG has been updated. You may need to restart this process with the new NIPKG version."
+                                } else {
+                                    throw "Failed to install NIPKG version $($targetNipkgPackage["version"]) after removal (exit code: $LASTEXITCODE). Dependency conflicts or missing packages prevent exact version matching."
+                                }
+                            } else {
+                                throw "Failed to remove current NIPKG version (exit code: $LASTEXITCODE). Dependency conflicts prevent downgrade to $($targetNipkgPackage["version"]). Exact version matching is required for reproducible builds."
+                            }
                         } else {
-                            throw "Failed to update NIPKG to version $($targetNipkgPackage["version"]) (exit code: $LASTEXITCODE)"
+                            # Other error codes
+                            throw "Failed to install NIPKG version $($targetNipkgPackage["version"]) (exit code: $LASTEXITCODE). Dependency conflicts, missing dependencies, or system permissions prevent exact version matching."
                         }
                     }
                 } else {
