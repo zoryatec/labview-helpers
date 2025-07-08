@@ -275,6 +275,7 @@ function Install-LabViewOffline {
                 Verbose = $true
                 ValidateCompliance = $true
                 UseBatchInstallation = $true
+                SyncNipkgVersion = $true
             }
             
             if ($RemoveExistingFeeds) {
