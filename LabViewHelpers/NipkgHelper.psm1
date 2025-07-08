@@ -1641,10 +1641,12 @@ function Apply-NipkgSnapshot {
         LockDuringInstallation is automatically disabled as it's incompatible with batch operations.
 
     .PARAMETER SyncNipkgVersion
-        Synchronize the NIPKG version with the version specified in the snapshot before processing 
-        feeds and packages. If the snapshot contains an 'ni-package-manager' package, this will 
-        update the current NIPKG installation to match that version. This ensures compatibility 
-        between the snapshot requirements and the package manager version.
+        Synchronize the NIPKG version with the version specified in the snapshot after processing 
+        feeds and updating the package database. If the snapshot contains an 'ni-package-manager' 
+        package, this will update the current NIPKG installation to match that version. This ensures 
+        compatibility between the snapshot requirements and the package manager version. The sync 
+        happens after feeds are added so that offline installer feeds are available for accessing 
+        the required NIPKG version.
 
     .PARAMETER ExcludePackages
         Array of package names to exclude from installation. These packages will be skipped even 
@@ -1840,24 +1842,8 @@ function Apply-NipkgSnapshot {
             # Track packages locked during installation for unlocking at the end
             $packagesLocked = @()
 
-            # Phase -1: Sync NIPKG version with snapshot if requested
-            if ($SyncNipkgVersion) {
-                Write-Information "Phase -1: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
-                
-                try {
-                    $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
-                    
-                    if ($syncResult.VersionChanged) {
-                        Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
-                    } else {
-                        Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
-                    }
-                }
-                catch {
-                    Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
-                    # Continue with the rest of the process - this is not a critical failure
-                }
-            }
+            # Note: NIPKG version sync moved to Phase 1.5 (after feeds are added and updated)
+            # This allows the sync to access packages from the newly added offline feeds
 
             # Phase 0: Remove existing feeds if requested
             if ($RemoveExistingFeeds -and -not $SkipFeeds) {
@@ -1973,6 +1959,35 @@ function Apply-NipkgSnapshot {
                         Write-Warning "This may cause package installation failures due to missing package information"
                     }
                 }
+
+                # Phase 1.5: Sync NIPKG version with snapshot if requested (after feeds are available)
+                if ($SyncNipkgVersion) {
+                    Write-Information "Phase 1.5: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
+                    
+                    try {
+                        $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
+                        
+                        if ($syncResult.VersionChanged) {
+                            Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
+                            
+                            # After NIPKG version change, update package database again to ensure compatibility
+                            Write-Information "Updating package database after NIPKG version change..." -InformationAction Continue
+                            & $NipkgCmdPath update
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                Write-Information "Package database re-updated successfully after NIPKG sync" -InformationAction Continue
+                            } else {
+                                Write-Warning "Package database re-update failed after NIPKG sync (exit code: $LASTEXITCODE)"
+                            }
+                        } else {
+                            Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
+                        # Continue with the rest of the process - this is not a critical failure
+                    }
+                }
             } else {
                 Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
                 
@@ -1988,6 +2003,35 @@ function Apply-NipkgSnapshot {
                         } else {
                             Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
                             Write-Warning "This may cause package installation failures due to missing package information"
+                        }
+                        
+                        # Phase 1.5: Sync NIPKG version with snapshot if requested (even when feeds are skipped)
+                        if ($SyncNipkgVersion) {
+                            Write-Information "Phase 1.5: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
+                            
+                            try {
+                                $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
+                                
+                                if ($syncResult.VersionChanged) {
+                                    Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
+                                    
+                                    # After NIPKG version change, update package database again to ensure compatibility
+                                    Write-Information "Updating package database after NIPKG version change..." -InformationAction Continue
+                                    & $NipkgCmdPath update
+                                    
+                                    if ($LASTEXITCODE -eq 0) {
+                                        Write-Information "Package database re-updated successfully after NIPKG sync" -InformationAction Continue
+                                    } else {
+                                        Write-Warning "Package database re-update failed after NIPKG sync (exit code: $LASTEXITCODE)"
+                                    }
+                                } else {
+                                    Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
+                                }
+                            }
+                            catch {
+                                Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
+                                # Continue with the rest of the process - this is not a critical failure
+                            }
                         }
                     }
                 }
