@@ -1646,6 +1646,12 @@ function Apply-NipkgSnapshot {
         update the current NIPKG installation to match that version. This ensures compatibility 
         between the snapshot requirements and the package manager version.
 
+    .PARAMETER ExcludePackages
+        Array of package names to exclude from installation. These packages will be skipped even 
+        if they are present in the snapshot. Useful for avoiding problematic packages or when 
+        certain packages should not be installed in specific environments. Package names should 
+        match exactly as they appear in the snapshot.
+
     .EXAMPLE
         Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
 
@@ -1691,6 +1697,10 @@ function Apply-NipkgSnapshot {
     .EXAMPLE
         # Use batch installation to resolve version conflicts
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -UseBatchInstallation
+
+    .EXAMPLE
+        # Exclude specific packages from installation
+        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ExcludePackages @("problematic-package", "optional-package")
 
     .EXAMPLE
         # Complete workflow: clean slate approach
@@ -1765,7 +1775,10 @@ function Apply-NipkgSnapshot {
         [switch]$UseBatchInstallation,
         
         [Parameter()]
-        [switch]$SyncNipkgVersion
+        [switch]$SyncNipkgVersion,
+        
+        [Parameter()]
+        [string[]]$ExcludePackages = @()
     )
 
     begin {
@@ -1785,6 +1798,9 @@ function Apply-NipkgSnapshot {
             # Import the snapshot
             Write-Information "Importing NIPKG snapshot..." -InformationAction Continue
             $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
+            
+            # Store original package count before any filtering
+            $originalPackageCount = $snapshot.packages.Count
             
             Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
 
@@ -1806,6 +1822,7 @@ function Apply-NipkgSnapshot {
                 PackagesUnchanged = 0
                 PackagesRemoved = 0
                 PackagesRemovalFailed = 0
+                PackagesExcluded = 0
             }
 
             # Track feeds added from the snapshot for potential removal later
@@ -1976,7 +1993,41 @@ function Apply-NipkgSnapshot {
                     Write-Warning "LockDuringInstallation is incompatible with UseBatchInstallation - disabling locking"
                     $LockDuringInstallation = $false
                 }
-                
+
+                # Filter out excluded packages if specified
+                $originalPackageCount = $snapshot.packages.Count
+                if ($ExcludePackages.Count -gt 0) {
+                    Write-Information "Filtering out $($ExcludePackages.Count) excluded packages: $($ExcludePackages -join ', ')" -InformationAction Continue
+                    
+                    $filteredPackages = @()
+                    $excludedPackagesFound = @()
+                    
+                    foreach ($snapshotPackage in $snapshot.packages) {
+                        if ($snapshotPackage.name -in $ExcludePackages) {
+                            $excludedPackagesFound += $snapshotPackage.name
+                            $results.PackagesExcluded++
+                            Write-Verbose "Excluding package: $($snapshotPackage.name) v$($snapshotPackage.version)"
+                        } else {
+                            $filteredPackages += $snapshotPackage
+                        }
+                    }
+                    
+                    # Update the snapshot packages with filtered list
+                    $snapshot.packages = $filteredPackages
+                    
+                    Write-Information "Package filtering complete: $($originalPackageCount) -> $($snapshot.packages.Count) packages (excluded: $($excludedPackagesFound.Count))" -InformationAction Continue
+                    
+                    if ($excludedPackagesFound.Count -gt 0) {
+                        Write-Information "Excluded packages: $($excludedPackagesFound -join ', ')" -InformationAction Continue
+                    }
+                    
+                    # Check for packages that were requested to be excluded but not found
+                    $notFoundExclusions = $ExcludePackages | Where-Object { $_ -notin $excludedPackagesFound }
+                    if ($notFoundExclusions.Count -gt 0) {
+                        Write-Warning "The following excluded packages were not found in the snapshot: $($notFoundExclusions -join ', ')"
+                    }
+                }
+
                 if ($UseBatchInstallation) {
                     # Batch installation approach - let NIPKG resolve all conflicts
                     Write-Information "Using batch installation mode to resolve version conflicts..." -InformationAction Continue
@@ -2438,7 +2489,7 @@ function Apply-NipkgSnapshot {
             if ($results.SnapshotFeedsRemovalFailed -gt 0) {
                 Write-Information "Snapshot feeds removal failed: $($results.SnapshotFeedsRemovalFailed)" -InformationAction Continue
             }
-            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesUpgraded) upgraded, $($results.PackagesDowngraded) downgraded, $($results.PackagesUnchanged) unchanged, $($results.PackagesRemoved) removed, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
+            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesUpgraded) upgraded, $($results.PackagesDowngraded) downgraded, $($results.PackagesUnchanged) unchanged, $($results.PackagesRemoved) removed, $($results.PackagesExcluded) excluded, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
             if ($results.PackagesRemovalFailed -gt 0) {
                 Write-Information "Package removal failures: $($results.PackagesRemovalFailed)" -InformationAction Continue
             }
@@ -2456,12 +2507,13 @@ function Apply-NipkgSnapshot {
                 FeedsUnlistedRemovalFailed = $results.FeedsUnlistedRemovalFailed
                 SnapshotFeedsRemoved = $results.SnapshotFeedsRemoved
                 SnapshotFeedsRemovalFailed = $results.SnapshotFeedsRemovalFailed
-                PackagesTotal = $snapshot.packages.Count
+                PackagesTotal = $originalPackageCount
                 PackagesInstalled = $results.PackagesInstalled
                 PackagesUpgraded = $results.PackagesUpgraded
                 PackagesDowngraded = $results.PackagesDowngraded
                 PackagesUnchanged = $results.PackagesUnchanged
                 PackagesRemoved = $results.PackagesRemoved
+                PackagesExcluded = $results.PackagesExcluded
                 PackagesSkipped = $results.PackagesSkipped
                 PackagesFailed = $results.PackagesFailed
                 PackagesRemovalFailed = $results.PackagesRemovalFailed

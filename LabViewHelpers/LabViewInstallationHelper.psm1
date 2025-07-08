@@ -207,6 +207,11 @@ function Install-LabViewOffline {
         This is useful when you want to install packages from the installer but don't want
         to keep those feeds permanently in the system.
 
+    .PARAMETER ExcludePackages
+        Array of package names to exclude from installation. These packages will be skipped even 
+        if they are present in the installer snapshot. Useful for avoiding problematic packages 
+        or when certain packages should not be installed in specific environments.
+
     .EXAMPLE
         Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview"
 
@@ -218,6 +223,9 @@ function Install-LabViewOffline {
 
     .EXAMPLE
         Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -RemoveExistingFeeds -RemoveSnapshotFeeds
+
+    .EXAMPLE
+        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -ExcludePackages @("problematic-package", "optional-driver")
 
     .NOTES
         Requires administrative privileges.
@@ -243,7 +251,10 @@ function Install-LabViewOffline {
         [switch]$RemoveExistingFeeds,
 
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [string[]]$ExcludePackages = @()
     )
     
     begin {
@@ -276,6 +287,7 @@ function Install-LabViewOffline {
                 ValidateCompliance = $true
                 UseBatchInstallation = $true
                 SyncNipkgVersion = $true
+                ExcludePackages = $ExcludePackages
             }
             
             if ($RemoveExistingFeeds) {
