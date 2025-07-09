@@ -966,11 +966,14 @@ function New-NipkgSnapshot {
         Formats feeds and packages information from provided PSObjects into a structured object.
         This object can be serialized to JSON or used for other purposes.
         
-        When ni-package-manager packages are found in the PackagesInfo, the function automatically
-        resolves all their dependencies using Resolve-PackageDependencies and creates a separate
-        packages-nipkg section containing these dependencies ordered for installation using
-        Get-PackageInstallationOrder. This ensures that NIPKG package dependencies are properly
-        tracked and can be installed in the correct order when applying snapshots.
+        When exactly one ni-package-manager package is found in the PackagesInfo, the function 
+        automatically resolves all its dependencies using Resolve-PackageDependencies and creates 
+        a separate packages-nipkg section containing these dependencies ordered for installation 
+        using Get-PackageInstallationOrder. This ensures that NIPKG package dependencies are 
+        properly tracked and can be installed in the correct order when applying snapshots.
+        
+        If more than one ni-package-manager package is found, the function will throw an error
+        and stop processing, as only exactly one ni-package-manager package is allowed per snapshot.
 
     .PARAMETER FeedsInfo
         PSCustomObject containing feed information from Get-FeedsInfoFromNipkgCmd.
@@ -987,13 +990,16 @@ function New-NipkgSnapshot {
         Returns a hashtable with:
         - feeds: Array of feeds with name and uri
         - packages: Array of packages with name and version
-        - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies ordered for installation
+        - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies ordered for installation (only present when exactly one ni-package-manager package is found)
         
-        The packages-nipkg section includes all dependencies for any ni-package-manager packages
+        The packages-nipkg section includes all dependencies for the ni-package-manager package
         found in the PackagesInfo, ordered for optimal installation sequence. This ensures that 
         when snapshots are applied, all NIPKG dependencies are available for installation in the
         correct order. NIPKG packages will also appear in the regular packages section 
         (duplicated), which is expected behavior.
+        
+        If more than one ni-package-manager package is found in the input, an error will be
+        thrown and processing will stop.
     #>
     [CmdletBinding()]
     param (
@@ -1013,6 +1019,18 @@ function New-NipkgSnapshot {
     process {
         try {
             Write-Verbose "Formatting feeds information"
+
+            # Check for multiple ni-package-manager packages BEFORE ordering/filtering
+            Write-Verbose "Checking for multiple ni-package-manager packages in input..."
+            $nipkgPackagesInInput = $PackagesInfo | Where-Object { 
+                $_.Package -eq "ni-package-manager"
+            }
+            
+            if ($nipkgPackagesInInput.Count -gt 1) {
+                $errorMessage = "Multiple ni-package-manager packages found ($($nipkgPackagesInInput.Count) instances). Only exactly one ni-package-manager package is allowed per snapshot. Found packages: $($nipkgPackagesInInput | ForEach-Object { "$($_.Package) v$($_.Version)" } | Join-String -Separator ', ')"
+                Write-Error -Message $errorMessage -Category InvalidData
+                throw $errorMessage
+            }
 
             # Order packages for installation, allowing circular dependencies which are common in real systems
             Write-Verbose "Ordering packages for optimal installation sequence..."
@@ -1058,11 +1076,13 @@ function New-NipkgSnapshot {
             Write-Verbose "Resolving dependencies for ni-package-manager packages..."
             $packagesNipkg = @()
             
-            # Find ni-package-manager packages in the filtered packages
-            $nipkgPackages = $filteredPackages | Where-Object { $_.Package -eq "ni-package-manager" }
+            # Find ni-package-manager packages in the filtered packages (already validated above)
+            $nipkgPackages = $filteredPackages | Where-Object { 
+                $_.Package -eq "ni-package-manager"
+            }
             
-            if ($nipkgPackages.Count -gt 0) {
-                Write-Verbose "Found $($nipkgPackages.Count) ni-package-manager package(s)"
+            if ($nipkgPackages.Count -eq 1) {
+                Write-Verbose "Found exactly one ni-package-manager package"
                 
                 foreach ($nipkgPackage in $nipkgPackages) {
                     try {
@@ -1112,16 +1132,28 @@ function New-NipkgSnapshot {
                 Write-Verbose "Created packages-nipkg section with $($packagesNipkg.Count) package(s)"
             } else {
                 Write-Verbose "No ni-package-manager packages found in the package list"
+                Write-Verbose "Packages-nipkg section will not be created"
             }
             
-            # Create the snapshot object with the new packages-nipkg section
+            # Create the snapshot object
             $snapshot = @{
                 feeds = $feeds
                 packages = $packages
-                "packages-nipkg" = $packagesNipkg
             }
             
-            Write-Verbose "Snapshot object contains $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
+            # Only add packages-nipkg section if ni-package-manager packages were found
+            if ($packagesNipkg.Count -gt 0) {
+                $snapshot["packages-nipkg"] = $packagesNipkg
+                Write-Verbose "Added packages-nipkg section with $($packagesNipkg.Count) package(s)"
+            } else {
+                Write-Verbose "Skipped packages-nipkg section (no ni-package-manager packages found)"
+            }
+            
+            if ($packagesNipkg.Count -gt 0) {
+                Write-Verbose "Snapshot object contains $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
+            } else {
+                Write-Verbose "Snapshot object contains $($feeds.Count) feeds and $($packages.Count) packages"
+            }
             
             return $snapshot
         }
@@ -1197,14 +1229,16 @@ function Export-NipkgSnapshotToJson {
                 
                 $feedsCount = if ($Snapshot.feeds) { $Snapshot.feeds.Count } else { 0 }
                 $packagesCount = if ($Snapshot.packages) { $Snapshot.packages.Count } else { 0 }
+                $nipkgPackagesCount = if ($Snapshot."packages-nipkg") { $Snapshot."packages-nipkg".Count } else { 0 }
                 
-                Write-Verbose "Exported snapshot contains $feedsCount feeds and $packagesCount packages"
+                Write-Verbose "Exported snapshot contains $feedsCount feeds, $packagesCount packages, and $nipkgPackagesCount NIPKG packages"
                 
                 # Return summary information
                 return [PSCustomObject]@{
                     SnapshotPath = $OutputPath
                     FeedsCount = $feedsCount
                     PackagesCount = $packagesCount
+                    NipkgPackagesCount = $nipkgPackagesCount
                     FileSizeBytes = (Get-Item -Path $OutputPath).Length
                 }
             }
@@ -1280,7 +1314,6 @@ function Import-NipkgSnapshotFromJson {
             $snapshot = @{
                 feeds = @()
                 packages = @()
-                "packages-nipkg" = @()
             }
             
             # Process feeds if they exist
@@ -1308,6 +1341,7 @@ function Import-NipkgSnapshotFromJson {
             # Process packages-nipkg if they exist
             if ($snapshotData."packages-nipkg") {
                 Write-Verbose "Processing $($snapshotData.'packages-nipkg'.Count) NIPKG packages"
+                $snapshot."packages-nipkg" = @()
                 foreach ($package in $snapshotData."packages-nipkg") {
                     $snapshot."packages-nipkg" += [ordered]@{
                         name = $package.name
@@ -1317,7 +1351,13 @@ function Import-NipkgSnapshotFromJson {
             }
             
             Write-Information "Snapshot imported successfully: $InputPath" -InformationAction Continue
-            Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds, $($snapshot.packages.Count) packages, and $($snapshot.'packages-nipkg'.Count) NIPKG packages"
+            
+            $nipkgPackagesCount = if ($snapshot."packages-nipkg") { $snapshot."packages-nipkg".Count } else { 0 }
+            if ($nipkgPackagesCount -gt 0) {
+                Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds, $($snapshot.packages.Count) packages, and $nipkgPackagesCount NIPKG packages"
+            } else {
+                Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            }
             
             return $snapshot
         }
@@ -3961,12 +4001,12 @@ function Sync-NipkgVersionWithSnapshot {
                         & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall
 
                         if ($LASTEXITCODE -eq 0) {
-                            Write-Information "✓ Successfully installed: $packageSpec" -InformationAction Continue
+                            Write-Information "Successfully installed: $packageSpec" -InformationAction Continue
                             $result.PackagesInstalled++
                             $result.InstalledPackages += $packageSpec
                         }
                         else {
-                            Write-Warning "✗ Failed to install: $packageSpec (exit code: $LASTEXITCODE)"
+                            Write-Warning "Failed to install: $packageSpec (exit code: $LASTEXITCODE)"
                             $result.PackagesFailed++
                             $result.FailedPackages += [PSCustomObject]@{
                                 Package = $packageSpec
@@ -3976,7 +4016,7 @@ function Sync-NipkgVersionWithSnapshot {
                         }
                     }
                     catch {
-                        Write-Warning "✗ Exception installing: $packageSpec - $($_.Exception.Message)"
+                        Write-Warning "Exception installing: $packageSpec - $($_.Exception.Message)"
                         $result.PackagesFailed++
                         $result.FailedPackages += [PSCustomObject]@{
                             Package = $packageSpec
@@ -3989,9 +4029,9 @@ function Sync-NipkgVersionWithSnapshot {
 
             # Summary
             Write-Information "Package installation completed:" -InformationAction Continue
-            Write-Information "  ✓ Successfully installed: $($result.PackagesInstalled) packages" -InformationAction Continue
+            Write-Information "  Successfully installed: $($result.PackagesInstalled) packages" -InformationAction Continue
             if ($result.PackagesFailed -gt 0) {
-                Write-Information "  ✗ Failed to install: $($result.PackagesFailed) packages" -InformationAction Continue
+                Write-Information "  Failed to install: $($result.PackagesFailed) packages" -InformationAction Continue
             }
 
             return $result
