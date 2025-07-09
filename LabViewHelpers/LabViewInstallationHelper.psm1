@@ -286,16 +286,16 @@ function Install-LabViewOffline {
                 Verbose = $true
                 ValidateCompliance = $true
                 UseBatchInstallation = $true
-                SyncNipkgVersion = $true
+                SyncNipkgVersion = $false
                 ExcludePackages = $ExcludePackages
             }
             
             if ($RemoveExistingFeeds) {
-                $applyParams.RemoveExistingFeeds = $true
+                $applyParams.RemoveExistingFeeds = $false
             }
             
             if ($RemoveSnapshotFeeds) {
-                $applyParams.RemoveSnapshotFeeds = $true
+                $applyParams.RemoveSnapshotFeeds = $false
             }
             
             Apply-NipkgSnapshot @applyParams
@@ -516,14 +516,6 @@ function Install-LabViewIso {
             
             if ($NipkgInstallerPath) {
                 $installParams.NipkgInstallerPath = $NipkgInstallerPath
-            }
-            
-            if ($RemoveExistingFeeds) {
-                $installParams.RemoveExistingFeeds = $true
-            }
-            
-            if ($RemoveSnapshotFeeds) {
-                $installParams.RemoveSnapshotFeeds = $true
             }
             
             Install-LabViewOffline @installParams
