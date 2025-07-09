@@ -3463,7 +3463,7 @@ function Get-PackageInstallationOrder {
 
     .EXAMPLE
         $packages = Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\Packages"
-        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -AllowCircularDependencies
 
     .EXAMPLE
         # Include all dependency types for ordering
@@ -3770,7 +3770,7 @@ function Invoke-TopologicalSort {
     # Visit all dependencies first
     foreach ($depName in $node.Dependencies) {
         if ($DependencyGraph.ContainsKey($depName)) {
-            $result = Invoke-TopologicalSort -DependencyGraph $DependencyGraph -PackageName $depName -SortedList $SortedList -VisitStack $VisitStack -AllowCircular $AllowCircular
+            $result = Invoke-TopologicalSort -DependencyGraph $DependencyGraph -PackageName $depName -SortedList $SortedList -VisitStack $VisitStack -AllowCircular $AllowCircularDependencies
             
             if (-not $result.Success -and -not $AllowCircular) {
                 return $result
@@ -4011,6 +4011,246 @@ function Sync-NipkgVersionWithSnapshot {
     }
 }
 
+function Resolve-PackageDependencies {
+    <#
+    .SYNOPSIS
+        Resolves all dependencies for a given package name using provided package information.
+
+    .DESCRIPTION
+        Takes a package name and a collection of package information (as returned by 
+        Get-PackagesInfoFromPackagesFile or similar functions) and recursively resolves 
+        all dependencies for the specified package. Only uses the provided package 
+        information and does not make external queries.
+
+    .PARAMETER PackageName
+        The name of the package for which to resolve dependencies.
+
+    .PARAMETER PackagesInfo
+        Array of package objects containing package information including dependencies.
+        Typically obtained from Get-PackagesInfoFromPackagesFile, Get-PackagesInfoFromNipkgCmd,
+        or similar functions.
+
+    .PARAMETER IncludeDependencyTypes
+        Array of dependency types to consider for resolution. Valid values are:
+        'Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements'.
+        Defaults to @('Depends', 'Recommends') for critical dependencies.
+
+    .PARAMETER IncludeRootPackage
+        Whether to include the root package in the returned dependency list.
+        Defaults to $true.
+
+    .PARAMETER AllowCircularDependencies
+        Allow circular dependencies by breaking cycles when detected.
+        If false, throws an error when circular dependencies are detected.
+        Defaults to $true for practical real-world scenarios.
+
+    .EXAMPLE
+        # Get package info from a Packages file
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\Packages"
+        
+        # Resolve all dependencies for a specific package
+        $dependencies = Resolve-PackageDependencies -PackageName "ni-labview-2025" -PackagesInfo $packages
+
+    .EXAMPLE
+        # Get package info from installer and resolve dependencies
+        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\labview-2025"
+        $allPackages = $snapshot.packages | ForEach-Object { 
+            # Convert snapshot format back to package info format
+            [PSCustomObject]@{
+                Package = $_.name
+                Version = $_.version
+                # Note: Dependencies would need to be included in the package info
+            }
+        }
+        $dependencies = Resolve-PackageDependencies -PackageName "my-package" -PackagesInfo $allPackages
+
+    .EXAMPLE
+        # Only resolve hard dependencies (Depends), exclude root package
+        $dependencies = Resolve-PackageDependencies -PackageName "my-package" -PackagesInfo $packages -IncludeDependencyTypes @('Depends') -IncludeRootPackage $false
+
+    .EXAMPLE
+        # Strict mode - fail on circular dependencies
+        $dependencies = Resolve-PackageDependencies -PackageName "my-package" -PackagesInfo $packages -AllowCircularDependencies $false
+
+    .NOTES
+        Returns an array of package objects representing all resolved dependencies.
+        The returned packages are in dependency order (dependencies before dependents).
+        
+        The function performs recursive dependency resolution:
+        1. Finds the specified package in the provided package info
+        2. Extracts its dependencies based on the specified dependency types
+        3. Recursively resolves dependencies of those dependencies
+        4. Returns all unique dependencies in proper installation order
+        
+        Dependency strings are parsed to extract package names and version constraints.
+        Only packages present in the provided PackagesInfo are considered.
+        
+        If a dependency is not found in PackagesInfo, it is silently skipped with a warning.
+        This allows for partial dependency resolution when not all packages are available
+        in the provided data set.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$PackageName,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject[]]$PackagesInfo,
+        
+        [Parameter()]
+        [ValidateSet('Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements')]
+        [string[]]$IncludeDependencyTypes = @('Depends', 'Recommends'),
+        
+        [Parameter()]
+        [bool]$IncludeRootPackage = $true,
+        
+        [Parameter()]
+        [bool]$AllowCircularDependencies = $true
+    )
+
+    begin {
+        Write-Verbose "Starting Resolve-PackageDependencies operation"
+    }
+    
+    process {
+        try {
+            if (-not $PackagesInfo -or $PackagesInfo.Count -eq 0) {
+                Write-Warning "No package information provided"
+                return @()
+            }
+
+            Write-Verbose "Resolving dependencies for package: $PackageName"
+            Write-Verbose "Including dependency types: $($IncludeDependencyTypes -join ', ')"
+            Write-Verbose "Searching in $($PackagesInfo.Count) available packages"
+
+            # Create a lookup table for packages by name
+            $packageLookup = @{}
+            foreach ($package in $PackagesInfo) {
+                $packageLookup[$package.Package] = $package
+            }
+
+            # Check if the root package exists
+            if (-not $packageLookup.ContainsKey($PackageName)) {
+                throw "Package '$PackageName' not found in provided package information"
+            }
+
+            # Initialize tracking collections
+            $resolvedPackages = @{}      # Track resolved packages to avoid duplicates
+            $resolutionStack = @()       # Track current resolution path for circular dependency detection
+            $allPackageNames = @($PackagesInfo | ForEach-Object { $_.Package })
+
+            # Internal function to recursively resolve dependencies
+            function Resolve-PackageRecursive {
+                param (
+                    [string]$CurrentPackageName,
+                    [hashtable]$PackageLookup,
+                    [hashtable]$ResolvedPackages,
+                    [System.Collections.Generic.List[string]]$ResolutionStack,
+                    [string[]]$AllPackageNames,
+                    [string[]]$DependencyTypes,
+                    [bool]$AllowCircular
+                )
+
+                Write-Verbose "Resolving dependencies for: $CurrentPackageName"
+
+                # Check for circular dependency
+                if ($ResolutionStack.Contains($CurrentPackageName)) {
+                    $cyclePath = ($ResolutionStack + $CurrentPackageName) -join ' -> '
+                    $errorMessage = "Circular dependency detected: $cyclePath"
+                    
+                    if ($AllowCircular) {
+                        Write-Warning $errorMessage
+                        return  # Break the cycle by returning early
+                    } else {
+                        throw $errorMessage
+                    }
+                }
+
+                # Check if already resolved
+                if ($ResolvedPackages.ContainsKey($CurrentPackageName)) {
+                    Write-Verbose "Package '$CurrentPackageName' already resolved"
+                    return
+                }
+
+                # Get the package information
+                $currentPackage = $PackageLookup[$CurrentPackageName]
+                if (-not $currentPackage) {
+                    Write-Warning "Package '$CurrentPackageName' not found in package information - skipping"
+                    return
+                }
+
+                # Add to resolution stack for circular dependency detection
+                $null = $ResolutionStack.Add($CurrentPackageName)
+
+                try {
+                    # Extract dependencies for this package
+                    $dependencies = @()
+                    foreach ($depType in $DependencyTypes) {
+                        if ($currentPackage.PSObject.Properties.Name -contains $depType -and $currentPackage.$depType) {
+                            $depString = $currentPackage.$depType
+                            $parsedDeps = Get-ParsedDependencies -DependencyString $depString -AvailablePackages $AllPackageNames
+                            $dependencies += $parsedDeps
+                        }
+                    }
+
+                    # Remove duplicates and sort
+                    $dependencies = $dependencies | Sort-Object -Unique
+
+                    Write-Verbose "Package '$CurrentPackageName' has dependencies: $($dependencies -join ', ')"
+
+                    # Recursively resolve each dependency first
+                    foreach ($dependency in $dependencies) {
+                        if ($PackageLookup.ContainsKey($dependency)) {
+                            $null = Resolve-PackageRecursive -CurrentPackageName $dependency -PackageLookup $PackageLookup -ResolvedPackages $ResolvedPackages -ResolutionStack $ResolutionStack -AllPackageNames $allPackageNames -DependencyTypes $DependencyTypes -AllowCircular $AllowCircularDependencies
+                        } else {
+                            Write-Warning "Dependency '$dependency' of package '$CurrentPackageName' not found in package information - skipping"
+                        }
+                    }
+
+                    # Add current package to resolved list (after its dependencies)
+                    $ResolvedPackages[$CurrentPackageName] = $currentPackage
+                    Write-Verbose "Resolved package: $CurrentPackageName"
+
+                } finally {
+                    # Remove from resolution stack
+                    $null = $ResolutionStack.Remove($CurrentPackageName)
+                }
+            }
+
+            # Start recursive resolution
+            $stackList = New-Object System.Collections.Generic.List[string]
+            $null = Resolve-PackageRecursive -CurrentPackageName $PackageName -PackageLookup $packageLookup -ResolvedPackages $resolvedPackages -ResolutionStack $stackList -AllPackageNames $allPackageNames -DependencyTypes $IncludeDependencyTypes -AllowCircular $AllowCircularDependencies
+
+            # Prepare result - create an ordered list of packages
+            $result = [System.Collections.ArrayList]::new()
+
+            # Add dependencies in resolution order (dependencies come first)
+            foreach ($packageName in $resolvedPackages.Keys) {
+                if ($IncludeRootPackage -or $packageName -ne $PackageName) {
+                    $null = $result.Add($resolvedPackages[$packageName])
+                }
+            }
+
+            Write-Information "Successfully resolved $($result.Count) dependencies for package '$PackageName'" -InformationAction Continue
+            Write-Verbose "Resolved packages: $($result | ForEach-Object { $_.Package } | Join-String -Separator ', ')"
+
+            # Return as array to ensure proper type
+            return $result.ToArray()
+        }
+        catch {
+            $errorMessage = "Failed to resolve dependencies for package '$PackageName'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $PackageName
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Resolve-PackageDependencies operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -4036,4 +4276,5 @@ Export-ModuleMember -Function `
     ,   Compare-PackageVersions `
     ,   Sync-NipkgVersionWithSnapshot `
     ,   Test-NipkgSnapshotCompliance `
-    ,   Test-NipkgSnapshotDependencies
+    ,   Test-NipkgSnapshotDependencies `
+    ,   Resolve-PackageDependencies

@@ -78,7 +78,8 @@
         "Compare-PackageVersions",
         "Sync-NipkgVersionWithSnapshot",
         "Test-NipkgSnapshotCompliance",
-        "Test-NipkgSnapshotDependencies"
+        "Test-NipkgSnapshotDependencies",
+        "Resolve-PackageDependencies"
     )
     
     # Cmdlets to export from this module
