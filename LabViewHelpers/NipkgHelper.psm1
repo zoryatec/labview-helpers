@@ -965,6 +965,11 @@ function New-NipkgSnapshot {
     .DESCRIPTION
         Formats feeds and packages information from provided PSObjects into a structured object.
         This object can be serialized to JSON or used for other purposes.
+        
+        When ni-package-manager packages are found in the PackagesInfo, the function automatically
+        resolves all their dependencies using Resolve-PackageDependencies and creates a separate
+        packages-nipkg section containing these dependencies. This ensures that NIPKG package
+        dependencies are properly tracked and can be installed when applying snapshots.
 
     .PARAMETER FeedsInfo
         PSCustomObject containing feed information from Get-FeedsInfoFromNipkgCmd.
@@ -981,6 +986,12 @@ function New-NipkgSnapshot {
         Returns a hashtable with:
         - feeds: Array of feeds with name and uri
         - packages: Array of packages with name and version
+        - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies
+        
+        The packages-nipkg section includes all dependencies for any ni-package-manager packages
+        found in the PackagesInfo. This ensures that when snapshots are applied, all NIPKG
+        dependencies are available for installation. NIPKG packages will also appear in the
+        regular packages section (duplicated), which is expected behavior.
     #>
     [CmdletBinding()]
     param (
@@ -1041,13 +1052,63 @@ function New-NipkgSnapshot {
                 }
             }
             
-            # Create the snapshot object
+            # Resolve dependencies for ni-package-manager and create packages-nipkg section
+            Write-Verbose "Resolving dependencies for ni-package-manager packages..."
+            $packagesNipkg = @()
+            
+            # Find ni-package-manager packages in the filtered packages
+            $nipkgPackages = $filteredPackages | Where-Object { $_.Package -eq "ni-package-manager" }
+            
+            if ($nipkgPackages.Count -gt 0) {
+                Write-Verbose "Found $($nipkgPackages.Count) ni-package-manager package(s)"
+                
+                foreach ($nipkgPackage in $nipkgPackages) {
+                    try {
+                        Write-Verbose "Resolving dependencies for ni-package-manager package: $($nipkgPackage.Package) v$($nipkgPackage.Version)"
+                        
+                        # Resolve all dependencies for this ni-package-manager package
+                        $resolvedDependencies = Resolve-PackageDependencies -PackageName $nipkgPackage.Package -PackagesInfo $PackagesInfo -IncludeRootPackage $true -AllowCircularDependencies $true
+                        
+                        Write-Verbose "Resolved $($resolvedDependencies.Count) dependencies for $($nipkgPackage.Package)"
+                        
+                        # Add resolved dependencies to packages-nipkg section
+                        foreach ($dependency in $resolvedDependencies) {
+                            # Check if not already added (avoid duplicates)
+                            $existingPackage = $packagesNipkg | Where-Object { $_.name -eq $dependency.Package }
+                            if (-not $existingPackage) {
+                                $packagesNipkg += [ordered]@{
+                                    name = $dependency.Package
+                                    version = $dependency.Version
+                                }
+                            }
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to resolve dependencies for ni-package-manager package '$($nipkgPackage.Package)': $($_.Exception.Message)"
+                        # Still add the ni-package-manager package itself even if dependency resolution fails
+                        $existingPackage = $packagesNipkg | Where-Object { $_.name -eq $nipkgPackage.Package }
+                        if (-not $existingPackage) {
+                            $packagesNipkg += [ordered]@{
+                                name = $nipkgPackage.Package
+                                version = $nipkgPackage.Version
+                            }
+                        }
+                    }
+                }
+                
+                Write-Verbose "Created packages-nipkg section with $($packagesNipkg.Count) package(s)"
+            } else {
+                Write-Verbose "No ni-package-manager packages found in the package list"
+            }
+            
+            # Create the snapshot object with the new packages-nipkg section
             $snapshot = @{
                 feeds = $feeds
                 packages = $packages
+                "packages-nipkg" = $packagesNipkg
             }
             
-            Write-Verbose "Snapshot object contains $($feeds.Count) feeds and $($packages.Count) packages"
+            Write-Verbose "Snapshot object contains $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
             
             return $snapshot
         }
@@ -1170,6 +1231,7 @@ function Import-NipkgSnapshotFromJson {
         Returns a hashtable with:
         - feeds: Array of feeds with name and uri properties
         - packages: Array of packages with name and version properties
+        - packages-nipkg: Array of NIPKG packages with name and version properties (if present)
     #>
     [CmdletBinding()]
     param (
@@ -1205,6 +1267,7 @@ function Import-NipkgSnapshotFromJson {
             $snapshot = @{
                 feeds = @()
                 packages = @()
+                "packages-nipkg" = @()
             }
             
             # Process feeds if they exist
@@ -1229,8 +1292,19 @@ function Import-NipkgSnapshotFromJson {
                 }
             }
             
+            # Process packages-nipkg if they exist
+            if ($snapshotData."packages-nipkg") {
+                Write-Verbose "Processing $($snapshotData.'packages-nipkg'.Count) NIPKG packages"
+                foreach ($package in $snapshotData."packages-nipkg") {
+                    $snapshot."packages-nipkg" += [ordered]@{
+                        name = $package.name
+                        version = $package.version
+                    }
+                }
+            }
+            
             Write-Information "Snapshot imported successfully: $InputPath" -InformationAction Continue
-            Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds, $($snapshot.packages.Count) packages, and $($snapshot.'packages-nipkg'.Count) NIPKG packages"
             
             return $snapshot
         }
