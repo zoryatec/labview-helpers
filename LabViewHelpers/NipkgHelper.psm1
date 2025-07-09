@@ -968,8 +968,9 @@ function New-NipkgSnapshot {
         
         When ni-package-manager packages are found in the PackagesInfo, the function automatically
         resolves all their dependencies using Resolve-PackageDependencies and creates a separate
-        packages-nipkg section containing these dependencies. This ensures that NIPKG package
-        dependencies are properly tracked and can be installed when applying snapshots.
+        packages-nipkg section containing these dependencies ordered for installation using
+        Get-PackageInstallationOrder. This ensures that NIPKG package dependencies are properly
+        tracked and can be installed in the correct order when applying snapshots.
 
     .PARAMETER FeedsInfo
         PSCustomObject containing feed information from Get-FeedsInfoFromNipkgCmd.
@@ -986,12 +987,13 @@ function New-NipkgSnapshot {
         Returns a hashtable with:
         - feeds: Array of feeds with name and uri
         - packages: Array of packages with name and version
-        - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies
+        - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies ordered for installation
         
         The packages-nipkg section includes all dependencies for any ni-package-manager packages
-        found in the PackagesInfo. This ensures that when snapshots are applied, all NIPKG
-        dependencies are available for installation. NIPKG packages will also appear in the
-        regular packages section (duplicated), which is expected behavior.
+        found in the PackagesInfo, ordered for optimal installation sequence. This ensures that 
+        when snapshots are applied, all NIPKG dependencies are available for installation in the
+        correct order. NIPKG packages will also appear in the regular packages section 
+        (duplicated), which is expected behavior.
     #>
     [CmdletBinding()]
     param (
@@ -1071,8 +1073,19 @@ function New-NipkgSnapshot {
                         
                         Write-Verbose "Resolved $($resolvedDependencies.Count) dependencies for $($nipkgPackage.Package)"
                         
-                        # Add resolved dependencies to packages-nipkg section
-                        foreach ($dependency in $resolvedDependencies) {
+                        # Apply installation order to the resolved dependencies
+                        try {
+                            Write-Verbose "Ordering resolved dependencies for optimal installation sequence..."
+                            $orderedDependencies = Get-PackageInstallationOrder -PackagesInfo $resolvedDependencies -AllowCircularDependencies
+                            Write-Verbose "Successfully ordered $($orderedDependencies.Count) dependencies (circular dependencies allowed)"
+                        }
+                        catch {
+                            Write-Warning "Dependency ordering failed for $($nipkgPackage.Package), using original order: $($_.Exception.Message)"
+                            $orderedDependencies = $resolvedDependencies
+                        }
+                        
+                        # Add ordered dependencies to packages-nipkg section
+                        foreach ($dependency in $orderedDependencies) {
                             # Check if not already added (avoid duplicates)
                             $existingPackage = $packagesNipkg | Where-Object { $_.name -eq $dependency.Package }
                             if (-not $existingPackage) {
