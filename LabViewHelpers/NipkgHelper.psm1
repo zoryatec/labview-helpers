@@ -85,7 +85,7 @@ function Add-FeedDirectories {
                 if ($PSCmdlet.ShouldProcess($dir.FullName, "Add NIPKG feed")) {
                     Write-Verbose "Adding feed directory: $($dir.Name)"
                     Write-Information "Adding feed: $($dir.Name)" -InformationAction Continue
-                    & $NipkgCmdPath feed-add "$($dir.FullName)"
+                    & $NipkgCmdPath feed-add "$($dir.FullName)" --name="$($dir.Name)"
                     
                     if ($LASTEXITCODE -ne 0) {
                         Write-Warning "Failed to add feed: $($dir.Name)"
@@ -1967,7 +1967,7 @@ function Apply-NipkgSnapshot {
                                 Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
                                 Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
                                 
-                                & $NipkgCmdPath feed-add "$($feed.uri)"
+                                & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)"
                                 
                                 if ($LASTEXITCODE -eq 0) {
                                     $results.FeedsAdded++
