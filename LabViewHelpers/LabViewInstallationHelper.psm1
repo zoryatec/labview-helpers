@@ -286,7 +286,7 @@ function Install-LabViewOffline {
                 Verbose = $true
                 ValidateCompliance = $true
                 UseBatchInstallation = $false
-                SyncNipkgVersion = $false
+                SyncNipkgVersion = $true
                 ExcludePackages = $ExcludePackages
             }
             

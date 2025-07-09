@@ -3957,7 +3957,7 @@ function Sync-NipkgVersionWithSnapshot {
 
                 if ($PSCmdlet.ShouldProcess($packageSpec, "Install NIPKG package")) {
                     try {
-                        Write-Verbose "Executing: & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall"
+                        Write-Verbose "Executing: & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --force-locked"
                         & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall
 
                         if ($LASTEXITCODE -eq 0) {
