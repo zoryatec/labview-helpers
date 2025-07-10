@@ -285,8 +285,8 @@ function Install-LabViewOffline {
                 NipkgCmdPath = $NipkgCmdPath
                 Verbose = $true
                 ValidateCompliance = $true
-                UseBatchInstallation = $false
-                SyncNipkgVersion = $true
+                UseBatchInstallation = $true
+                SyncNipkgVersion = $false
                 ExcludePackages = $ExcludePackages
             }
             
