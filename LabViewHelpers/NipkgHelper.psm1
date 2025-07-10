@@ -981,15 +981,30 @@ function New-NipkgSnapshot {
     .PARAMETER PackagesInfo
         PSCustomObject containing package information from Get-PackagesInfoFromNipkgCmd.
 
+    .PARAMETER Type
+        Specifies the type of snapshot to create. Valid values are:
+        - Full: Include all packages (default behavior)
+        - UserVisible: Include only packages where UserVisible is 'yes'
+        - StoreProduct: Include only packages where StoreProduct is 'yes'
+
     .EXAMPLE
         $feeds = Get-FeedsInfoFromNipkgCmd
         $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
         $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
 
+    .EXAMPLE
+        # Create snapshot with only user-visible packages
+        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
+
+    .EXAMPLE
+        # Create snapshot with only store products
+        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
+
     .NOTES
         Returns a hashtable with:
+        - type: Snapshot type (Full, UserVisible, or StoreProduct)
         - feeds: Array of feeds with name and uri
-        - packages: Array of packages with name and version
+        - packages: Array of packages with name and version (filtered based on Type)
         - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies ordered for installation (only present when exactly one ni-package-manager package is found)
         
         The packages-nipkg section includes all dependencies for the ni-package-manager package
@@ -1009,7 +1024,11 @@ function New-NipkgSnapshot {
         
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
-        [PSCustomObject[]]$PackagesInfo
+        [PSCustomObject[]]$PackagesInfo,
+        
+        [Parameter()]
+        [ValidateSet("Full", "UserVisible", "StoreProduct")]
+        [string]$Type = "Full"
     )
 
     begin {
@@ -1051,6 +1070,27 @@ function New-NipkgSnapshot {
             # $filteredPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
 
             Write-Verbose "Filtered packages: $($filteredPackages.Count) total packages from programming environments, drivers, applications, and utilities"
+            
+            # Apply type-based filtering
+            Write-Verbose "Applying snapshot type filtering: $Type"
+            $originalCount = $filteredPackages.Count
+            
+            switch ($Type) {
+                "UserVisible" {
+                    $filteredPackages = $filteredPackages | Where-Object { $_.UserVisible -eq 'yes' }
+                    Write-Verbose "Filtered to UserVisible packages: $($filteredPackages.Count) (was $originalCount)"
+                }
+                "StoreProduct" {
+                    $filteredPackages = $filteredPackages | Where-Object { $_.StoreProduct -eq 'yes' }
+                    Write-Verbose "Filtered to StoreProduct packages: $($filteredPackages.Count) (was $originalCount)"
+                }
+                "Full" {
+                    Write-Verbose "Using all packages (Full type): $($filteredPackages.Count)"
+                }
+                default {
+                    Write-Warning "Unknown snapshot type '$Type', using Full type"
+                }
+            }
             
             # Convert feeds to desired format
             $feeds = @()
@@ -1137,6 +1177,7 @@ function New-NipkgSnapshot {
             
             # Create the snapshot object
             $snapshot = @{
+                type = $Type
                 feeds = $feeds
                 packages = $packages
             }
@@ -1150,9 +1191,9 @@ function New-NipkgSnapshot {
             }
             
             if ($packagesNipkg.Count -gt 0) {
-                Write-Verbose "Snapshot object contains $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
+                Write-Verbose "Snapshot object contains type '$Type', $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
             } else {
-                Write-Verbose "Snapshot object contains $($feeds.Count) feeds and $($packages.Count) packages"
+                Write-Verbose "Snapshot object contains type '$Type', $($feeds.Count) feeds and $($packages.Count) packages"
             }
             
             return $snapshot
@@ -1230,12 +1271,14 @@ function Export-NipkgSnapshotToJson {
                 $feedsCount = if ($Snapshot.feeds) { $Snapshot.feeds.Count } else { 0 }
                 $packagesCount = if ($Snapshot.packages) { $Snapshot.packages.Count } else { 0 }
                 $nipkgPackagesCount = if ($Snapshot."packages-nipkg") { $Snapshot."packages-nipkg".Count } else { 0 }
+                $snapshotType = if ($Snapshot.type) { $Snapshot.type } else { "Unknown" }
                 
-                Write-Verbose "Exported snapshot contains $feedsCount feeds, $packagesCount packages, and $nipkgPackagesCount NIPKG packages"
+                Write-Verbose "Exported snapshot contains type '$snapshotType', $feedsCount feeds, $packagesCount packages, and $nipkgPackagesCount NIPKG packages"
                 
                 # Return summary information
                 return [PSCustomObject]@{
                     SnapshotPath = $OutputPath
+                    Type = $snapshotType
                     FeedsCount = $feedsCount
                     PackagesCount = $packagesCount
                     NipkgPackagesCount = $nipkgPackagesCount
@@ -1276,6 +1319,7 @@ function Import-NipkgSnapshotFromJson {
 
     .NOTES
         Returns a hashtable with:
+        - type: Snapshot type (Full, UserVisible, StoreProduct, or Unknown if not specified)
         - feeds: Array of feeds with name and uri properties
         - packages: Array of packages with name and version properties
         - packages-nipkg: Array of NIPKG packages with name and version properties (if present)
@@ -1312,6 +1356,7 @@ function Import-NipkgSnapshotFromJson {
             
             # Convert back to hashtable format
             $snapshot = @{
+                type = if ($snapshotData.type) { $snapshotData.type } else { "Unknown" }
                 feeds = @()
                 packages = @()
             }
@@ -1353,10 +1398,11 @@ function Import-NipkgSnapshotFromJson {
             Write-Information "Snapshot imported successfully: $InputPath" -InformationAction Continue
             
             $nipkgPackagesCount = if ($snapshot."packages-nipkg") { $snapshot."packages-nipkg".Count } else { 0 }
+            $snapshotType = $snapshot.type
             if ($nipkgPackagesCount -gt 0) {
-                Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds, $($snapshot.packages.Count) packages, and $nipkgPackagesCount NIPKG packages"
+                Write-Verbose "Imported snapshot contains type '$snapshotType', $($snapshot.feeds.Count) feeds, $($snapshot.packages.Count) packages, and $nipkgPackagesCount NIPKG packages"
             } else {
-                Write-Verbose "Imported snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+                Write-Verbose "Imported snapshot contains type '$snapshotType', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             }
             
             return $snapshot
@@ -1456,11 +1502,21 @@ function New-NipkgSnapshotFromInstaller {
     .PARAMETER IncludeFeeds
         Whether to include feed information in the snapshot. Defaults to $true.
 
+    .PARAMETER Type
+        Specifies the type of snapshot to create. Valid values are:
+        - Full: Include all packages (default behavior)
+        - UserVisible: Include only packages where UserVisible is 'yes'
+        - StoreProduct: Include only packages where StoreProduct is 'yes'
+
     .EXAMPLE
         $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
 
     .EXAMPLE
         $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
+
+    .EXAMPLE
+        # Create snapshot with only user-visible packages from installer
+        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -Type "UserVisible"
 
     .NOTES
         Returns a hashtable with:
@@ -1478,7 +1534,11 @@ function New-NipkgSnapshotFromInstaller {
         [string]$InstallerDirectory,
         
         [Parameter()]
-        [bool]$IncludeFeeds = $true
+        [bool]$IncludeFeeds = $true,
+        
+        [Parameter()]
+        [ValidateSet("Full", "UserVisible", "StoreProduct")]
+        [string]$Type = "Full"
     )
 
     begin {
@@ -1594,9 +1654,9 @@ function New-NipkgSnapshotFromInstaller {
 
             Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
 
-            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $allPackages
+            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $allPackages -Type $Type
             
-            Write-Verbose "Created snapshot with $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            Write-Verbose "Created snapshot with type '$Type', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
             return $snapshot
         }
@@ -1631,6 +1691,12 @@ function New-NipkgSnapshotFromSystem {
     .PARAMETER IncludeFeeds
         Whether to include current feed configuration in the snapshot. Defaults to $true.
 
+    .PARAMETER Type
+        Specifies the type of snapshot to create. Valid values are:
+        - Full: Include all packages (default behavior)
+        - UserVisible: Include only packages where UserVisible is 'yes'
+        - StoreProduct: Include only packages where StoreProduct is 'yes'
+
     .EXAMPLE
         $snapshot = New-NipkgSnapshotFromSystem
 
@@ -1640,10 +1706,15 @@ function New-NipkgSnapshotFromSystem {
     .EXAMPLE
         $snapshot = New-NipkgSnapshotFromSystem -PackageType "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
+    .EXAMPLE
+        # Create snapshot with only user-visible packages from current system
+        $snapshot = New-NipkgSnapshotFromSystem -Type "UserVisible"
+
     .NOTES
         Returns a hashtable with:
+        - type: Snapshot type (Full, UserVisible, StoreProduct)
         - feeds: Array of current feeds with name and uri (if IncludeFeeds is true)
-        - packages: Array of packages with name and version based on PackageType
+        - packages: Array of packages with name and version based on PackageType and Type filter
         
         This function is useful for creating backups of the current system state or 
         for creating snapshots to replicate on other systems.
@@ -1659,7 +1730,11 @@ function New-NipkgSnapshotFromSystem {
         [string]$NipkgCmdPath = "nipkg",
         
         [Parameter()]
-        [bool]$IncludeFeeds = $true
+        [bool]$IncludeFeeds = $true,
+        
+        [Parameter()]
+        [ValidateSet("Full", "UserVisible", "StoreProduct")]
+        [string]$Type = "Full"
     )
 
     begin {
@@ -1669,7 +1744,7 @@ function New-NipkgSnapshotFromSystem {
     process {
         try {
             Write-Information "Creating NIPKG snapshot from current system state..." -InformationAction Continue
-            Write-Verbose "Package type: $PackageType, Include feeds: $IncludeFeeds"
+            Write-Verbose "Package type: $PackageType, Include feeds: $IncludeFeeds, Snapshot type: $Type"
 
             # Initialize collections
             $feedsInfo = @()
@@ -1709,12 +1784,12 @@ function New-NipkgSnapshotFromSystem {
 
             # Create the snapshot using the retrieved information
             Write-Information "Creating snapshot object..." -InformationAction Continue
-            Write-Verbose "Creating snapshot with $($feedsInfo.Count) feeds and $($packagesInfo.Count) packages"
+            Write-Verbose "Creating snapshot with type '$Type', $($feedsInfo.Count) feeds and $($packagesInfo.Count) packages"
             
-            $snapshot = New-NipkgSnapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo
+            $snapshot = New-NipkgSnapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo -Type $Type
             
             Write-Information "System snapshot created successfully" -InformationAction Continue
-            Write-Verbose "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            Write-Verbose "Snapshot contains type '$($snapshot.type)', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
             return $snapshot
         }
