@@ -1504,9 +1504,9 @@ function New-NipkgSnapshotFromInstaller {
 
     .PARAMETER Type
         Specifies the type of snapshot to create. Valid values are:
-        - Full: Include all packages (default behavior)
+        - Full: Include all packages
         - UserVisible: Include only packages where UserVisible is 'yes'
-        - StoreProduct: Include only packages where StoreProduct is 'yes'
+        - StoreProduct: Include only packages where StoreProduct is 'yes' (default behavior)
 
     .EXAMPLE
         $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
@@ -1538,7 +1538,7 @@ function New-NipkgSnapshotFromInstaller {
         
         [Parameter()]
         [ValidateSet("Full", "UserVisible", "StoreProduct")]
-        [string]$Type = "Full"
+        [string]$Type = "StoreProduct"
     )
 
     begin {
@@ -1693,9 +1693,9 @@ function New-NipkgSnapshotFromSystem {
 
     .PARAMETER Type
         Specifies the type of snapshot to create. Valid values are:
-        - Full: Include all packages (default behavior)
+        - Full: Include all packages
         - UserVisible: Include only packages where UserVisible is 'yes'
-        - StoreProduct: Include only packages where StoreProduct is 'yes'
+        - StoreProduct: Include only packages where StoreProduct is 'yes' (default behavior)
 
     .EXAMPLE
         $snapshot = New-NipkgSnapshotFromSystem
@@ -1734,7 +1734,7 @@ function New-NipkgSnapshotFromSystem {
         
         [Parameter()]
         [ValidateSet("Full", "UserVisible", "StoreProduct")]
-        [string]$Type = "Full"
+        [string]$Type = "StoreProduct"
     )
 
     begin {
@@ -3299,8 +3299,15 @@ function Test-NipkgSnapshotCompliance {
                 Write-Information "Validating package compliance..." -InformationAction Continue
                 
                 try {
-                    $installedPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
-                    Write-Verbose "Found $($installedPackages.Count) currently installed packages"
+                    # Get installed packages using the same Type filter as the original snapshot
+                    $snapshotType = if ($snapshot.type) { $snapshot.type } else { "Full" }
+                    Write-Verbose "Using snapshot type '$snapshotType' for compliance validation"
+                    
+                    # Create a system snapshot with the same Type to get filtered packages for comparison
+                    $systemSnapshot = New-NipkgSnapshotFromSystem -PackageType "installed" -IncludeFeeds $false -Type $snapshotType -NipkgCmdPath $NipkgCmdPath
+                    $installedPackages = $systemSnapshot.packages
+                    
+                    Write-Verbose "Found $($installedPackages.Count) currently installed packages matching snapshot type '$snapshotType'"
                 }
                 catch {
                     Write-Warning "Failed to get installed packages for validation: $($_.Exception.Message)"
@@ -3313,7 +3320,7 @@ function Test-NipkgSnapshotCompliance {
                 $installedLookup = @{
                 }
                 foreach ($pkg in $installedPackages) {
-                    $installedLookup[$pkg.Package] = $pkg.Version
+                    $installedLookup[$pkg.name] = $pkg.version
                 }
                 
                 $snapshotPackageLookup = @{
@@ -3359,10 +3366,10 @@ function Test-NipkgSnapshotCompliance {
                 # Check for extra packages (installed but not in snapshot) if not allowed
                 if (-not $AllowExtraPackages) {
                     foreach ($installedPkg in $installedPackages) {
-                        if (-not $snapshotPackageLookup.ContainsKey($installedPkg.Package)) {
+                        if (-not $snapshotPackageLookup.ContainsKey($installedPkg.name)) {
                             $complianceReport.ExtraPackages += [PSCustomObject]@{
-                                Name = $installedPkg.Package
-                                Version = $installedPkg.Version
+                                Name = $installedPkg.name
+                                Version = $installedPkg.version
                                 Issue = "Extra package not in snapshot"
                             }
                             $complianceReport.PackagesCompliant = $false
