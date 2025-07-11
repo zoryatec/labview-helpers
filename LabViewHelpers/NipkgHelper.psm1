@@ -1495,6 +1495,9 @@ function New-NipkgSnapshotFromInstaller {
         The function automatically detects and includes:
         - Standard feeds in the 'feeds' subdirectory
         - Special NIPKG feed in 'bin/ni-package-manager-packages' (for offline installers)
+        
+        Duplicate packages (same name, different versions) are automatically removed by 
+        selecting the highest version of each package before creating the snapshot.
 
     .PARAMETER InstallerDirectory
         Path to the installer directory containing the feeds subdirectory.
@@ -1526,6 +1529,8 @@ function New-NipkgSnapshotFromInstaller {
         The function looks for:
         1. A 'feeds' subdirectory and scans all subdirectories for Packages files
         2. A special 'bin/ni-package-manager-packages' directory for NIPKG packages (offline installers)
+        
+        Duplicate packages are automatically removed by selecting the highest version of each package.
     #>
     [CmdletBinding()]
     param (
@@ -1654,7 +1659,12 @@ function New-NipkgSnapshotFromInstaller {
 
             Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
 
-            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $allPackages -Type $Type
+            # Remove duplicate packages by selecting highest version
+            Write-Verbose "Removing duplicate packages by selecting highest versions"
+            $uniquePackages = Remove-DuplicatePackagesByVersion -PackagesInfo $allPackages
+            Write-Information "After duplicate removal: $($uniquePackages.Count) unique packages (removed $($allPackages.Count - $uniquePackages.Count) duplicates)" -InformationAction Continue
+
+            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $uniquePackages -Type $Type
             
             Write-Verbose "Created snapshot with type '$Type', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
@@ -3251,27 +3261,27 @@ function Test-NipkgSnapshotCompliance {
                     $normalizedUri = $snapshotFeed.uri -replace '\\', '/' -replace '/$', ''
                     $feedKey = [string]::Concat($snapshotFeed.name, "|", $normalizedUri)
                     
-                    if (-not $currentFeedsLookup.ContainsKey($feedKey)) {
-                        # Pre-calculate values for the custom object
-                        $feedNotConfiguredText = "Feed not configured"
-                        $uriMismatchText = "URI mismatch"
-                        $issueText = $feedNotConfiguredText
-                        $actualUriValue = $null
-                        if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) {
-                            $issueText = $uriMismatchText
-                            $actualUriValue = $currentFeedsByName[$snapshotFeed.name].Path
-                        }
-
-                        $complianceReport.MissingFeeds += [PSCustomObject]@{
-                            Name = $snapshotFeed.name
-                            ExpectedUri = $snapshotFeed.uri
-                            ActualUri = $actualUriValue
-                            Issue = $issueText
-                        }
-                        $complianceReport.FeedsCompliant = $false
-                        $complianceReport.OverallCompliant = $false
+                if (-not $currentFeedsLookup.ContainsKey($feedKey)) {
+                    # Pre-calculate values for the custom object
+                    $feedNotConfiguredText = "Feed not configured"
+                    $uriMismatchText = "URI mismatch"
+                    $issueText = $feedNotConfiguredText
+                    $actualUriValue = $null
+                    if ($currentFeedsByName.ContainsKey($snapshotFeed.name)) {
+                        $issueText = $uriMismatchText
+                        $actualUriValue = $currentFeedsByName[$snapshotFeed.name].Path
                     }
+
+                    $complianceReport.MissingFeeds += [PSCustomObject]@{
+                        Name = $snapshotFeed.name
+                        ExpectedUri = $snapshotFeed.uri
+                        ActualUri = $actualUriValue
+                        Issue = $issueText
+                    }
+                    $complianceReport.FeedsCompliant = $false
+                    $complianceReport.OverallCompliant = $false
                 }
+            }
                 
                 # Check for extra feeds (in current system but not in snapshot) if not allowed
                 if (-not $AllowExtraFeeds) {
@@ -3717,10 +3727,10 @@ function Get-PackageInstallationOrder {
                 Write-Warning "No packages provided for ordering"
                 return @()
             }
-
+            
             Write-Information "Analyzing dependencies for $($PackagesInfo.Count) packages..." -InformationAction Continue
             Write-Verbose "Including dependency types: $($IncludeDependencyTypes -join ', ')"
-
+            
             # Create a lookup table for packages by name
             $packageLookup = @{}
             foreach ($package in $PackagesInfo) {
@@ -4098,7 +4108,7 @@ function Sync-NipkgVersionWithSnapshot {
                         }
                     }
                     catch {
-                        Write-Warning "Exception installing: $packageSpec - $($_.Exception.Message)"
+                         Write-Warning "Exception installing: $packageSpec - $($_.Exception.Message)"
                         $result.PackagesFailed++
                         $result.FailedPackages += [PSCustomObject]@{
                             Package = $packageSpec
@@ -4370,6 +4380,103 @@ function Resolve-PackageDependencies {
     }
 }
 
+function Remove-DuplicatePackagesByVersion {
+    <#
+    .SYNOPSIS
+        Removes duplicate packages by selecting the highest version of each package.
+
+    .DESCRIPTION
+        Takes an array of package objects and removes duplicates based on the Package name,
+        keeping only the package with the highest version for each unique package name.
+        Uses semantic version comparison where possible, falling back to string comparison.
+
+    .PARAMETER PackagesInfo
+        Array of PSCustomObject containing package information with Package and Version properties.
+
+    .EXAMPLE
+        $uniquePackages = Remove-DuplicatePackagesByVersion -PackagesInfo $allPackages
+
+    .NOTES
+        Returns an array of unique packages with the highest version for each package name.
+        Preserves all other properties of the package objects.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]]$PackagesInfo
+    )
+
+    begin {
+        Write-Verbose "Starting Remove-DuplicatePackagesByVersion operation"
+    }
+    
+    process {
+        try {
+            if ($PackagesInfo.Count -eq 0) {
+                Write-Verbose "No packages provided, returning empty array"
+                return @()
+            }
+            
+            Write-Verbose "Processing $($PackagesInfo.Count) packages for duplicate removal"
+            
+            # Group packages by name
+            $packageGroups = $PackagesInfo | Group-Object -Property Package
+            
+            $uniquePackages = @()
+            
+            foreach ($group in $packageGroups) {
+                if ($group.Count -eq 1) {
+                    # Only one version, add it directly
+                    $uniquePackages += $group.Group[0]
+                    Write-Verbose "Package '$($group.Name)': single version $($group.Group[0].Version)"
+                } else {
+                    # Multiple versions, select the highest
+                    Write-Verbose "Package '$($group.Name)': found $($group.Count) versions"
+                    
+                    $highestVersionPackage = $group.Group[0]
+                    
+                    foreach ($package in $group.Group[1..($group.Count-1)]) {
+                        try {
+                            # Try semantic version comparison
+                            $currentVersion = [System.Version]::new($highestVersionPackage.Version)
+                            $candidateVersion = [System.Version]::new($package.Version)
+                            
+                            if ($candidateVersion -gt $currentVersion) {
+                                $highestVersionPackage = $package
+                                Write-Verbose "  Selected higher version: $($package.Version) > $($highestVersionPackage.Version)"
+                            }
+                        }
+                        catch {
+                            # Fall back to string comparison if semantic version parsing fails
+                            Write-Verbose "  Using string comparison for versions: $($package.Version) vs $($highestVersionPackage.Version)"
+                            if ($package.Version -gt $highestVersionPackage.Version) {
+                                $highestVersionPackage = $package
+                                Write-Verbose "  Selected higher version (string): $($package.Version)"
+                            }
+                        }
+                    }
+                    
+                    $uniquePackages += $highestVersionPackage
+                    Write-Verbose "Package '$($group.Name)': selected version $($highestVersionPackage.Version) from $($group.Count) versions"
+                }
+            }
+            
+            Write-Verbose "Removed $($PackagesInfo.Count - $uniquePackages.Count) duplicate packages, returning $($uniquePackages.Count) unique packages"
+            return $uniquePackages
+        }
+        catch {
+            $errorMessage = "Failed to remove duplicate packages: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Remove-DuplicatePackagesByVersion operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -4396,4 +4503,5 @@ Export-ModuleMember -Function `
     ,   Sync-NipkgVersionWithSnapshot `
     ,   Test-NipkgSnapshotCompliance `
     ,   Test-NipkgSnapshotDependencies `
-    ,   Resolve-PackageDependencies
+    ,   Resolve-PackageDependencies `
+    ,   Remove-DuplicatePackagesByVersion
