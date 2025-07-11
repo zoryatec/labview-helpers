@@ -1502,6 +1502,9 @@ function New-NipkgSnapshotFromInstaller {
         - Standard feeds in the 'feeds' subdirectory
         - Special NIPKG feed in 'bin/ni-package-manager-packages' (for offline installers)
         
+        Feed names are generated from folder names using ConvertTo-FeedName to ensure
+        compatibility with feed naming requirements (dots are replaced with underscores).
+        
         Duplicate packages (same name, different versions) are automatically removed by 
         selecting the highest version of each package before creating the snapshot.
 
@@ -1531,6 +1534,9 @@ function New-NipkgSnapshotFromInstaller {
         Returns a hashtable with:
         - feeds: Array of feeds with name and uri (if IncludeFeeds is true)
         - packages: Array of packages with name and version from all feeds
+        
+        Feed names are automatically converted using ConvertTo-FeedName to ensure compatibility
+        (e.g., "ni-488.2" becomes "ni-488_2", "ni-vivado-2021.1-cg" becomes "ni-vivado-2021_1-cg").
         
         The function looks for:
         1. A 'feeds' subdirectory and scans all subdirectories for Packages files
@@ -1648,8 +1654,9 @@ function New-NipkgSnapshotFromInstaller {
                         
                         # Add feed information if requested
                         if ($IncludeFeeds) {
+                            $feedName = ConvertTo-FeedName -FolderName $feedDir.Name
                             $feedInfo = [PSCustomObject]@{
-                                Name = $feedDir.Name
+                                Name = $feedName
                                 Path = $feedDir.FullName
                             }
                             $allFeeds += $feedInfo
@@ -4394,7 +4401,7 @@ function Remove-DuplicatePackagesByVersion {
     .DESCRIPTION
         Takes an array of package objects and removes duplicates based on the Package name,
         keeping only the package with the highest version for each unique package name.
-        Uses semantic version comparison where possible, falling back to string comparison.
+        Uses the Compare-PackageVersions function for consistent version comparison logic.
 
     .PARAMETER PackagesInfo
         Array of PSCustomObject containing package information with Package and Version properties.
@@ -4443,23 +4450,12 @@ function Remove-DuplicatePackagesByVersion {
                     $highestVersionPackage = $group.Group[0]
                     
                     foreach ($package in $group.Group[1..($group.Count-1)]) {
-                        try {
-                            # Try semantic version comparison
-                            $currentVersion = [System.Version]::new($highestVersionPackage.Version)
-                            $candidateVersion = [System.Version]::new($package.Version)
-                            
-                            if ($candidateVersion -gt $currentVersion) {
-                                $highestVersionPackage = $package
-                                Write-Verbose "  Selected higher version: $($package.Version) > $($highestVersionPackage.Version)"
-                            }
-                        }
-                        catch {
-                            # Fall back to string comparison if semantic version parsing fails
-                            Write-Verbose "  Using string comparison for versions: $($package.Version) vs $($highestVersionPackage.Version)"
-                            if ($package.Version -gt $highestVersionPackage.Version) {
-                                $highestVersionPackage = $package
-                                Write-Verbose "  Selected higher version (string): $($package.Version)"
-                            }
+                        # Use existing Compare-PackageVersions function for consistency
+                        $comparisonResult = Compare-PackageVersions -Version1 $package.Version -Version2 $highestVersionPackage.Version
+                        
+                        if ($comparisonResult -gt 0) {
+                            Write-Verbose "  Selected higher version: $($package.Version) > $($highestVersionPackage.Version)"
+                            $highestVersionPackage = $package
                         }
                     }
                     
@@ -4531,7 +4527,7 @@ function ConvertTo-FeedName {
             $feedName = $FolderName
             
             # Replace dots with underscores
-            $feedName = $feedName -replace '\.', '_'
+            $feedName = $feedName -replace '\.', '-'
             
             Write-Verbose "Converted '$FolderName' to feed name '$feedName'"
             
