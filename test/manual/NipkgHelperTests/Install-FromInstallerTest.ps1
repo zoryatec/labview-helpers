@@ -20,7 +20,7 @@ $applyParams = @{
     Verbose = $true
     ValidateCompliance = $true
     UseBatchInstallation = $true
-    SyncNipkgVersion = $true
+    SyncNipkgVersion = $false
     ExcludePackages = $ExcludePackages
 }
 
