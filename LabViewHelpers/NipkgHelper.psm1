@@ -1025,7 +1025,7 @@ function New-NipkgSnapshot {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
+        [AllowEmptyCollection()]
         [PSCustomObject[]]$FeedsInfo,
         
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
