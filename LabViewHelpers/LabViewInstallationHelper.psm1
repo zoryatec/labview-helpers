@@ -565,6 +565,372 @@ function Install-LabViewIso {
     }
 }
 
+function Invoke-FileDownload {
+    <#
+    .SYNOPSIS
+        Downloads a file from a URL with progress reporting.
+
+    .DESCRIPTION
+        Downloads a file from HTTP/HTTPS URL to a specified local path with progress reporting,
+        timeout handling, and validation. Provides detailed progress information during download.
+
+    .PARAMETER Url
+        URL of the file to download.
+
+    .PARAMETER OutputPath
+        Local file path where the downloaded file will be saved.
+
+    .PARAMETER TimeoutMinutes
+        Download timeout in minutes. Defaults to 60 minutes.
+
+    .PARAMETER MinimumFileSizeMB
+        Minimum expected file size in MB for validation. Defaults to 1 MB.
+
+    .EXAMPLE
+        Invoke-FileDownload -Url "https://example.com/file.iso" -OutputPath "C:\temp\file.iso"
+
+    .EXAMPLE
+        Invoke-FileDownload -Url "https://example.com/large-file.iso" -OutputPath "C:\temp\file.iso" -TimeoutMinutes 120 -MinimumFileSizeMB 100
+
+    .NOTES
+        Requires internet connectivity and write access to the output directory.
+        Progress is reported every 5 seconds during download.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Url,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath,
+
+        [Parameter()]
+        [ValidateRange(1, 480)]
+        [int]$TimeoutMinutes = 60,
+
+        [Parameter()]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$MinimumFileSizeMB = 1
+    )
+    
+    begin {
+        Write-Verbose "Starting Invoke-FileDownload operation"
+    }
+    
+    process {
+        try {
+            # Validate URL format
+            try {
+                $uri = [System.Uri]$Url
+                if (-not ($uri.Scheme -eq 'http' -or $uri.Scheme -eq 'https')) {
+                    throw "URL must use HTTP or HTTPS protocol"
+                }
+            }
+            catch {
+                throw "Invalid URL format: $Url. Error: $($_.Exception.Message)"
+            }
+            
+            # Create output directory if it doesn't exist
+            $outputDirectory = [System.IO.Path]::GetDirectoryName($OutputPath)
+            if (-not (Test-Path -Path $outputDirectory)) {
+                Write-Information "Creating output directory: $outputDirectory" -InformationAction Continue
+                New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+            }
+            
+            Write-Information "Starting file download..." -InformationAction Continue
+            Write-Information "  Source: $Url" -InformationAction Continue
+            Write-Information "  Destination: $OutputPath" -InformationAction Continue
+            Write-Information "  Timeout: $TimeoutMinutes minutes" -InformationAction Continue
+            
+            # Download with progress reporting
+            $webClient = New-Object System.Net.WebClient
+            $webClient.Timeout = $TimeoutMinutes * 60 * 1000  # Convert to milliseconds
+            
+            # Register progress event
+            Register-ObjectEvent -InputObject $webClient -EventName DownloadProgressChanged -Action {
+                $Global:DownloadProgress = $Event.SourceEventArgs
+            } | Out-Null
+            
+            try {
+                # Start async download
+                $downloadTask = $webClient.DownloadFileTaskAsync($Url, $OutputPath)
+                
+                # Monitor progress
+                $lastReportTime = Get-Date
+                while (-not $downloadTask.IsCompleted) {
+                    Start-Sleep -Milliseconds 1000
+                    
+                    if ($Global:DownloadProgress -and ((Get-Date) - $lastReportTime).TotalSeconds -ge 5) {
+                        $progress = $Global:DownloadProgress
+                        $percentComplete = $progress.ProgressPercentage
+                        $bytesReceived = $progress.BytesReceived
+                        $totalBytes = $progress.TotalBytesToReceive
+                        
+                        $receivedMB = [math]::Round($bytesReceived / 1MB, 2)
+                        $totalMB = [math]::Round($totalBytes / 1MB, 2)
+                        
+                        Write-Information "  Download progress: $percentComplete% ($receivedMB MB / $totalMB MB)" -InformationAction Continue
+                        $lastReportTime = Get-Date
+                    }
+                    
+                    # Check for timeout
+                    if ($downloadTask.Wait(1000)) {
+                        break
+                    }
+                }
+                
+                # Wait for completion and check result
+                $downloadTask.Wait()
+                if ($downloadTask.IsFaulted) {
+                    throw "Download failed: $($downloadTask.Exception.InnerException.Message)"
+                }
+                
+                Write-Information "Download completed successfully" -InformationAction Continue
+                
+                # Verify file exists and validate size
+                if (-not (Test-Path -Path $OutputPath)) {
+                    throw "Downloaded file not found at: $OutputPath"
+                }
+                
+                $fileInfo = Get-Item -Path $OutputPath
+                $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+                Write-Information "  Downloaded file size: $fileSizeMB MB" -InformationAction Continue
+                
+                if ($fileInfo.Length -lt ($MinimumFileSizeMB * 1MB)) {
+                    throw "Downloaded file appears to be too small (${fileSizeMB} MB, expected at least ${MinimumFileSizeMB} MB). This may indicate a download error."
+                }
+                
+                return $OutputPath
+            }
+            finally {
+                # Cleanup event registration and web client
+                Get-EventSubscriber | Where-Object { $_.SourceObject -eq $webClient } | Unregister-Event
+                $webClient.Dispose()
+                Remove-Variable -Name DownloadProgress -Scope Global -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            $errorMessage = "Failed to download file from URL. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category ConnectionError
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Invoke-FileDownload operation"
+    }
+}
+
+function Install-FromInstallerIsoWithDownload {
+    <#
+    .SYNOPSIS
+        Downloads and installs LabVIEW from an ISO file URL.
+
+    .DESCRIPTION
+        Downloads a LabVIEW ISO file from a URL to a temporary directory and then performs
+        offline installation using Install-LabViewIso. Provides progress reporting during
+        download and handles cleanup of downloaded files.
+
+    .PARAMETER IsoUrl
+        URL of the LabVIEW ISO file to download and install.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to standard installation path.
+
+    .PARAMETER NipkgInstallerPath
+        Optional path to NIPKG installer if it needs to be installed first.
+
+    .PARAMETER TemporaryDownloadDirectory
+        Directory to download the ISO file. Defaults to system temp directory with unique subfolder.
+
+    .PARAMETER TemporaryExpandDirectory
+        Directory to temporarily extract ISO contents. Defaults to C:\installer-labview.
+
+    .PARAMETER RemoveExistingFeeds
+        Remove all existing feeds from the system before applying the installer feeds.
+
+    .PARAMETER RemoveSnapshotFeeds
+        Remove the installer feeds from the system after package installation is complete.
+
+    .PARAMETER RemoveDownloadedFiles
+        Remove the downloaded ISO file and download directory after installation completes.
+        Defaults to $true to save disk space.
+
+    .PARAMETER RemoveTemporaryDirectory
+        Remove the temporary extraction directory after installation completes.
+
+    .PARAMETER TimeoutMinutes
+        Download timeout in minutes. Defaults to 60 minutes for large ISO files.
+
+    .EXAMPLE
+        Install-FromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso"
+
+    .EXAMPLE
+        Install-FromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -RemoveDownloadedFiles -RemoveTemporaryDirectory
+
+    .EXAMPLE
+        Install-FromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -TemporaryDownloadDirectory "D:\temp\downloads" -TimeoutMinutes 120
+
+    .NOTES
+        Requires administrative privileges and sufficient disk space for download and extraction.
+        Large ISO files (40GB+) require significant temporary disk space.
+        Progress reporting shows download progress and file sizes.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$IsoUrl,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "C:\Program Files\National Instruments\NI Package Manager\nipkg.exe",
+        
+        [Parameter()]
+        [string]$NipkgInstallerPath,
+
+        [Parameter()]
+        [string]$TemporaryDownloadDirectory,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$TemporaryExpandDirectory = "C:\installer-labview",
+
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$RemoveDownloadedFiles = $true,
+
+        [Parameter()]
+        [switch]$RemoveTemporaryDirectory,
+
+        [Parameter()]
+        [ValidateRange(1, 480)]
+        [int]$TimeoutMinutes = 60
+    )
+    
+    begin {
+        Write-Verbose "Starting Install-FromInstallerIsoWithDownload operation"
+        
+        # Generate unique temporary download directory if not provided
+        if ([string]::IsNullOrEmpty($TemporaryDownloadDirectory)) {
+            $tempGuid = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
+            $TemporaryDownloadDirectory = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "labview-iso-download-$tempGuid"
+        }
+    }
+    
+    process {
+        $downloadedIsoPath = $null
+        
+        try {
+            Write-Information "Starting LabVIEW installation from ISO URL: $IsoUrl" -InformationAction Continue
+            
+            # Create download directory
+            if (-not (Test-Path -Path $TemporaryDownloadDirectory)) {
+                Write-Information "Creating download directory: $TemporaryDownloadDirectory" -InformationAction Continue
+                New-Item -ItemType Directory -Path $TemporaryDownloadDirectory -Force | Out-Null
+            }
+            
+            # Generate ISO filename from URL
+            $uri = [System.Uri]$IsoUrl
+            $isoFileName = [System.IO.Path]::GetFileName($uri.LocalPath)
+            if ([string]::IsNullOrEmpty($isoFileName) -or -not $isoFileName.EndsWith('.iso', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isoFileName = "labview-installer-$(Get-Date -Format 'yyyyMMdd-HHmmss').iso"
+                Write-Verbose "Generated ISO filename: $isoFileName"
+            }
+            
+            $downloadedIsoPath = Join-Path -Path $TemporaryDownloadDirectory -ChildPath $isoFileName
+            
+            Write-Information "Step 1: Downloading ISO file..." -InformationAction Continue
+            
+            # Download the ISO file using the dedicated download function
+            $downloadedIsoPath = Invoke-FileDownload -Url $IsoUrl -OutputPath $downloadedIsoPath -TimeoutMinutes $TimeoutMinutes -MinimumFileSizeMB 1
+            
+            Write-Information "Step 2: Installing LabVIEW from downloaded ISO..." -InformationAction Continue
+            
+            # Build parameters for Install-LabViewIso
+            $installParams = @{
+                NipkgCmdPath = $NipkgCmdPath
+                IsoFilePath = $downloadedIsoPath
+                TemporaryExpandDirectory = $TemporaryExpandDirectory
+                RemoveIsoFile = $RemoveDownloadedFiles  # Remove ISO after extraction if cleanup requested
+                RemoveTemporaryDirectory = $RemoveTemporaryDirectory
+            }
+            
+            if ($NipkgInstallerPath) {
+                $installParams.NipkgInstallerPath = $NipkgInstallerPath
+            }
+            
+            if ($RemoveExistingFeeds) {
+                $installParams.RemoveExistingFeeds = $true
+            }
+            
+            if ($RemoveSnapshotFeeds) {
+                $installParams.RemoveSnapshotFeeds = $true
+            }
+            
+            # Install using existing function
+            Install-LabViewIso @installParams
+            
+            Write-Information "LabVIEW installation from downloaded ISO completed successfully" -InformationAction Continue
+        }
+        catch {
+            $errorMessage = "Failed to download and install LabVIEW from ISO URL. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category NotInstalled
+            throw
+        }
+        finally {
+            # Perform cleanup operations if requested
+            if ($RemoveDownloadedFiles) {
+                Write-Verbose "Performing download cleanup operations..."
+                
+                # Remove downloaded ISO file if it still exists
+                if ($downloadedIsoPath -and (Test-Path $downloadedIsoPath)) {
+                    try {
+                        Write-Information "Removing downloaded ISO file: $downloadedIsoPath" -InformationAction Continue
+                        Remove-Item -Path $downloadedIsoPath -Force
+                        Write-Verbose "Successfully removed downloaded ISO file"
+                    }
+                    catch {
+                        Write-Warning "Failed to remove downloaded ISO file: $($_.Exception.Message)"
+                    }
+                }
+                
+                # Remove download directory if empty
+                if ((Test-Path $TemporaryDownloadDirectory)) {
+                    try {
+                        $remainingFiles = Get-ChildItem -Path $TemporaryDownloadDirectory -Force
+                        if ($remainingFiles.Count -eq 0) {
+                            Write-Information "Removing empty download directory: $TemporaryDownloadDirectory" -InformationAction Continue
+                            Remove-Item -Path $TemporaryDownloadDirectory -Force
+                            Write-Verbose "Successfully removed download directory"
+                        }
+                        else {
+                            Write-Verbose "Download directory not empty, keeping: $TemporaryDownloadDirectory"
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to remove download directory: $($_.Exception.Message)"
+                    }
+                }
+            }
+            elseif ($downloadedIsoPath -and (Test-Path $downloadedIsoPath)) {
+                Write-Verbose "Downloaded ISO file remains at: $downloadedIsoPath"
+            }
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Install-FromInstallerIsoWithDownload operation"
+    }
+}
+
 function Set-LabViewForCi {
     <#
     .SYNOPSIS
@@ -655,4 +1021,6 @@ Export-ModuleMember -Function `
     ,   Install-Gcd `
     ,   Expand-Iso `
     ,   Install-LabViewIso `
+    ,   Invoke-FileDownload `
+    ,   Install-FromInstallerIsoWithDownload `
     ,   Set-LabViewForCi
