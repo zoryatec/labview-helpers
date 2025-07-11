@@ -34,7 +34,9 @@ function Add-FeedDirectories {
 
     .DESCRIPTION
         Scans a parent directory for subdirectories and adds each as a feed to NIPKG.
-        Updates the package database after adding all feeds.
+        Updates the package database after adding all feeds. Feed names are generated
+        from folder names using ConvertTo-FeedName to ensure compatibility with feed
+        naming requirements.
 
     .PARAMETER FeedsDirectory
         Path to the directory containing feed subdirectories.
@@ -50,6 +52,8 @@ function Add-FeedDirectories {
 
     .NOTES
         Each subdirectory in the FeedsDirectory will be added as a separate feed.
+        Feed names are automatically generated from folder names using ConvertTo-FeedName
+        which replaces dots (.) with underscores (_) for compatibility.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -83,12 +87,14 @@ function Add-FeedDirectories {
 
             foreach ($dir in $directories) {
                 if ($PSCmdlet.ShouldProcess($dir.FullName, "Add NIPKG feed")) {
-                    Write-Verbose "Adding feed directory: $($dir.Name)"
-                    Write-Information "Adding feed: $($dir.Name)" -InformationAction Continue
-                    & $NipkgCmdPath feed-add "$($dir.FullName)" --name="$($dir.Name)"
+                    # Convert folder name to valid feed name
+                    $feedName = ConvertTo-FeedName -FolderName $dir.Name
+                    Write-Verbose "Adding feed directory: $($dir.Name) as feed name: $feedName"
+                    Write-Information "Adding feed: $feedName (from folder: $($dir.Name))" -InformationAction Continue
+                    & $NipkgCmdPath feed-add "$($dir.FullName)" --name="$feedName"
                     
                     if ($LASTEXITCODE -ne 0) {
-                        Write-Warning "Failed to add feed: $($dir.Name)"
+                        Write-Warning "Failed to add feed: $feedName"
                     }
                 }
             }
@@ -4477,6 +4483,72 @@ function Remove-DuplicatePackagesByVersion {
     }
 }
 
+function ConvertTo-FeedName {
+    <#
+    .SYNOPSIS
+        Converts a folder name to a valid feed name.
+
+    .DESCRIPTION
+        Transforms a folder name into a valid feed name by applying naming conventions.
+        Currently replaces dots (.) with underscores (_) to ensure compatibility with
+        feed naming requirements. This function can be extended in the future to apply
+        additional transformations as needed.
+
+    .PARAMETER FolderName
+        The folder name to convert to a feed name.
+
+    .EXAMPLE
+        $feedName = ConvertTo-FeedName -FolderName "ni-software-2025.q1"
+        # Returns: "ni-software-2025_q1"
+
+    .EXAMPLE
+        $feedName = ConvertTo-FeedName -FolderName "drivers.24.8"
+        # Returns: "drivers_24_8"
+
+    .NOTES
+        Current transformations:
+        - Replaces dots (.) with underscores (_)
+        
+        This function is designed to be easily extensible for future naming
+        convention requirements.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [ValidateNotNullOrEmpty()]
+        [string]$FolderName
+    )
+
+    begin {
+        Write-Verbose "Starting ConvertTo-FeedName operation"
+    }
+    
+    process {
+        try {
+            Write-Verbose "Converting folder name '$FolderName' to feed name"
+            
+            # Apply naming transformations
+            $feedName = $FolderName
+            
+            # Replace dots with underscores
+            $feedName = $feedName -replace '\.', '_'
+            
+            Write-Verbose "Converted '$FolderName' to feed name '$feedName'"
+            
+            return $feedName
+        }
+        catch {
+            $errorMessage = "Failed to convert folder name to feed name - FolderName: '$FolderName'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed ConvertTo-FeedName operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
@@ -4504,4 +4576,5 @@ Export-ModuleMember -Function `
     ,   Test-NipkgSnapshotCompliance `
     ,   Test-NipkgSnapshotDependencies `
     ,   Resolve-PackageDependencies `
-    ,   Remove-DuplicatePackagesByVersion
+    ,   Remove-DuplicatePackagesByVersion `
+    ,   ConvertTo-FeedName
