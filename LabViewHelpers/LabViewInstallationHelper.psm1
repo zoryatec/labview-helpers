@@ -279,18 +279,14 @@ function Install-LabViewOffline {
             $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
             
-            $applyParams = @{
+            $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
-                Verbose = $true
-                ValidateCompliance = $true
-                SyncNipkgVersion = $false
-                ExcludePackages = $ExcludePackages
                 RemoveExistingFeeds = $RemoveExistingFeeds
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds
             }
             
             Import-NipkgSnapshotFromJson $InstallationSnapshotFile |
-            Install-Snapshot @applyParams |
+            Install-Snapshot @installParams |
             Test-SnapshotCompliance -NipkgCmdPath $NipkgCmdPath
 
         }
