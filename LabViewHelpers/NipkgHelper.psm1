@@ -27,6 +27,220 @@
     Copyright 2025 : LabVIEW Helpers
 #>
 
+function ConvertTo-PackageSpecifications {
+    <#
+    .SYNOPSIS
+        Converts package definitions to NIPKG package specifications.
+
+    .DESCRIPTION
+        Validates package definitions and converts them to package specifications
+        in the format "package=version" for use with NIPKG commands.
+
+    .PARAMETER PackageDefinitions
+        Array of PSCustomObjects containing package information with Package and Version properties.
+
+    .EXAMPLE
+        $packages = @(
+            [PSCustomObject]@{ Package = "ni-labview-2025"; Version = "25.1.3" }
+            [PSCustomObject]@{ Package = "ni-vision-runtime"; Version = "2025.1.0" }
+        )
+        $specs = ConvertTo-PackageSpecifications -PackageDefinitions $packages
+
+    .NOTES
+        Returns array of package specifications in "package=version" format.
+        Invalid package definitions are skipped with warnings.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [PSCustomObject[]]$PackageDefinitions
+    )
+
+    $packageSpecs = @()
+    
+    foreach ($packageDef in $PackageDefinitions) {
+        # Validate package definition
+        if (-not $packageDef.Package) {
+            Write-Warning "Package definition missing 'Package' property, skipping"
+            continue
+        }
+        
+        if (-not $packageDef.Version) {
+            Write-Warning "Package definition for '$($packageDef.Package)' missing 'Version' property, skipping"
+            continue
+        }
+        
+        $packageName = $packageDef.Package
+        $packageVersion = $packageDef.Version
+        $packageSpec = "$packageName=$packageVersion"
+        
+        $packageSpecs += $packageSpec
+        Write-Verbose "Added package specification: $packageSpec"
+    }
+    
+    return $packageSpecs
+}
+
+function Install-Packages {
+    <#
+    .SYNOPSIS
+        Installs packages using NI Package Manager with configurable options.
+
+    .DESCRIPTION
+        A reusable function that installs packages from the pipeline using NIPKG with support
+        for all standard installation options. Each package definition should contain Package
+        and Version properties. This function provides a consistent interface for package
+        installation across different scenarios.
+
+    .PARAMETER PackageDefinitions
+        Array of PSCustomObjects containing package information with Package and Version properties.
+        Accepts input from the pipeline.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER AcceptEulas
+        Automatically accept End User License Agreements during installation.
+
+    .PARAMETER Yes
+        Automatically answer 'yes' to all prompts during installation.
+
+    .PARAMETER Simulate
+        Perform a simulation of the installation without actually installing packages.
+
+    .PARAMETER ForceUnlocked
+        Force installation even if packages are locked.
+
+    .PARAMETER VerboseOutput
+        Enable verbose output from NIPKG command.
+
+    .PARAMETER AllowDowngrade
+        Allow downgrading packages to older versions if necessary.
+
+    .PARAMETER AllowUninstall
+        Allow uninstalling packages during dependency resolution.
+
+    .PARAMETER InstallAlsoUpgrades
+        Also install available upgrades for existing packages.
+
+    .PARAMETER IncludeRecommended
+        Include recommended packages during installation.
+
+    .EXAMPLE
+        $packages = @(
+            [PSCustomObject]@{ Package = "ni-labview-2025"; Version = "25.1.3" }
+            [PSCustomObject]@{ Package = "ni-vision-runtime"; Version = "2025.1.0" }
+        )
+        Install-Packages -PackageDefinitions $packages -AcceptEulas -Yes
+
+    .EXAMPLE
+        # Install packages with all options enabled
+        Install-Packages -PackageDefinitions $packages -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -AcceptEulas -Yes -AllowDowngrade -AllowUninstall -InstallAlsoUpgrades
+
+    .EXAMPLE
+        # Simulate installation to see what would happen
+        Install-Packages -PackageDefinitions $packages -Simulate -VerboseOutput
+
+    .NOTES
+        Returns installation results with success/failure status for each package.
+        This function is designed to be reusable across different installation scenarios.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [PSCustomObject[]]$PackageDefinitions,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [switch]$AcceptEulas,
+        
+        [Parameter()]
+        [switch]$Yes,
+        
+        [Parameter()]
+        [switch]$Simulate,
+        
+        [Parameter()]
+        [switch]$ForceUnlocked,
+        
+        [Parameter()]
+        [switch]$VerboseOutput,
+        
+        [Parameter()]
+        [switch]$AllowDowngrade,
+        
+        [Parameter()]
+        [switch]$AllowUninstall,
+        
+        [Parameter()]
+        [switch]$InstallAlsoUpgrades,
+        
+        [Parameter()]
+        [switch]$IncludeRecommended
+    )
+
+    begin {
+        # Check if NIPKG command is available
+        try {
+            $null = Get-Command $NipkgCmdPath -ErrorAction Stop
+        }
+        catch {
+            throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
+        }
+    }
+    
+    process {
+        # Validate package definitions array
+        if (-not $PackageDefinitions -or $PackageDefinitions.Count -eq 0) {
+            Write-Warning "No package definitions provided, skipping installation"
+            return
+        }
+        
+        # Convert package definitions to specifications
+        $packageSpecs = ConvertTo-PackageSpecifications -PackageDefinitions $PackageDefinitions
+        
+        if ($packageSpecs.Count -eq 0) {
+            Write-Warning "No valid package definitions found, skipping installation"
+            return
+        }
+        
+        Write-Information "Installing $($packageSpecs.Count) packages in batch mode..." -InformationAction Continue
+        Write-Information "Package specifications: $($packageSpecs -join ', ')" -InformationAction Continue
+        
+        # Build NIPKG command arguments for batch installation
+        $arguments = @("install") + $packageSpecs
+        
+        # Add optional flags based on parameters
+        if ($AcceptEulas) { $arguments += "--accept-eulas" }
+        if ($Yes) { $arguments += "-y" }
+        if ($Simulate) { $arguments += "--simulate" }
+        if ($ForceUnlocked) { $arguments += "--force-unlocked" }
+        if ($VerboseOutput) { $arguments += "--verbose" }
+        if ($AllowDowngrade) { $arguments += "--allow-downgrade" }
+        if ($AllowUninstall) { $arguments += "--allow-uninstall" }
+        if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
+        if ($IncludeRecommended) { $arguments += "--include-recommended" }
+        
+        # Execute NIPKG batch install command and output immediately to console
+        & $NipkgCmdPath @arguments 2>&1
+        $exitCode = $LASTEXITCODE
+        
+        # Handle errors at the end and throw
+        if ($exitCode -ne 0) {
+            throw "Batch installation failed with exit code: $exitCode"
+        }
+        
+        Write-Information "Successfully installed $($packageSpecs.Count) packages in batch mode" -InformationAction Continue
+    }
+    
+    end {
+        # No result tracking needed - just success or error thrown
+    }
+}
+
 function Add-FeedDirectories {
     <#
     .SYNOPSIS
@@ -2367,38 +2581,20 @@ function Apply-NipkgSnapshot {
                 }
 
                 if ($UseBatchInstallation) {
-                    # Batch installation approach - let NIPKG resolve all conflicts
-                    Write-Information "Using batch installation mode to resolve version conflicts..." -InformationAction Continue
-                    
-                    # Build package specifications for all packages
-                    $packageSpecs = @()
-                    foreach ($snapshotPackage in $snapshot.packages) {
-                        $packageSpecs += "$($snapshotPackage.name)=$($snapshotPackage.version)"
+                    # Batch installation using pipeline and hashtable for switches
+                    $installSwitches = @{
+                        NipkgCmdPath = $NipkgCmdPath
+                        AcceptEulas = $true
+                        Yes = $true
+                        AllowDowngrade = $true
+                        AllowUninstall = $true
+                        InstallAlsoUpgrades = $true
                     }
                     
-                    Write-Information "Installing $($packageSpecs.Count) packages in batch mode..." -InformationAction Continue
-                    Write-Information "Package specifications: $($packageSpecs -join ', ')" -InformationAction Continue
+                    Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
                     
-                    if ($PSCmdlet.ShouldProcess("$($packageSpecs.Count) packages", "Batch install packages")) {
-                        try {
-                            # Install all packages in one command - let NIPKG resolve conflicts
-                            & $NipkgCmdPath install $packageSpecs --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                            
-                            if ($LASTEXITCODE -eq 0) {
-                                $results.PackagesInstalled = $packageSpecs.Count
-                                Write-Information "Successfully installed $($packageSpecs.Count) packages in batch mode" -InformationAction Continue
-                            } else {
-                                $results.PackagesFailed = $packageSpecs.Count
-                                Write-Warning "Batch installation failed (exit code: $LASTEXITCODE)"
-                            }
-                        }
-                        catch {
-                            $results.PackagesFailed = $packageSpecs.Count
-                            Write-Warning "Exception during batch installation: $($_.Exception.Message)"
-                        }
-                    } else {
-                        $results.PackagesSkipped = $packageSpecs.Count
-                    }
+                    # Since Install-Packages throws on error, we reach here only on success
+                    $results.PackagesInstalled = $snapshot.packages.Count
                 } else {
                     # Individual package installation approach (existing logic)
                     Write-Information "Using individual package installation mode..." -InformationAction Continue
@@ -4545,14 +4741,108 @@ function ConvertTo-FeedName {
     }
 }
 
+function Get-PackageDefinitionsFromSnapshot {
+    <#
+    .SYNOPSIS
+        Converts snapshot packages section into package definitions for use with Install-Packages.
+
+    .DESCRIPTION
+        Takes a snapshot object and converts its packages section into an array of package 
+        definitions with Package and Version properties that can be used with Install-Packages
+        function for batch installation.
+
+    .PARAMETER Snapshot
+        Hashtable containing the snapshot data with packages section.
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        $packageDefinitions = Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot
+        Install-Packages -PackageDefinitions $packageDefinitions -AcceptEulas -Yes
+
+    .EXAMPLE
+        # Direct pipeline usage
+        $snapshot | Get-PackageDefinitionsFromSnapshot | Install-Packages -AcceptEulas -Yes -AllowDowngrade
+
+    .NOTES
+        Returns an array of PSCustomObjects with Package and Version properties.
+        This function is designed to be a bridge between snapshot format and Install-Packages function.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackageDefinitionsFromSnapshot operation"
+    }
+    
+    process {
+        try {
+            # Validate snapshot structure
+            if (-not $Snapshot.packages) {
+                Write-Warning "Snapshot does not contain a packages section"
+                return @()
+            }
+            
+            if ($Snapshot.packages.Count -eq 0) {
+                Write-Verbose "Snapshot packages section is empty"
+                return @()
+            }
+            
+            Write-Verbose "Converting $($Snapshot.packages.Count) snapshot packages to package definitions"
+            
+            # Convert snapshot packages (name/version) to package definitions (Package/Version)
+            $packageDefinitions = @()
+            
+            foreach ($snapshotPackage in $Snapshot.packages) {
+                # Validate snapshot package structure
+                if (-not $snapshotPackage.name) {
+                    Write-Warning "Snapshot package missing 'name' property, skipping"
+                    continue
+                }
+                
+                if (-not $snapshotPackage.version) {
+                    Write-Warning "Snapshot package '$($snapshotPackage.name)' missing 'version' property, skipping"
+                    continue
+                }
+                
+                # Create package definition for Install-Packages
+                $packageDef = [PSCustomObject]@{
+                    Package = $snapshotPackage.name
+                    Version = $snapshotPackage.version
+                }
+                
+                $packageDefinitions += $packageDef
+                Write-Verbose "Converted: $($snapshotPackage.name) v$($snapshotPackage.version) -> Package: $($packageDef.Package), Version: $($packageDef.Version)"
+            }
+            
+            Write-Verbose "Successfully converted $($packageDefinitions.Count) package definitions"
+            return $packageDefinitions
+        }
+        catch {
+            $errorMessage = "Failed to convert snapshot packages to package definitions. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Snapshot
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackageDefinitionsFromSnapshot operation"
+    }
+}
+
 Export-ModuleMember -Function `
         Add-FeedDirectories `
     ,   Test-NipkgAvailability `
     ,   Get-NipkgCommandOutput `
     ,   ConvertFrom-NipkgOutput `
     ,   ConvertFrom-NipkgPackagesFile `
+    ,   ConvertTo-PackageSpecifications `
     ,   Get-PackagesInfoFromNipkgCmd `
     ,   Get-PackagesInfoFromPackagesFile `
+    ,   Get-PackageDefinitionsFromSnapshot `
     ,   Get-PackageInstallationOrder `
     ,   Get-DriverPackages `
     ,   Get-ProgrammingEnvironmentsPackages `
@@ -4560,6 +4850,7 @@ Export-ModuleMember -Function `
     ,   Get-ApplicationSoftwarePackages `
     ,   Get-FeedsInfoFromNipkgCmd `
     ,   Remove-Feeds `
+    ,   Install-Packages `
     ,   Install-NipkgManager `
     ,   New-NipkgSnapshot `
     ,   New-NipkgSnapshotFromInstaller `
