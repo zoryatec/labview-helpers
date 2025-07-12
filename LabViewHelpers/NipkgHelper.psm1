@@ -334,7 +334,7 @@ function Add-FeedDirectories {
     }
 }
 
-function Get-FeedsInfoFromNipkgCmd {
+function Get-FeedDefinitionsFromSystem {
     <#
     .SYNOPSIS
         Retrieves information about configured NIPKG feeds.
@@ -353,18 +353,18 @@ function Get-FeedsInfoFromNipkgCmd {
         Exclude online feeds from the results. Only local file system feeds will be returned.
 
     .EXAMPLE
-        Get-FeedsInfoFromNipkgCmd
+        Get-FeedDefinitionsFromSystem
 
     .EXAMPLE
-        Get-FeedsInfoFromNipkgCmd -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        Get-FeedDefinitionsFromSystem -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .EXAMPLE
         # Get only online feeds
-        Get-FeedsInfoFromNipkgCmd -ExcludeLocalFeeds
+        Get-FeedDefinitionsFromSystem -ExcludeLocalFeeds
 
     .EXAMPLE
         # Get only local feeds
-        Get-FeedsInfoFromNipkgCmd -ExcludeOnlineFeeds
+        Get-FeedDefinitionsFromSystem -ExcludeOnlineFeeds
 
     .NOTES
         Returns PSCustomObject with Name, Path, and Type properties for each feed.
@@ -388,7 +388,7 @@ function Get-FeedsInfoFromNipkgCmd {
     )
 
     begin {
-        Write-Verbose "Starting Get-FeedsInfoFromNipkgCmd operation"
+        Write-Verbose "Starting Get-FeedDefinitionsFromSystem operation"
         
         # Validate parameter combination
         if ($ExcludeLocalFeeds -and $ExcludeOnlineFeeds) {
@@ -457,7 +457,7 @@ function Get-FeedsInfoFromNipkgCmd {
     }
 
     end {
-        Write-Verbose "Completed Get-FeedsInfoFromNipkgCmd operation"
+        Write-Verbose "Completed Get-FeedDefinitionsFromSystem operation"
     }
 }
 
@@ -476,14 +476,14 @@ function Remove-Feeds {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .EXAMPLE
-        $feeds = Get-FeedsInfoFromNipkgCmd
+        $feeds = Get-FeedDefinitionsFromSystem
         Remove-Feeds -FeedsInfo $feeds
 
     .EXAMPLE
         Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
-        Use Get-FeedsInfoFromNipkgCmd to get the required FeedsInfo object.
+        Use Get-FeedDefinitionsFromSystem to get the required FeedsInfo object.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
@@ -1194,7 +1194,7 @@ function New-NipkgSnapshot {
         and stop processing, as only exactly one ni-package-manager package is allowed per snapshot.
 
     .PARAMETER FeedsInfo
-        PSCustomObject containing feed information from Get-FeedsInfoFromNipkgCmd.
+        PSCustomObject containing feed information from Get-FeedDefinitionsFromSystem.
 
     .PARAMETER PackagesInfo
         PSCustomObject containing package information from Get-PackagesInfoFromNipkgCmd.
@@ -1206,7 +1206,7 @@ function New-NipkgSnapshot {
         - StoreProduct: Include only packages where StoreProduct is 'yes'
 
     .EXAMPLE
-        $feeds = Get-FeedsInfoFromNipkgCmd
+        $feeds = Get-FeedDefinitionsFromSystem
         $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
         $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
 
@@ -1914,7 +1914,7 @@ function New-NipkgSnapshotFromSystem {
 
     .DESCRIPTION
         Creates a snapshot by capturing the current NIPKG configuration including configured feeds
-        and installed packages. This function combines Get-FeedsInfoFromNipkgCmd, Get-PackagesInfo, 
+        and installed packages. This function combines Get-FeedDefinitionsFromSystem, Get-PackagesInfo, 
         and New-NipkgSnapshot to create a complete system state snapshot.
 
     .PARAMETER PackageType
@@ -1991,7 +1991,7 @@ function New-NipkgSnapshotFromSystem {
                 Write-Verbose "Getting feeds info from NIPKG command"
                 
                 try {
-                    $feedsInfo = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath -ExcludeLocalFeeds
+                    $feedsInfo = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath -ExcludeLocalFeeds
                     Write-Verbose "Retrieved $($feedsInfo.Count) feeds from system"
                     Write-Information "Found $($feedsInfo.Count) configured feed(s)" -InformationAction Continue
                 }
@@ -2240,49 +2240,46 @@ function Apply-NipkgSnapshot {
     
     process {
         try {
-            Write-Information "Importing NIPKG snapshot..." -InformationAction Continue
-            $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
-            $originalPackageCount = $snapshot.packages.Count    
-            Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
-
-            $snapshotFeedsAdded = @()
-            if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
-                $snapshotFeedsAdded = $snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
-            } else { 
-                Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
-            }
-
-            if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
-
-                $installSwitches = @{
+            $installSwitches = @{
                     NipkgCmdPath = $NipkgCmdPath
+                    ForceUnlocked = $true
                     AcceptEulas = $true
                     Yes = $true
                     AllowDowngrade = $true
                     AllowUninstall = $true
                     InstallAlsoUpgrades = $true
+                    VerboseOutput = $true
+                    IncludeRecommended = $true
                 }
-                
+
+            Write-Information "Importing NIPKG snapshot..."
+            $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
+            $originalPackageCount = $snapshot.packages.Count    
+            Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
+
+            if($RemoveExistingFeeds) {
+                Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath | 
+                Remove-Feeds -NipkgCmdPath $NipkgCmdPath
+            }
+
+            $snapshotFeedsAdded = @()
+            if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
+                Write-Information "Adding feeds from snapshot..."
+                $snapshotFeedsAdded = $snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
+            }
+
+            if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
+                Write-Information "Installing Packages..."
                 Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | 
                 Install-Packages @installSwitches   
             }
 
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
-                Write-Information "Removing $($snapshotFeedsAdded.Count) snapshot feed(s)" -InformationAction Continue
-                
-                # Convert snapshot feeds to the format expected by Remove-Feeds
-                $feedsToRemove = $snapshotFeedsAdded | ForEach-Object {
-                    [PSCustomObject]@{
-                        name = $_.name
-                        uri = $_.uri
-                        enabled = $true
-                    }
-                }
-                
-                Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
+                Write-Information "Removing feeds added by snapshot..."  
+                Remove-Feeds -FeedsInfo $snapshotFeedsAdded -NipkgCmdPath $NipkgCmdPath
             } 
 
-            Write-Information "Snapshot application completed successfully" -InformationAction Continue
+            Write-Information "Snapshot application completed successfully"
 
             # Create simple result object focused on compliance
             $applyResult = [PSCustomObject]@{
@@ -2646,7 +2643,7 @@ function Test-NipkgSnapshotCompliance {
                 Write-Information "Validating feed compliance..." -InformationAction Continue
                 
                 try {
-                    $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                    $currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
                     Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
                 }
                 catch {
@@ -4097,7 +4094,7 @@ function Add-Feeds {
         if ($null -eq $currentFeedsLookup) {
             Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
             try {
-                $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                $currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
                 Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
             }
             catch {
@@ -4191,7 +4188,7 @@ Export-ModuleMember -Function `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
     ,   Get-ApplicationSoftwarePackages `
-    ,   Get-FeedsInfoFromNipkgCmd `
+    ,   Get-FeedDefinitionsFromSystem `
     ,   Remove-Feeds `
     ,   Install-Packages `
     ,   Install-NipkgManager `
