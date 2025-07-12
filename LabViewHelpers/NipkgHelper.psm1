@@ -487,7 +487,7 @@ function Remove-Feeds {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$FeedsInfo,
         
@@ -2258,8 +2258,8 @@ function Apply-NipkgSnapshot {
             Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
 
             if($RemoveExistingFeeds) {
-                Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath | 
-                Remove-Feeds -NipkgCmdPath $NipkgCmdPath
+                Write-Information "Removing existing feeds..."
+                Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath | Remove-Feeds -NipkgCmdPath $NipkgCmdPath
             }
 
             $snapshotFeedsAdded = @()
@@ -2270,13 +2270,12 @@ function Apply-NipkgSnapshot {
 
             if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
                 Write-Information "Installing Packages..."
-                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | 
-                Install-Packages @installSwitches   
+                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches   
             }
 
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
                 Write-Information "Removing feeds added by snapshot..."  
-                Remove-Feeds -FeedsInfo $snapshotFeedsAdded -NipkgCmdPath $NipkgCmdPath
+                $snapshotFeedsAdded | Remove-Feeds -NipkgCmdPath $NipkgCmdPath
             } 
 
             Write-Information "Snapshot application completed successfully"
@@ -4085,42 +4084,53 @@ function Add-Feeds {
 
     begin {
         Write-Verbose "Starting Add-Feeds operation"
-        $feedsAdded = @()
-        $currentFeedsLookup = $null
+        $script:feedsAdded = @()
+        $script:currentFeedsLookup = $null
     }
     
     process {
         # Get currently configured feeds on first call only
-        if ($null -eq $currentFeedsLookup) {
+        if ($null -eq $script:currentFeedsLookup) {
             Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
             try {
-                $currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
-                Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
+                $script:currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
+                Write-Verbose "Found $($script:currentFeeds.Count) currently configured feeds"
             }
             catch {
                 Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
-                $currentFeeds = @()
+                $script:currentFeeds = @()
             }
             
             # Create lookup table for current feeds (by name and path)
-            $currentFeedsLookup = @{}
-            foreach ($currentFeed in $currentFeeds) {
+            $script:currentFeedsLookup = @{}
+            foreach ($currentFeed in $script:currentFeeds) {
                 # Create a key combining name and normalized path for comparison
                 $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
                 $lookupKey = "$($currentFeed.Name)|$normalizedPath"
-                $currentFeedsLookup[$lookupKey] = $currentFeed
+                $script:currentFeedsLookup[$lookupKey] = $currentFeed
             }
         }
 
         # Process the individual feed definition
         $feed = $FeedDefinition
         
+        # Validate feed definition
+        if ([string]::IsNullOrWhiteSpace($feed.name)) {
+            Write-Warning "Feed definition has null or empty name - skipping"
+            return
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($feed.uri)) {
+            Write-Warning "Feed definition has null or empty URI - skipping"
+            return
+        }
+        
         # Normalize the feed URI for comparison
         $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
         $feedLookupKey = "$($feed.name)|$normalizedUri"
         
         # Check if this feed already exists with the same name and URI
-        if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
+        if ($script:currentFeedsLookup.ContainsKey($feedLookupKey)) {
             Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
             Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
             
@@ -4129,7 +4139,7 @@ function Add-Feeds {
         }
         else {
             # Check if a feed with the same name but different URI exists
-            $existingFeedWithSameName = $currentFeeds | Where-Object { $_.Name -eq $feed.name }
+            $existingFeedWithSameName = $script:currentFeeds | Where-Object { $_.Name -eq $feed.name }
             if ($existingFeedWithSameName) {
                 Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
             }
@@ -4189,6 +4199,7 @@ Export-ModuleMember -Function `
     ,   Get-UtilitiesPackages `
     ,   Get-ApplicationSoftwarePackages `
     ,   Get-FeedDefinitionsFromSystem `
+    ,   Add-Feeds `
     ,   Remove-Feeds `
     ,   Install-Packages `
     ,   Install-NipkgManager `
