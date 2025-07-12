@@ -19,7 +19,6 @@ $applyParams = @{
     NipkgCmdPath = $nipkgCmdPath
     Verbose = $true
     ValidateCompliance = $true
-    UseBatchInstallation = $true
     SyncNipkgVersion = $false
     ExcludePackages = $ExcludePackages
 }

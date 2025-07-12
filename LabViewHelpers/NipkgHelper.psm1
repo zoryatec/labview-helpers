@@ -2108,20 +2108,6 @@ function Apply-NipkgSnapshot {
         When ValidateCompliance is enabled, allow extra packages beyond those in the snapshot.
         If false, extra packages cause non-compliance. Defaults to $false.
 
-    .PARAMETER LockDuringInstallation
-        Lock each package after it is successfully installed, upgraded, downgraded, or if it's already 
-        at the correct version to prevent later packages in the snapshot from modifying it. This ensures 
-        that the installation order is strictly maintained and packages cannot be automatically upgraded 
-        or downgraded by dependency resolution of subsequent packages. All locked packages are 
-        automatically unlocked at the end of the installation process. Use this when package 
-        installation order is critical.
-
-    .PARAMETER UseBatchInstallation
-        Install all packages in a single batch operation instead of one-by-one. This allows NIPKG 
-        to resolve version conflicts and dependencies across the entire snapshot, which can solve 
-        compatibility issues that occur with individual package installation. When enabled, 
-        LockDuringInstallation is automatically disabled as it's incompatible with batch operations.
-
     .PARAMETER SyncNipkgVersion
         Synchronize the NIPKG version with the version specified in the snapshot after processing 
         feeds and updating the package database. If the snapshot contains an 'ni-package-manager' 
@@ -2175,14 +2161,6 @@ function Apply-NipkgSnapshot {
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance -AllowExtraPackages $true
 
     .EXAMPLE
-        # Lock packages during installation to prevent dependency conflicts
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -LockDuringInstallation
-
-    .EXAMPLE
-        # Use batch installation to resolve version conflicts
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -UseBatchInstallation
-
-    .EXAMPLE
         # Exclude specific packages from installation
         Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ExcludePackages @("problematic-package", "optional-package")
 
@@ -2203,20 +2181,10 @@ function Apply-NipkgSnapshot {
         2. The 'nipkg update' command completed successfully (check the output)
         3. Network connectivity is available for online feeds
         
-        By default, packages are installed individually with hardcoded flags (--allow-downgrade --allow-uninstall --install-also-upgrades)
-        to give NIPKG maximum flexibility in resolving dependencies while maintaining strict installation order.
-        The --include-recommended flag is NOT used to prevent automatic installation of dependencies
-        that should be installed in the intended order.
-        
-        Use -UseBatchInstallation when encountering version conflicts or complex dependency chains that
-        require NIPKG to resolve conflicts across the entire snapshot as a single operation.
-        
-        When LockDuringInstallation is enabled, packages are locked after each successful installation,
-        upgrade, downgrade, or if they're already at the correct version, using 'nipkg lock <package-name>' 
-        to prevent later packages from modifying them through dependency resolution. This ensures strict 
-        package installation order is maintained. All locked packages are automatically unlocked at the 
-        end of the process using 'nipkg unlock <package-name>'. Note: LockDuringInstallation is 
-        incompatible with UseBatchInstallation.
+        By default, packages are installed using batch installation with hardcoded flags 
+        (--allow-downgrade --allow-uninstall --install-also-upgrades) to give NIPKG maximum 
+        flexibility in resolving dependencies. The --include-recommended flag is NOT used to 
+        prevent automatic installation of dependencies that should be installed in the intended order.
     #>
     [CmdletBinding()]
     param (
@@ -2260,12 +2228,6 @@ function Apply-NipkgSnapshot {
         
         [Parameter()]
         [bool]$AllowExtraPackages = $false,
-        
-        [Parameter()]
-        [switch]$LockDuringInstallation,
-        
-        [Parameter()]
-        [switch]$UseBatchInstallation,
         
         [Parameter()]
         [switch]$SyncNipkgVersion,
@@ -2320,9 +2282,6 @@ function Apply-NipkgSnapshot {
 
             # Track feeds added from the snapshot for potential removal later
             $snapshotFeedsAdded = @()
-            
-            # Track packages locked during installation for unlocking at the end
-            $packagesLocked = @()
 
             # Note: NIPKG version sync moved to Phase 1.5 (after feeds are added and updated)
             # This allows the sync to access packages from the newly added offline feeds
@@ -2523,18 +2482,21 @@ function Apply-NipkgSnapshot {
                     Write-Warning "Failed to get installed packages list: $($_.Exception.Message)"
                     $installedPackages = @()
                 }
-                
-                # Create lookup table for installed packages
-                $installedLookup = @{}
-                foreach ($pkg in $installedPackages) {
-                    $installedLookup[$pkg.Package] = $pkg.Version
+
+                # Batch installation using pipeline and hashtable for switches
+                $installSwitches = @{
+                    NipkgCmdPath = $NipkgCmdPath
+                    AcceptEulas = $true
+                    Yes = $true
+                    AllowDowngrade = $true
+                    AllowUninstall = $true
+                    InstallAlsoUpgrades = $true
                 }
                 
-                # Disable locking if batch installation is requested (incompatible modes)
-                if ($UseBatchInstallation -and $LockDuringInstallation) {
-                    Write-Warning "LockDuringInstallation is incompatible with UseBatchInstallation - disabling locking"
-                    $LockDuringInstallation = $false
-                }
+                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
+                
+                # Since Install-Packages throws on error, we reach here only on success
+                $results.PackagesInstalled = $snapshot.packages.Count
 
                 # Filter out excluded packages if specified
                 $originalPackageCount = $snapshot.packages.Count
@@ -2570,243 +2532,20 @@ function Apply-NipkgSnapshot {
                     }
                 }
 
-                if ($UseBatchInstallation) {
-                    # Batch installation using pipeline and hashtable for switches
-                    $installSwitches = @{
-                        NipkgCmdPath = $NipkgCmdPath
-                        AcceptEulas = $true
-                        Yes = $true
-                        AllowDowngrade = $true
-                        AllowUninstall = $true
-                        InstallAlsoUpgrades = $true
-                    }
-                    
-                    Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
-                    
-                    # Since Install-Packages throws on error, we reach here only on success
-                    $results.PackagesInstalled = $snapshot.packages.Count
-                } else {
-                    # Individual package installation approach (existing logic)
-                    Write-Information "Using individual package installation mode..." -InformationAction Continue
-                    Write-Information "Processing $($snapshot.packages.Count) packages in dependency order..." -InformationAction Continue
-                    Write-Warning "Using strict installation order to prevent dependency conflicts - packages will be installed one by one without automatic recommended packages" -WarningAction Continue
-                    
-                    foreach ($snapshotPackage in $snapshot.packages) {
-                    $packageName = $snapshotPackage.name
-                    $targetVersion = $snapshotPackage.version
-                    
-                    # Check if package is already installed at the correct version before processing
-                    # This prevents unnecessary work and avoids issues with packages that were auto-installed
-                    $currentlyInstalled = $false
-                    $currentInstalledVersion = $null
-                    
-                    try {
-                        # Re-check current installation status for this specific package
-                        $checkResult = & $NipkgCmdPath info-installed $packageName 2>$null
-                        if ($LASTEXITCODE -eq 0 -and $checkResult) {
-                            # Parse the output to get the installed version - preserve full version string
-                            $versionLine = $checkResult | Where-Object { $_ -match "Version:\s*(.+)" }
-                            if ($versionLine) {
-                                                               # Extract the full version string using regex to preserve all version components
-                                if ($versionLine -match "Version:\s*(.+)") {
-                                    $currentInstalledVersion = $matches[1]
-                                    $currentlyInstalled = $true
-                                    Write-Verbose "Current status check: $packageName is installed at version $currentInstalledVersion"
-                                }
-                            }
-                        }
-                    }
-                    catch {
-                        Write-Verbose "Failed to check current status for $packageName : $($_.Exception.Message)"
-                    }
-                    
-                    # Determine what action is needed for this package
-                    $action = "none"
-                    
-                    if ($currentlyInstalled) {
-                        if ($currentInstalledVersion -eq $targetVersion) {
-                            # Exact version match - no action needed
-                            $action = "none"
-                            Write-Verbose "Package '$packageName' is already at target version ($targetVersion)"
-                        }
-                        else {
-                            $versionComparison = Compare-PackageVersions -Version1 $targetVersion -Version2 $currentInstalledVersion
-                            
-                            if ($versionComparison -gt 0) {
-                                # Upgrade needed (target version is higher)
-                                $action = "upgrade"
-                                Write-Verbose "Package '$packageName' needs upgrade: $currentInstalledVersion -> $targetVersion"
-                            }
-                            elseif ($versionComparison -lt 0) {
-                                # Downgrade needed (target version is lower)
-                                $action = "downgrade"
-                                Write-Verbose "Package '$packageName' needs downgrade: $currentInstalledVersion -> $targetVersion"
-                            }
-                            else {
-                                # Versions are considered equal by our comparison
-                                $action = "none"
-                                Write-Verbose "Package '$packageName' is already at equivalent version ($currentInstalledVersion = $targetVersion)"
-                            }
-                        }
-                    }
-                    else {
-                        # Package not installed - needs installation
-                        $action = "install"
-                        Write-Verbose "Package '$packageName' is not installed, needs installation (version $targetVersion)"
-                    }
-                    
-                    # Perform the required action
-                    switch ($action) {
-                        "none" {
-                            $results.PackagesUnchanged++
-                            Write-Verbose "Skipping '$packageName' - already at correct version ($targetVersion)"
-                            
-                            # Lock unchanged packages if requested to prevent later packages from modifying them
-                            if ($LockDuringInstallation) {
-                                Write-Verbose "Locking unchanged package $($packageName) to prevent modifications by later packages"
-                                & $NipkgCmdPath lock $packageName
-                                if ($LASTEXITCODE -eq 0) {
-                                    Write-Verbose "Successfully locked unchanged package $($packageName)"
-                                    $packagesLocked += $packageName
-                                } else {
-                                    Write-Warning "Failed to lock unchanged package $($packageName) (exit code: $LASTEXITCODE)"
-                                }
-                            }
-                        }
-                        
-                        "install" {
-                            try {
-                                $packageSpec = "$($packageName)=$($targetVersion)"
-                                Write-Information "Installing: $($packageName) v$($targetVersion)" -InformationAction Continue
-                                
-                                # Install with strict control to maintain package installation order
-                                # Use flags to allow NIPKG flexibility in resolving dependencies while maintaining order
-                                & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    $results.PackagesInstalled++
-                                    Write-Verbose "Successfully installed $($packageName) v$($targetVersion)"
-                                    
-                                    # Lock the package if requested to prevent later packages from modifying it
-                                    if ($LockDuringInstallation) {
-                                        Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                        & $NipkgCmdPath lock $packageName
-                                        if ($LASTEXITCODE -eq 0) {
-                                            Write-Verbose "Successfully locked package $($packageName)"
-                                            $packagesLocked += $packageName
-                                        } else {
-                                            Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                        }
-                                    }
-                                } else {
-                                    $results.PackagesFailed++
-                                    Write-Warning "Failed to install $($packageName) v$($targetVersion) (exit code: $LASTEXITCODE)"
-                                }
-                            }
-                            catch {
-                                $results.PackagesFailed++
-                                Write-Warning "Exception installing $($packageName) v$($targetVersion): $($_.Exception.Message)"
-                            }
-                        }
-                        
-                        "upgrade" {
-                            try {
-                                $packageSpec = "$($packageName)=$($targetVersion)"
-                                Write-Information "Upgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
-                                
-                                # Upgrade with strict control - no automatic recommended packages
-                                & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    $results.PackagesUpgraded++
-                                    Write-Verbose "Successfully upgraded $($packageName) to v$($targetVersion)"
-                                    
-                                    # Lock the package if requested to prevent later packages from modifying it
-                                    if ($LockDuringInstallation) {
-                                        Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                        & $NipkgCmdPath lock $packageName
-                                        if ($LASTEXITCODE -eq 0) {
-                                            Write-Verbose "Successfully locked package $($packageName)"
-                                            $packagesLocked += $packageName
-                                        } else {
-                                            Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                        }
-                                    }
-                                } else {
-                                    $results.PackagesFailed++
-                                    Write-Warning "Failed to upgrade $($packageName) to v$($targetVersion) (exit code: $LASTEXITCODE)"
-                                }
-                            }
-                            catch {
-                                $results.PackagesFailed++
-                                Write-Warning "Exception upgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
-                            }
-                        }
-                        
-                        "downgrade" {
-                            try {
-                                $packageSpec = "$($packageName)=$($targetVersion)"
-                                Write-Information "Downgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
-                                
-                                # For downgrades, use all flags for maximum flexibility
-                                & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    $results.PackagesDowngraded++
-                                    Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion)"
-                                    
-                                    # Lock the package if requested to prevent later packages from modifying it
-                                    if ($LockDuringInstallation) {
-                                        Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                        & $NipkgCmdPath lock $packageName
-                                        if ($LASTEXITCODE -eq 0) {
-                                            Write-Verbose "Successfully locked package $($packageName)"
-                                            $packagesLocked += $packageName
-                                        } else {
-                                            Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                        }
-                                    }
-                                } else {
-                                    # If direct downgrade fails, try uninstall then install
-                                    Write-Verbose "Direct downgrade failed, trying uninstall then install approach"
-                                    & $NipkgCmdPath remove $($packageName) -y
-                                    
-                                    if ($LASTEXITCODE -eq 0) {
-                                        & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                                        
-                                        if ($LASTEXITCODE -eq 0) {
-                                            $results.PackagesDowngraded++
-                                            Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
-                                            
-                                            # Lock the package if requested to prevent later packages from modifying it
-                                            if ($LockDuringInstallation) {
-                                                Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                                & $NipkgCmdPath lock $packageName
-                                                if ($LASTEXITCODE -eq 0) {
-                                                    Write-Verbose "Successfully locked package $($packageName)"
-                                                    $packagesLocked += $packageName
-                                                } else {
-                                                    Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                                }
-                                            }
-                                        } else {
-                                            $results.PackagesFailed++
-                                            Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
-                                        }
-                                    } else {
-                                        $results.PackagesFailed++
-                                        Write-Warning "Failed to uninstall $($packageName) for downgrade (exit code: $LASTEXITCODE)"
-                                    }
-                                }
-                            }
-                            catch {
-                                $results.PackagesFailed++
-                                Write-Warning "Exception downgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
-                            }
-                        }
-                    }
-                } # End foreach ($snapshotPackage in $snapshot.packages)
-                } # End of individual package installation mode
+                # Batch installation using pipeline and hashtable for switches
+                $installSwitches = @{
+                    NipkgCmdPath = $NipkgCmdPath
+                    AcceptEulas = $true
+                    Yes = $true
+                    AllowDowngrade = $true
+                    AllowUninstall = $true
+                    InstallAlsoUpgrades = $true
+                }
+                
+                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
+                
+                # Since Install-Packages throws on error, we reach here only on success
+                $results.PackagesInstalled = $snapshot.packages.Count
                 
             } else {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
@@ -3024,28 +2763,6 @@ function Apply-NipkgSnapshot {
                 SystemCompliant = $null
                 ComplianceSummary = "Compliance validation not requested"
                 ComplianceIssues = $null
-            }
-
-            # Unlock packages that were locked during installation
-            if ($LockDuringInstallation -and $packagesLocked.Count -gt 0) {
-                Write-Information "Unlocking $($packagesLocked.Count) packages that were locked during installation..." -InformationAction Continue
-                
-                foreach ($packageToUnlock in $packagesLocked) {
-                    try {
-                        Write-Verbose "Unlocking package: $packageToUnlock"
-                        & $NipkgCmdPath unlock $packageToUnlock
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Verbose "Successfully unlocked package $packageToUnlock"
-                        } else {
-                            Write-Warning "Failed to unlock package $packageToUnlock (exit code: $LASTEXITCODE)"
-                        }
-                    }
-                    catch {
-                        Write-Warning "Exception unlocking package $packageToUnlock : $($_.Exception.Message)"
-                    }
-                }
-                
-                Write-Information "Package unlocking completed" -InformationAction Continue
             }
 
             # Phase 6: Validate compliance if requested
