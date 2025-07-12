@@ -2,11 +2,11 @@
 
 <#
 .SYNOPSIS
-    Demonstrates the new RemoveExistingFeeds parameter in Apply-NipkgSnapshot
+    Demonstrates the new RemoveExistingFeeds parameter in Install-Snapshot
 
 .DESCRIPTION
     This script shows how to use the new RemoveExistingFeeds switch parameter
-    which was added to the Apply-NipkgSnapshot function.
+    which was added to the Install-Snapshot function.
 
 .NOTES
     The RemoveExistingFeeds parameter will:
@@ -17,21 +17,21 @@
     Run this from the test/manual directory.
 #>
 
-Write-Host "=== Apply-NipkgSnapshot RemoveExistingFeeds Demo ===" -ForegroundColor Cyan
+Write-Host "=== Install-Snapshot RemoveExistingFeeds Demo ===" -ForegroundColor Cyan
 
 Write-Host "`nNew RemoveExistingFeeds Parameter Usage Examples:" -ForegroundColor Yellow
 
 Write-Host "`n1. Basic usage - remove existing feeds before applying snapshot:" -ForegroundColor Green
-Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Install-Snapshot -RemoveExistingFeeds'
 
 Write-Host "`n2. With WhatIf to see what would be removed/added:" -ForegroundColor Green
-Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -WhatIf'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Install-Snapshot -RemoveExistingFeeds -WhatIf'
 
 Write-Host "`n3. Remove existing feeds but only apply feeds (skip packages):" -ForegroundColor Green
-Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -SkipPackages'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Install-Snapshot -RemoveExistingFeeds -SkipPackages'
 
 Write-Host "`n4. Remove existing feeds and force package installation:" -ForegroundColor Green
-Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -Force'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Install-Snapshot -RemoveExistingFeeds -Force'
 
 Write-Host "`nOperation Flow with RemoveExistingFeeds:" -ForegroundColor Yellow
 Write-Host "Phase 0: Remove existing feeds (if RemoveExistingFeeds is specified)"
@@ -80,7 +80,7 @@ try {
         Write-Host "✓ Module imported successfully from test/manual directory!" -ForegroundColor Green
         
         # Test the new parameter exists
-        $applyFunction = Get-Command Apply-NipkgSnapshot -ErrorAction SilentlyContinue
+        $applyFunction = Get-Command Install-Snapshot -ErrorAction SilentlyContinue
         if ($applyFunction -and $applyFunction.Parameters.ContainsKey('RemoveExistingFeeds')) {
             Write-Host "✓ RemoveExistingFeeds parameter is available!" -ForegroundColor Green
         } else {

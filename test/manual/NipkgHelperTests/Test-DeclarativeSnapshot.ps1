@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests the declarative Apply-NipkgSnapshot functionality.
+    Tests the declarative Install-Snapshot functionality.
 
 .DESCRIPTION
-    Tests that Apply-NipkgSnapshot correctly checks package state before taking action
+    Tests that Install-Snapshot correctly checks package state before taking action
     and processes packages in the correct installation order.
 #>
 
@@ -12,7 +12,7 @@
 Import-Module -Name $PSScriptRoot/../../../LabViewHelpers/LabViewHelpers.psd1 -Force
 
 Write-Host "====================================================================================" -ForegroundColor Cyan
-Write-Host "Testing Declarative Apply-NipkgSnapshot Functionality" -ForegroundColor Cyan
+Write-Host "Testing Declarative Install-Snapshot Functionality" -ForegroundColor Cyan
 Write-Host "====================================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -154,10 +154,10 @@ Write-Host "====================================" -ForegroundColor Yellow
 
 if (-not $skipActualOperations) {
     try {
-        Write-Host "Running Apply-NipkgSnapshot with -WhatIf..." -ForegroundColor Cyan
+        Write-Host "Running Install-Snapshot with -WhatIf..." -ForegroundColor Cyan
         
         # Test with WhatIf to see what would be done
-        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -WhatIf
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Install-Snapshot -NipkgCmdPath $nipkgCmdPath -WhatIf
         
         Write-Host "✓ WhatIf completed successfully" -ForegroundColor Green
         
@@ -250,7 +250,7 @@ Write-Host "- Idempotent - safe to run multiple times" -ForegroundColor White
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
-Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Install-Snapshot' -ForegroundColor Gray
 Write-Host "# Will only install/upgrade/downgrade packages that need it" -ForegroundColor Gray
 Write-Host "# Will only add feeds that don't already exist" -ForegroundColor Gray
 Write-Host ""

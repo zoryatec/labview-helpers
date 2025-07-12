@@ -285,8 +285,8 @@ function Install-LabViewOffline {
                 ValidateCompliance = $true
                 SyncNipkgVersion = $false
                 ExcludePackages = $ExcludePackages
-                RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
-                RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
+                RemoveExistingFeeds = $RemoveExistingFeeds
+                RemoveSnapshotFeeds = $RemoveSnapshotFeeds
             }
             
             Import-NipkgSnapshotFromJson $InstallationSnapshotFile |

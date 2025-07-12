@@ -1,17 +1,17 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Example of using Apply-NipkgSnapshot with compliance validation.
+    Example of using Install-Snapshot with compliance validation.
 
 .DESCRIPTION
-    Demonstrates the new validation features in Apply-NipkgSnapshot.
+    Demonstrates the new validation features in Install-Snapshot.
 #>
 
 # Import the module
 Import-Module -Name $PSScriptRoot/../../../LabViewHelpers/LabViewHelpers.psd1 -Force
 
 Write-Host "====================================================================================" -ForegroundColor Cyan
-Write-Host "Apply-NipkgSnapshot with Compliance Validation Examples" -ForegroundColor Cyan
+Write-Host "Install-Snapshot with Compliance Validation Examples" -ForegroundColor Cyan
 Write-Host "====================================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -42,14 +42,14 @@ Write-Host "Example 1: Basic snapshot application with compliance validation" -F
 Write-Host "================================================================" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Command:" -ForegroundColor Cyan
-Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Apply-NipkgSnapshot -ValidateCompliance" -ForegroundColor Gray
+Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Install-Snapshot -ValidateCompliance" -ForegroundColor Gray
 Write-Host ""
 
 if (-not $testMode) {
     try {
         # TODO: Update to use pipeline pattern when compliance validation is fixed
         $snapshot = Import-NipkgSnapshotFromJson $snapshotPath
-        $result = $snapshot | Apply-NipkgSnapshot -ValidateCompliance -WhatIf
+        $result = $snapshot | Install-Snapshot -ValidateCompliance -WhatIf
         Write-Host "✓ WhatIf execution successful" -ForegroundColor Green
         Write-Host "Compliance validated: $($result.ComplianceValidated)" -ForegroundColor Green
         Write-Host "System compliant: $($result.SystemCompliant)" -ForegroundColor Green
@@ -70,7 +70,7 @@ Write-Host "Example 2: Strict validation for CI/CD (fail on non-compliance)" -Fo
 Write-Host "================================================================" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Command:" -ForegroundColor Cyan
-Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Apply-NipkgSnapshot -ValidateCompliance -FailOnNonCompliance" -ForegroundColor Gray
+Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Install-Snapshot -ValidateCompliance -FailOnNonCompliance" -ForegroundColor Gray
 Write-Host ""
 Write-Host "This would throw an exception if the system is not compliant after application." -ForegroundColor Gray
 Write-Host ""
@@ -79,7 +79,7 @@ Write-Host "Example 3: Development environment (allow extra packages)" -Foregrou
 Write-Host "========================================================" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Command:" -ForegroundColor Cyan
-Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Apply-NipkgSnapshot -ValidateCompliance -AllowExtraPackages `$true" -ForegroundColor Gray
+Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Install-Snapshot -ValidateCompliance -AllowExtraPackages `$true" -ForegroundColor Gray
 Write-Host ""
 Write-Host "This allows developers to have additional packages installed beyond the snapshot." -ForegroundColor Gray
 Write-Host ""
@@ -88,7 +88,7 @@ Write-Host "Example 4: Feeds-only validation" -ForegroundColor Yellow
 Write-Host "===============================" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Command:" -ForegroundColor Cyan
-Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Apply-NipkgSnapshot -SkipPackages -ValidateCompliance" -ForegroundColor Gray
+Write-Host "Import-NipkgSnapshotFromJson 'snapshot.json' | Install-Snapshot -SkipPackages -ValidateCompliance" -ForegroundColor Gray
 Write-Host ""
 Write-Host "This only sets up feeds and validates feed configuration compliance." -ForegroundColor Gray
 Write-Host ""

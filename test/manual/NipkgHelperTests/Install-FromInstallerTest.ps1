@@ -31,5 +31,5 @@ if ($RemoveSnapshotFeeds) {
     $applyParams.RemoveSnapshotFeeds = $false
 }
 
-Apply-NipkgSnapshot @applyParams
+Install-Snapshot @applyParams
 

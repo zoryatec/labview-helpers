@@ -25,4 +25,4 @@ $applyParams.RemoveSnapshotFeeds = $false
 $applyParams.RemoveUnlistedFeeds = $true
 
 
-Apply-NipkgSnapshot @applyParams
+Install-Snapshot @applyParams

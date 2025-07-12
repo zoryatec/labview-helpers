@@ -70,7 +70,7 @@ The LabViewHelpers PowerShell module is now fully productionized and ready for d
 
 ### NIPKG Management (NipkgHelper.psm1)
 
-- **Snapshot Operations**: `New-NipkgSnapshot`, `Export-NipkgSnapshotToJson`, `Import-NipkgSnapshotFromJson`, `Apply-NipkgSnapshot`
+- **Snapshot Operations**: `New-NipkgSnapshot`, `Export-NipkgSnapshotToJson`, `Import-NipkgSnapshotFromJson`, `Install-Snapshot`
 - **Package Management**: `Get-PackagesInfo`, `Get-*Packages` (by category)
 - **Feed Management**: `Add-FeedDirectories`, `Get-FeedsInfo`, `Remove-Feeds`
 - **Installer Analysis**: `New-NipkgSnapshotFromInstaller`, `Get-PackagesInfoFromNipkgFile`
@@ -97,7 +97,7 @@ The LabViewHelpers PowerShell module is now fully productionized and ready for d
 
 The following functions make system changes and should be tested carefully:
 
-- `Apply-NipkgSnapshot` - Adds feeds and installs packages
+- `Install-Snapshot` - Adds feeds and installs packages
 - `Add-FeedDirectories` - Modifies NIPKG feed configuration
 - `Install-*` functions - Install software packages
 

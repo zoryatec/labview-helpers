@@ -6,7 +6,7 @@
 .DESCRIPTION
     This script tests the new RemoveExistingFeeds and RemoveSnapshotFeeds parameters 
     that have been added to Install-LabView, Install-LabViewOffline, and Install-LabViewIso 
-    functions. These parameters are propagated to Apply-NipkgSnapshot calls.
+    functions. These parameters are propagated to Install-Snapshot calls.
 
 .NOTES
     This script should be run from the test/manual directory.

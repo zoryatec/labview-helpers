@@ -16,7 +16,7 @@ $nipkgFunctions = @(
     'Get-PackageInstallationOrder',
     'New-NipkgSnapshotFromInstaller',
     'New-NipkgSnapshotFromSystem',
-    'Apply-NipkgSnapshot',
+    'Install-Snapshot',
     'Export-NipkgSnapshotToJson',
     'Import-NipkgSnapshotFromJson'
 )
@@ -346,33 +346,33 @@ if (Test-Path $installerDirectory) {
 
 Write-Host ""
 
-# Test Apply-NipkgSnapshot function availability (without making system changes)
-Write-Host "Testing Apply-NipkgSnapshot function availability..." -ForegroundColor Green
+# Test Install-Snapshot function availability (without making system changes)
+Write-Host "Testing Install-Snapshot function availability..." -ForegroundColor Green
 
 if (Test-Path "$tempDirectory\snapshot.json") {
     Write-Host "Found snapshot file: $tempDirectory\snapshot.json" -ForegroundColor Cyan
     
     # Test function availability and parameter validation only
-    Write-Host "✓ Apply-NipkgSnapshot function is available for manual testing" -ForegroundColor Green
+    Write-Host "✓ Install-Snapshot function is available for manual testing" -ForegroundColor Green
     Write-Host ""
     Write-Host "USAGE EXAMPLES:" -ForegroundColor Yellow
     Write-Host "  # Apply complete snapshot (adds feeds and installs packages):" -ForegroundColor White
-    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Install-Snapshot" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Only add feeds (skip package installation):" -ForegroundColor White  
-    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -SkipPackages" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Install-Snapshot -SkipPackages" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Only install packages (skip adding feeds):" -ForegroundColor White
-    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -SkipFeeds" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Install-Snapshot -SkipFeeds" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Use with specific NIPKG path and force installation:" -ForegroundColor White
-    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -NipkgCmdPath '$nipkgPath' -Force" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Install-Snapshot -NipkgCmdPath '$nipkgPath' -Force" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Preview what would be done (safe to run):" -ForegroundColor White
-    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -WhatIf" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Install-Snapshot -WhatIf" -ForegroundColor Gray
     Write-Host ""
     
-    Write-Host "WARNING: Apply-NipkgSnapshot makes system changes. Test manually with appropriate permissions." -ForegroundColor Red
+    Write-Host "WARNING: Install-Snapshot makes system changes. Test manually with appropriate permissions." -ForegroundColor Red
     
 } else {
     Write-Host "✗ No snapshot file found at $tempDirectory\snapshot.json" -ForegroundColor Red

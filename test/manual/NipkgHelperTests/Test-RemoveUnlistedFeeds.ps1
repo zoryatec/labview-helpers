@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests the RemoveUnlistedFeeds functionality of Apply-NipkgSnapshot.
+    Tests the RemoveUnlistedFeeds functionality of Install-Snapshot.
 
 .DESCRIPTION
-    Tests that Apply-NipkgSnapshot correctly identifies and removes feeds
+    Tests that Install-Snapshot correctly identifies and removes feeds
     that are configured but not listed in the snapshot when -RemoveUnlistedFeeds is used.
 #>
 
@@ -131,12 +131,12 @@ Write-Host "===============================================" -ForegroundColor Ye
 
 if (-not $skipActualOperations) {
     try {
-        Write-Host "Running Apply-NipkgSnapshot with -RemoveUnlistedFeeds -WhatIf..." -ForegroundColor Cyan
+        Write-Host "Running Install-Snapshot with -RemoveUnlistedFeeds -WhatIf..." -ForegroundColor Cyan
         Write-Host "This will show what feeds would be removed but won't actually remove them." -ForegroundColor Yellow
         Write-Host ""
         
         # Test with WhatIf to see what would be removed
-        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipPackages -WhatIf -Verbose
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Install-Snapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipPackages -WhatIf -Verbose
         
         Write-Host ""
         Write-Host "✓ WhatIf with RemoveUnlistedFeeds completed successfully" -ForegroundColor Green
@@ -166,7 +166,7 @@ try {
     Write-Host "Testing RemoveUnlistedFeeds with SkipFeeds (should skip removal)..." -ForegroundColor Cyan
     
     if (-not $skipActualOperations) {
-        $testResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipFeeds -SkipPackages -WhatIf
+        $testResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Install-Snapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipFeeds -SkipPackages -WhatIf
         
         if ($testResult.FeedsUnlistedRemoved -eq 0) {
             Write-Host "  ✓ Correctly skipped unlisted feed removal when SkipFeeds=True" -ForegroundColor Green
@@ -286,9 +286,9 @@ Write-Host "- Can be combined with RemoveUnlistedPackages for exact snapshot mat
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
-Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedFeeds' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Install-Snapshot -RemoveUnlistedFeeds' -ForegroundColor Gray
 Write-Host "# Will remove feeds not listed in snapshot" -ForegroundColor Gray
 Write-Host ""
-Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedFeeds -RemoveUnlistedPackages' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Install-Snapshot -RemoveUnlistedFeeds -RemoveUnlistedPackages' -ForegroundColor Gray
 Write-Host "# Will ensure exact match to snapshot (feeds and packages)" -ForegroundColor Gray
 Write-Host ""

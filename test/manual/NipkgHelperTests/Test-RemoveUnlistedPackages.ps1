@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests the RemoveUnlistedPackages functionality of Apply-NipkgSnapshot.
+    Tests the RemoveUnlistedPackages functionality of Install-Snapshot.
 
 .DESCRIPTION
-    Tests that Apply-NipkgSnapshot correctly identifies and removes packages
+    Tests that Install-Snapshot correctly identifies and removes packages
     that are installed but not listed in the snapshot when -RemoveUnlistedPackages is used.
 #>
 
@@ -117,12 +117,12 @@ Write-Host "===================================================" -ForegroundColo
 
 if (-not $skipActualOperations) {
     try {
-        Write-Host "Running Apply-NipkgSnapshot with -RemoveUnlistedPackages -WhatIf..." -ForegroundColor Cyan
+        Write-Host "Running Install-Snapshot with -RemoveUnlistedPackages -WhatIf..." -ForegroundColor Cyan
         Write-Host "This will show what packages would be removed but won't actually remove them." -ForegroundColor Yellow
         Write-Host ""
         
         # Test with WhatIf to see what would be removed
-        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedPackages -SkipFeeds -WhatIf
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Install-Snapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedPackages -SkipFeeds -WhatIf
         
         Write-Host ""
         Write-Host "✓ WhatIf with RemoveUnlistedPackages completed successfully" -ForegroundColor Green
@@ -150,7 +150,7 @@ try {
     Write-Host "Testing RemoveUnlistedPackages with SkipPackages (should skip removal)..." -ForegroundColor Cyan
     
     if (-not $skipActualOperations) {
-        $result = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedPackages -SkipPackages -WhatIf
+        $result = Import-NipkgSnapshotFromJson $tempSnapshotPath | Install-Snapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedPackages -SkipPackages -WhatIf
         Write-Host "✓ Correctly handled RemoveUnlistedPackages with SkipPackages" -ForegroundColor Green
     } else {
         Write-Host "✓ Parameter combination test skipped (NIPKG not available)" -ForegroundColor Yellow
@@ -186,13 +186,13 @@ Write-Host "==================================" -ForegroundColor Yellow
 Write-Host "Common usage patterns:" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "1. Complete system reset:" -ForegroundColor White
-Write-Host '   Import-NipkgSnapshotFromJson "prod.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -RemoveUnlistedPackages' -ForegroundColor Gray
+Write-Host '   Import-NipkgSnapshotFromJson "prod.json" | Install-Snapshot -RemoveExistingFeeds -RemoveUnlistedPackages' -ForegroundColor Gray
 Write-Host ""
 Write-Host "2. Exact package matching:" -ForegroundColor White
-Write-Host '   Import-NipkgSnapshotFromJson "baseline.json" | Apply-NipkgSnapshot -RemoveUnlistedPackages' -ForegroundColor Gray
+Write-Host '   Import-NipkgSnapshotFromJson "baseline.json" | Install-Snapshot -RemoveUnlistedPackages' -ForegroundColor Gray
 Write-Host ""
 Write-Host "3. Safe preview:" -ForegroundColor White
-Write-Host '   Import-NipkgSnapshotFromJson "new-config.json" | Apply-NipkgSnapshot -RemoveUnlistedPackages -WhatIf' -ForegroundColor Gray
+Write-Host '   Import-NipkgSnapshotFromJson "new-config.json" | Install-Snapshot -RemoveUnlistedPackages -WhatIf' -ForegroundColor Gray
 Write-Host ""
 
 # Cleanup

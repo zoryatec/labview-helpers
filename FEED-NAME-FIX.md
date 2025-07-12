@@ -20,7 +20,7 @@ This caused the compliance check to report 28 issues with missing and extra feed
 
 The issue was in two functions in `NipkgHelper.psm1`:
 
-1. **Apply-NipkgSnapshot** (line ~1970): Called `nipkg feed-add "$uri"` without specifying the `--name` parameter
+1. **Install-Snapshot** (line ~1970): Called `nipkg feed-add "$uri"` without specifying the `--name` parameter
 2. **Add-FeedDirectories** (line ~88): Called `nipkg feed-add "$dir"` without specifying the `--name` parameter
 
 When NIPKG adds a feed without an explicit name, it auto-generates one from the URI, which resulted in the malformed names.
@@ -52,7 +52,7 @@ Changed the feed-add commands to include the `--name` parameter:
 1. **Clean up existing malformed feeds** (optional but recommended):
    ```powershell
    # Remove all existing feeds and start fresh
-   Import-NipkgSnapshotFromJson "your-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds
+   Import-NipkgSnapshotFromJson "your-snapshot.json" | Install-Snapshot -RemoveExistingFeeds
    ```
 
 2. **Or remove specific malformed feeds**:
@@ -64,7 +64,7 @@ Changed the feed-add commands to include the `--name` parameter:
 
 3. **Run apply-nipksnapshot again**:
    ```powershell
-   Import-NipkgSnapshotFromJson "your-snapshot.json" | Apply-NipkgSnapshot
+   Import-NipkgSnapshotFromJson "your-snapshot.json" | Install-Snapshot
    ```
 
 4. **Verify the fix with compliance check**:

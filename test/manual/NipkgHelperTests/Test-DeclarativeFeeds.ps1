@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests the declarative feed functionality of Apply-NipkgSnapshot.
+    Tests the declarative feed functionality of Install-Snapshot.
 
 .DESCRIPTION
-    Tests that Apply-NipkgSnapshot correctly checks feed state before taking action:
+    Tests that Install-Snapshot correctly checks feed state before taking action:
     - Skip feeds that already exist with the same name and URI
     - Add feeds that don't exist
     - Warn about feeds with same name but different URI
@@ -121,12 +121,12 @@ Write-Host "===============================================" -ForegroundColor Ye
 
 if (-not $skipActualOperations) {
     try {
-        Write-Host "Running Apply-NipkgSnapshot with -WhatIf to analyze feed actions..." -ForegroundColor Cyan
+        Write-Host "Running Install-Snapshot with -WhatIf to analyze feed actions..." -ForegroundColor Cyan
         Write-Host "This will show what feed operations would be performed." -ForegroundColor Yellow
         Write-Host ""
         
         # Test with WhatIf to see what would be done with feeds
-        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -SkipPackages -WhatIf -Verbose
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Install-Snapshot -NipkgCmdPath $nipkgCmdPath -SkipPackages -WhatIf -Verbose
         
         Write-Host ""
         Write-Host "✓ WhatIf completed successfully" -ForegroundColor Green
@@ -233,6 +233,6 @@ Write-Host "- Idempotent - safe to run multiple times" -ForegroundColor White
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
-Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Install-Snapshot' -ForegroundColor Gray
 Write-Host "# Will only add feeds that don't already exist" -ForegroundColor Gray
 Write-Host ""

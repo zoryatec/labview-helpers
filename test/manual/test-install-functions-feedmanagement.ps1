@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     This script tests that the RemoveExistingFeeds and RemoveSnapshotFeeds parameters
-    are properly propagated from Install-LabViewIso → Install-LabViewOffline → Apply-NipkgSnapshot.
+    are properly propagated from Install-LabViewIso → Install-LabViewOffline → Install-Snapshot.
 
 .NOTES
     This script should be run from the test/manual directory.
@@ -117,13 +117,13 @@ try {
 Write-Host "`n=== Phase 4: Testing Parameter Propagation Chain ===" -ForegroundColor Cyan
 
 Write-Host "Verifying the parameter propagation chain:" -ForegroundColor Yellow
-Write-Host "  Install-LabViewIso → Install-LabViewOffline → Apply-NipkgSnapshot" -ForegroundColor White
+Write-Host "  Install-LabViewIso → Install-LabViewOffline → Install-Snapshot" -ForegroundColor White
 
 try {
     # Check that the functions are properly chained
     $installIsoCmd = Get-Command Install-LabViewIso
     $installOfflineCmd = Get-Command Install-LabViewOffline
-    $applySnapshotCmd = Get-Command Apply-NipkgSnapshot
+    $applySnapshotCmd = Get-Command Install-Snapshot
     
     Write-Host "✓ All functions in the chain are available" -ForegroundColor Green
     
@@ -146,9 +146,9 @@ try {
         $chainComplete = $false
     }
     
-    # Check Apply-NipkgSnapshot has the parameters
+    # Check Install-Snapshot has the parameters
     if (-not $snapshotParams.ContainsKey("RemoveExistingFeeds") -or -not $snapshotParams.ContainsKey("RemoveSnapshotFeeds")) {
-        Write-Host "✗ Apply-NipkgSnapshot missing required parameters" -ForegroundColor Red
+        Write-Host "✗ Install-Snapshot missing required parameters" -ForegroundColor Red
         $chainComplete = $false
     }
     
@@ -156,7 +156,7 @@ try {
         Write-Host "✓ Parameter propagation chain is complete" -ForegroundColor Green
         Write-Host "  - Install-LabViewIso: ✓ RemoveExistingFeeds, ✓ RemoveSnapshotFeeds"
         Write-Host "  - Install-LabViewOffline: ✓ RemoveExistingFeeds, ✓ RemoveSnapshotFeeds"
-        Write-Host "  - Apply-NipkgSnapshot: ✓ RemoveExistingFeeds, ✓ RemoveSnapshotFeeds"
+        Write-Host "  - Install-Snapshot: ✓ RemoveExistingFeeds, ✓ RemoveSnapshotFeeds"
     }
     
 } catch {
@@ -188,7 +188,7 @@ Write-Host "✓ Consistent system state after installation"
 Write-Host "`n=== Test Summary ===" -ForegroundColor Green
 Write-Host "✓ Install-LabViewOffline accepts RemoveExistingFeeds and RemoveSnapshotFeeds parameters"
 Write-Host "✓ Install-LabViewIso accepts RemoveExistingFeeds and RemoveSnapshotFeeds parameters"
-Write-Host "✓ Parameter propagation chain is complete: Install-LabViewIso → Install-LabViewOffline → Apply-NipkgSnapshot"
+Write-Host "✓ Parameter propagation chain is complete: Install-LabViewIso → Install-LabViewOffline → Install-Snapshot"
 Write-Host "✓ Functions are properly documented with help information"
 Write-Host "✓ Ready for production use in CI/CD and automated environments"
 

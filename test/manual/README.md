@@ -9,21 +9,21 @@ Comprehensive test suite that validates all module functionality including:
 - Module import and function exports
 - New functions (New-NipkgSnapshotFromSystem)
 - Renamed functions (Get-PackagesInfoFromNipkgCmd)
-- New parameters (RemoveExistingFeeds in Apply-NipkgSnapshot)
+- New parameters (RemoveExistingFeeds in Install-Snapshot)
 - Help documentation
 
 ### `test-removeexistingfeeds.ps1`
 
-Specific test for the RemoveExistingFeeds parameter in Apply-NipkgSnapshot function.
+Specific test for the RemoveExistingFeeds parameter in Install-Snapshot function.
 
 ### `test-removesnapshotfeeds.ps1`
 
-Specific test for the new RemoveSnapshotFeeds parameter in Apply-NipkgSnapshot function.
+Specific test for the new RemoveSnapshotFeeds parameter in Install-Snapshot function.
 
 ### `test-install-functions-feedmanagement.ps1`
 
 Tests the feed management parameters (RemoveExistingFeeds and RemoveSnapshotFeeds)
-propagation through the installation function chain: Install-LabViewIso → Install-LabViewOffline → Apply-NipkgSnapshot.
+propagation through the installation function chain: Install-LabViewIso → Install-LabViewOffline → Install-Snapshot.
 
 ## Demo Scripts
 

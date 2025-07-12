@@ -86,5 +86,5 @@ Write-Host "✓ Handles cases with and without ni-package-manager packages" -For
 Write-Host "✓ JSON export/import preserves the new structure" -ForegroundColor Green
 Write-Host "✓ NIPKG packages are duplicated in both sections as expected" -ForegroundColor Green
 Write-Host ""
-Write-Host "When Apply-NipkgSnapshot is used, the packages-nipkg section ensures" -ForegroundColor Yellow
+Write-Host "When Install-Snapshot is used, the packages-nipkg section ensures" -ForegroundColor Yellow
 Write-Host "that all NIPKG dependencies are available for installation." -ForegroundColor Yellow

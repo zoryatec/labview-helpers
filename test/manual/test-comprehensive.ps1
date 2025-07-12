@@ -8,7 +8,7 @@
     Tests all the functions in the NipkgHelper module, including the newly added and renamed functions:
     - New-NipkgSnapshotFromSystem
     - Get-PackagesInfoFromNipkgCmd (renamed from Get-PackagesInfoFromFile)
-    - Apply-NipkgSnapshot with RemoveExistingFeeds parameter
+    - Install-Snapshot with RemoveExistingFeeds parameter
 
 .NOTES
     Run this from the test/manual directory.
@@ -70,7 +70,7 @@ try {
         'New-NipkgSnapshotFromSystem',
         'Export-NipkgSnapshotToJson',
         'Import-NipkgSnapshotFromJson',
-        'Apply-NipkgSnapshot'
+        'Install-Snapshot'
     )
 
     $missingFunctions = @()
@@ -129,16 +129,16 @@ try {
     # Test 5: New Parameters
     Write-Host "`n=== Test 5: New Parameters ===" -ForegroundColor Yellow
     
-    # Test RemoveExistingFeeds parameter in Apply-NipkgSnapshot
-    $applyFunction = Get-Command Apply-NipkgSnapshot
+    # Test RemoveExistingFeeds parameter in Install-Snapshot
+    $applyFunction = Get-Command Install-Snapshot
     if ($applyFunction.Parameters.ContainsKey('RemoveExistingFeeds')) {
         $param = $applyFunction.Parameters['RemoveExistingFeeds']
-        Write-Host "✓ RemoveExistingFeeds parameter exists in Apply-NipkgSnapshot" -ForegroundColor Green
+        Write-Host "✓ RemoveExistingFeeds parameter exists in Install-Snapshot" -ForegroundColor Green
         Write-Host "  Type: $($param.ParameterType)" -ForegroundColor Gray
         Write-Host "  Switch: $($param.ParameterType -eq [switch])" -ForegroundColor Gray
         $testResults.NewParameters = $true
     } else {
-        Write-Host "✗ RemoveExistingFeeds parameter missing from Apply-NipkgSnapshot" -ForegroundColor Red
+        Write-Host "✗ RemoveExistingFeeds parameter missing from Install-Snapshot" -ForegroundColor Red
     }
 
     # Test 6: Help Documentation
@@ -161,12 +161,12 @@ try {
     }
     
     # Test help for new parameter
-    $help = Get-Help Apply-NipkgSnapshot -Parameter RemoveExistingFeeds -ErrorAction SilentlyContinue
+    $help = Get-Help Install-Snapshot -Parameter RemoveExistingFeeds -ErrorAction SilentlyContinue
     if ($help) {
-        Write-Host "✓ RemoveExistingFeeds parameter documented in Apply-NipkgSnapshot help" -ForegroundColor Green
+        Write-Host "✓ RemoveExistingFeeds parameter documented in Install-Snapshot help" -ForegroundColor Green
         $testResults.HelpDocumentation = $true
     } else {
-        Write-Host "✗ RemoveExistingFeeds parameter missing from Apply-NipkgSnapshot help" -ForegroundColor Red
+        Write-Host "✗ RemoveExistingFeeds parameter missing from Install-Snapshot help" -ForegroundColor Red
     }
 
     # Test Summary

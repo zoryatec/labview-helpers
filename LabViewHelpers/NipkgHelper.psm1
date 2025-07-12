@@ -2515,7 +2515,7 @@ function Test-NipkgSnapshotCompliance {
 
     .DESCRIPTION
         Compares the current NIPKG configuration (feeds and/or packages) against a snapshot
-        to verify compliance. This function is useful for validating that Apply-NipkgSnapshot
+        to verify compliance. This function is useful for validating that Install-Snapshot
         achieved the desired state or for ongoing compliance monitoring.
 
     .PARAMETER SnapshotPath
@@ -4186,7 +4186,7 @@ Export-ModuleMember -Function `
     ,   New-NipkgSnapshotFromSystem `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
-    ,   Apply-NipkgSnapshot `
+    ,   Install-Snapshot `
     ,   Compare-PackageVersions `
     ,   Sync-NipkgVersionWithSnapshot `
     ,   Test-NipkgSnapshotCompliance `
