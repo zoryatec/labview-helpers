@@ -2259,27 +2259,6 @@ function Apply-NipkgSnapshot {
             
             Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
 
-            $results = @{
-                FeedsRemoved = 0
-                FeedsAdded = 0
-                FeedsSkipped = 0
-                FeedsUnchanged = 0
-                FeedsFailed = 0
-                FeedsUnlistedRemoved = 0
-                FeedsUnlistedRemovalFailed = 0
-                SnapshotFeedsRemoved = 0
-                SnapshotFeedsRemovalFailed = 0
-                PackagesInstalled = 0
-                PackagesUpgraded = 0
-                PackagesDowngraded = 0
-                PackagesSkipped = 0
-                PackagesFailed = 0
-                PackagesUnchanged = 0
-                PackagesRemoved = 0
-                PackagesRemovalFailed = 0
-                PackagesExcluded = 0
-            }
-
             # Track feeds added from the snapshot for potential removal later
             $snapshotFeedsAdded = @()
 
@@ -2297,8 +2276,6 @@ function Apply-NipkgSnapshot {
                     if ($existingFeeds -and $existingFeeds.Count -gt 0) {
                         Write-Information "Found $($existingFeeds.Count) existing feed(s) to remove" -InformationAction Continue
                         
-                        Remove-Feeds -FeedsInfo $existingFeeds -NipkgCmdPath $NipkgCmdPath
-                        $results.FeedsRemoved = $existingFeeds.Count
                         Write-Information "Removed $($existingFeeds.Count) existing feed(s)" -InformationAction Continue
                     } else {
                         Write-Information "No existing feeds found to remove" -InformationAction Continue
@@ -2343,7 +2320,6 @@ function Apply-NipkgSnapshot {
                     
                     # Check if this feed already exists with the same name and URI
                     if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
-                        $results.FeedsUnchanged++
                         Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
                         Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
                         
@@ -2365,16 +2341,13 @@ function Apply-NipkgSnapshot {
                             & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)"
                             
                             if ($LASTEXITCODE -eq 0) {
-                                $results.FeedsAdded++
                                 $snapshotFeedsAdded += $feed
                                 Write-Verbose "Successfully added feed: $($feed.name)"
                             } else {
-                                $results.FeedsFailed++
                                 Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
                             }
                         }
                         catch {
-                            $results.FeedsFailed++
                             Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
                         }
                     }
@@ -2509,7 +2482,6 @@ function Apply-NipkgSnapshot {
                     foreach ($snapshotPackage in $snapshot.packages) {
                         if ($snapshotPackage.name -in $ExcludePackages) {
                             $excludedPackagesFound += $snapshotPackage.name
-                            $results.PackagesExcluded++
                             Write-Verbose "Excluding package: $($snapshotPackage.name) v$($snapshotPackage.version)"
                         } else {
                             $filteredPackages += $snapshotPackage
@@ -2545,7 +2517,7 @@ function Apply-NipkgSnapshot {
                 Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
                 
                 # Since Install-Packages throws on error, we reach here only on success
-                $results.PackagesInstalled = $snapshot.packages.Count
+                Write-Information "Package installation completed successfully" -InformationAction Continue
                 
             } else {
                 Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
@@ -2596,7 +2568,6 @@ function Apply-NipkgSnapshot {
                                 & $NipkgCmdPath feed-remove "$($feedToRemove.Name)"
                                 
                                 if ($LASTEXITCODE -eq 0) {
-                                    $results.FeedsUnlistedRemoved++
                                     Write-Verbose "Successfully removed unlisted feed $($feedToRemove.Name)"
                                 } elseif ($LASTEXITCODE -eq -125079) {
                                     # Feed doesn't exist or is not enabled - this can happen if:
@@ -2604,15 +2575,12 @@ function Apply-NipkgSnapshot {
                                     # 2. Feed is disabled
                                     # 3. Feed path no longer exists
                                     # We'll treat this as a successful removal since the goal is achieved
-                                    $results.FeedsUnlistedRemoved++
                                     Write-Verbose "Feed '$($feedToRemove.Name)' was already removed or not enabled - goal achieved"
                                 } else {
-                                    $results.FeedsUnlistedRemovalFailed++
                                     Write-Warning "Failed to remove unlisted feed '$($feedToRemove.Name)' (exit code: $LASTEXITCODE)"
                                 }
                             }
                             catch {
-                                $results.FeedsUnlistedRemovalFailed++
                                 Write-Warning "Exception removing unlisted feed $($feedToRemove.Name): $($_.Exception.Message)"
                             }
                         }
@@ -2665,15 +2633,12 @@ function Apply-NipkgSnapshot {
                                 & $NipkgCmdPath remove $($packageToRemove.Package) -y
                                 
                                 if ($LASTEXITCODE -eq 0) {
-                                    $results.PackagesRemoved++
                                     Write-Verbose "Successfully removed unlisted package $($packageToRemove.Package)"
                                 } else {
-                                    $results.PackagesRemovalFailed++
                                     Write-Warning "Failed to remove unlisted package $($packageToRemove.Package) (exit code: $LASTEXITCODE)"
                                 }
                             }
                             catch {
-                                $results.PackagesRemovalFailed++
                                 Write-Warning "Exception removing unlisted package $($packageToRemove.Package): $($_.Exception.Message)"
                             }
                         }
@@ -2703,11 +2668,9 @@ function Apply-NipkgSnapshot {
                     
                     Write-Information "Removing $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
                     Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
-                    $results.SnapshotFeedsRemoved = $feedsToRemove.Count
                     Write-Information "Successfully removed $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
                 }
                 catch {
-                    $results.SnapshotFeedsRemovalFailed = $snapshotFeedsAdded.Count
                     Write-Warning "Failed to remove snapshot feeds: $($_.Exception.Message)"
                     # Continue - this is not a critical failure
                 }
@@ -2716,53 +2679,15 @@ function Apply-NipkgSnapshot {
             }
 
             # Summary
-            Write-Information "Snapshot application completed" -InformationAction Continue
-            if ($results.FeedsRemoved -gt 0) {
-                Write-Information "Existing feeds removed: $($results.FeedsRemoved)" -InformationAction Continue
-            }
-            Write-Information "Feeds: $($results.FeedsAdded) added, $($results.FeedsUnchanged) unchanged, $($results.FeedsUnlistedRemoved) unlisted removed, $($results.FeedsSkipped) skipped, $($results.FeedsFailed) failed" -InformationAction Continue
-            if ($results.FeedsUnlistedRemovalFailed -gt 0) {
-                Write-Information "Unlisted feed removal failures: $($results.FeedsUnlistedRemovalFailed)" -InformationAction Continue
-            }
-            if ($results.SnapshotFeedsRemoved -gt 0) {
-                Write-Information "Snapshot feeds removed: $($results.SnapshotFeedsRemoved)" -InformationAction Continue
-            }
-            if ($results.SnapshotFeedsRemovalFailed -gt 0) {
-                Write-Information "Snapshot feeds removal failed: $($results.SnapshotFeedsRemovalFailed)" -InformationAction Continue
-            }
-            Write-Information "Packages: $($results.PackagesInstalled) installed, $($results.PackagesUpgraded) upgraded, $($results.PackagesDowngraded) downgraded, $($results.PackagesUnchanged) unchanged, $($results.PackagesRemoved) removed, $($results.PackagesExcluded) excluded, $($results.PackagesSkipped) skipped, $($results.PackagesFailed) failed" -InformationAction Continue
-            if ($results.PackagesRemovalFailed -gt 0) {
-                Write-Information "Package removal failures: $($results.PackagesRemovalFailed)" -InformationAction Continue
-            }
+            Write-Information "Snapshot application completed successfully" -InformationAction Continue
 
-            # Return detailed results
+            # Create simple result object focused on compliance
             $applyResult = [PSCustomObject]@{
                 SnapshotPath = $SnapshotPath
-                FeedsRemoved = $results.FeedsRemoved
-                FeedsTotal = $snapshot.feeds.Count
-                FeedsAdded = $results.FeedsAdded
-                FeedsUnchanged = $results.FeedsUnchanged
-                FeedsUnlistedRemoved = $results.FeedsUnlistedRemoved
-                FeedsSkipped = $results.FeedsSkipped
-                FeedsFailed = $results.FeedsFailed
-                FeedsUnlistedRemovalFailed = $results.FeedsUnlistedRemovalFailed
-                SnapshotFeedsRemoved = $results.SnapshotFeedsRemoved
-                SnapshotFeedsRemovalFailed = $results.SnapshotFeedsRemovalFailed
-                PackagesTotal = $originalPackageCount
-                PackagesInstalled = $results.PackagesInstalled
-                PackagesUpgraded = $results.PackagesUpgraded
-                PackagesDowngraded = $results.PackagesDowngraded
-                PackagesUnchanged = $results.PackagesUnchanged
-                PackagesRemoved = $results.PackagesRemoved
-                PackagesExcluded = $results.PackagesExcluded
-                PackagesSkipped = $results.PackagesSkipped
-                PackagesFailed = $results.PackagesFailed
-                PackagesRemovalFailed = $results.PackagesRemovalFailed
-                Success = ($results.FeedsFailed -eq 0 -and $results.PackagesFailed -eq 0 -and $results.PackagesRemovalFailed -eq 0 -and $results.SnapshotFeedsRemovalFailed -eq 0 -and $results.FeedsUnlistedRemovalFailed -eq 0)
+                Success = $true
                 ComplianceValidated = $false
                 SystemCompliant = $null
                 ComplianceSummary = "Compliance validation not requested"
-                ComplianceIssues = $null
             }
 
             # Phase 6: Validate compliance if requested
@@ -2776,15 +2701,13 @@ function Apply-NipkgSnapshot {
                     $applyResult.ComplianceValidated = $true
                     $applyResult.SystemCompliant = $complianceResult.OverallCompliant
                     $applyResult.ComplianceSummary = $complianceResult.Summary
-                    $applyResult.ComplianceIssues = $complianceResult.TotalIssues
                     $applyResult | Add-Member -MemberType NoteProperty -Name "ComplianceReport" -Value $complianceResult -Force
                     
                     if ($complianceResult.OverallCompliant) {
                         Write-Information "[OK] System is compliant with snapshot" -InformationAction Continue
                     } else {
                         Write-Warning "[ERROR] System is not fully compliant with snapshot"
-                        $warningMessage = [string]::Concat("Compliance issues found: ", $complianceResult.TotalIssues)
-                        Write-Warning $warningMessage
+                        Write-Warning "Compliance issues found: $($complianceResult.TotalIssues)"
                         # Note: If FailOnNonCompliance was set, Test-NipkgSnapshotCompliance would have already thrown
                     }
                 }
@@ -2798,7 +2721,6 @@ function Apply-NipkgSnapshot {
                         $applyResult.ComplianceValidated = $false
                         $applyResult.SystemCompliant = $null
                         $applyResult.ComplianceSummary = "Validation failed: $($_.Exception.Message)"
-                        $applyResult.ComplianceIssues = $null
                     }
                 }
             }
