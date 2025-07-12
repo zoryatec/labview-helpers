@@ -183,7 +183,6 @@ function Install-Packages {
     )
 
     begin {
-        # Check if NIPKG command is available
         try {
             $null = Get-Command $NipkgCmdPath -ErrorAction Stop
         }
@@ -193,13 +192,11 @@ function Install-Packages {
     }
     
     process {
-        # Validate package definitions array
         if (-not $PackageDefinitions -or $PackageDefinitions.Count -eq 0) {
             Write-Warning "No package definitions provided, skipping installation"
             return
         }
         
-        # Convert package definitions to specifications
         $packageSpecs = ConvertTo-PackageSpecifications -PackageDefinitions $PackageDefinitions
         
         if ($packageSpecs.Count -eq 0) {
@@ -210,10 +207,8 @@ function Install-Packages {
         Write-Information "Installing $($packageSpecs.Count) packages in batch mode..." -InformationAction Continue
         Write-Information "Package specifications: $($packageSpecs -join ', ')" -InformationAction Continue
         
-        # Build NIPKG command arguments for batch installation
         $arguments = @("install") + $packageSpecs
         
-        # Add optional flags based on parameters
         if ($AcceptEulas) { $arguments += "--accept-eulas" }
         if ($Yes) { $arguments += "-y" }
         if ($Simulate) { $arguments += "--simulate" }
@@ -224,20 +219,23 @@ function Install-Packages {
         if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
         if ($IncludeRecommended) { $arguments += "--include-recommended" }
         
-        # Execute NIPKG batch install command and output immediately to console
         & $NipkgCmdPath @arguments 2>&1
-        $exitCode = $LASTEXITCODE
-        
-        # Handle errors at the end and throw
-        if ($exitCode -ne 0) {
-            throw "Batch installation failed with exit code: $exitCode"
+
+        $exitCode = $LASTEXITCODE 
+        switch ($exitCode) {
+            0 {
+                Write-Information "Successfully installed $($packageSpecs.Count) packages"
+            }
+            -125071 {
+                Write-Warning "Installation completed successfully but requires system restart (exit code: $exitCode)"
+            }
+            default {
+                throw "Batch installation failed with exit code: $exitCode"
+            }
         }
-        
-        Write-Information "Successfully installed $($packageSpecs.Count) packages in batch mode" -InformationAction Continue
     }
     
     end {
-        # No result tracking needed - just success or error thrown
     }
 }
 
@@ -2249,8 +2247,9 @@ function Apply-NipkgSnapshot {
 
             $snapshotFeedsAdded = @()
             if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
-                $snapshotFeedsAdded = $snapshot.feeds |
-                                        Add-Feeds -FeedDefinitions  -NipkgCmdPath $NipkgCmdPath
+                $snapshotFeedsAdded = $snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
+            } else { 
+                Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
             }
 
             if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
@@ -2269,7 +2268,17 @@ function Apply-NipkgSnapshot {
             }
 
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
-                $snapshotFeedsAdded | 
+                Write-Information "Removing $($snapshotFeedsAdded.Count) snapshot feed(s)" -InformationAction Continue
+                
+                # Convert snapshot feeds to the format expected by Remove-Feeds
+                $feedsToRemove = $snapshotFeedsAdded | ForEach-Object {
+                    [PSCustomObject]@{
+                        name = $_.name
+                        uri = $_.uri
+                        enabled = $true
+                    }
+                }
+                
                 Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
             } 
 
@@ -4070,9 +4079,8 @@ function Add-Feeds {
     
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyCollection()]
-        [object[]]$FeedDefinitions,
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [object]$FeedDefinition,
         
         [Parameter()]
         [string]$NipkgCmdPath = 'nipkg'
@@ -4080,93 +4088,90 @@ function Add-Feeds {
 
     begin {
         Write-Verbose "Starting Add-Feeds operation"
+        $feedsAdded = @()
+        $currentFeedsLookup = $null
     }
     
     process {
-        $feedsAdded = @()
-
-        if ($FeedDefinitions.Count -eq 0) {
-            Write-Information "No feeds to add" -InformationAction Continue
-            return $feedsAdded
-        }
-
-        # Get currently configured feeds
-        Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
-        try {
-            $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
-            Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
-        }
-        catch {
-            Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
-            $currentFeeds = @()
-        }
-        
-        # Create lookup table for current feeds (by name and path)
-        $currentFeedsLookup = @{}
-        foreach ($currentFeed in $currentFeeds) {
-            # Create a key combining name and normalized path for comparison
-            $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
-            $lookupKey = "$($currentFeed.Name)|$normalizedPath"
-            $currentFeedsLookup[$lookupKey] = $currentFeed
-        }
-        
-        Write-Information "Processing $($FeedDefinitions.Count) feeds..." -InformationAction Continue
-        
-        foreach ($feed in $FeedDefinitions) {
-            # Normalize the feed URI for comparison
-            $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
-            $feedLookupKey = "$($feed.name)|$normalizedUri"
+        # Get currently configured feeds on first call only
+        if ($null -eq $currentFeedsLookup) {
+            Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
+            try {
+                $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+                Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
+            }
+            catch {
+                Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
+                $currentFeeds = @()
+            }
             
-            # Check if this feed already exists with the same name and URI
-            if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
-                Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
-                Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
-                
-                # Still track it as an added feed in case we need to remove it later
-                $feedsAdded += $feed
-            }
-            else {
-                # Check if a feed with the same name but different URI exists
-                $existingFeedWithSameName = $currentFeeds | Where-Object { $_.Name -eq $feed.name }
-                if ($existingFeedWithSameName) {
-                    Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
-                }
-                
-                # Feed doesn't exist - add it
-                try {
-                    Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
-                    Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
-                    
-                    & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)" 2>&1
-                    
-                    if ($LASTEXITCODE -eq 0) {
-                        $feedsAdded += $feed
-                        Write-Verbose "Successfully added feed: $($feed.name)"
-                    } else {
-                        Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
-                    }
-                }
-                catch {
-                    Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
-                }
+            # Create lookup table for current feeds (by name and path)
+            $currentFeedsLookup = @{}
+            foreach ($currentFeed in $currentFeeds) {
+                # Create a key combining name and normalized path for comparison
+                $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
+                $lookupKey = "$($currentFeed.Name)|$normalizedPath"
+                $currentFeedsLookup[$lookupKey] = $currentFeed
             }
         }
 
-        Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
-        & $NipkgCmdPath update 2>&1
+        # Process the individual feed definition
+        $feed = $FeedDefinition
         
-        if ($LASTEXITCODE -eq 0) {
-            Write-Information "Package database updated successfully" -InformationAction Continue
-        } else {
-            Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
-            Write-Warning "This may cause package installation failures due to missing package information"
+        # Normalize the feed URI for comparison
+        $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
+        $feedLookupKey = "$($feed.name)|$normalizedUri"
+        
+        # Check if this feed already exists with the same name and URI
+        if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
+            Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
+            Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
+            
+            # Still track it as an added feed in case we need to remove it later
+            $script:feedsAdded += $feed
         }
-
-        return $feedsAdded
+        else {
+            # Check if a feed with the same name but different URI exists
+            $existingFeedWithSameName = $currentFeeds | Where-Object { $_.Name -eq $feed.name }
+            if ($existingFeedWithSameName) {
+                Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
+            }
+            
+            # Feed doesn't exist - add it
+            try {
+                Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
+                Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
+                
+                & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)" 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    $script:feedsAdded += $feed
+                    Write-Verbose "Successfully added feed: $($feed.name)"
+                } else {
+                    Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
+                }
+            }
+            catch {
+                Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
+            }
+        }
     }
     
     end {
+        if ($script:feedsAdded.Count -gt 0) {
+            Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
+            & $NipkgCmdPath update 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Information "Package database updated successfully" -InformationAction Continue
+            } else {
+                Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+                Write-Warning "This may cause package installation failures due to missing package information"
+            }
+        }
+        
         Write-Verbose "Completed Add-Feeds operation"
+        return $script:feedsAdded
     }
 }
 
