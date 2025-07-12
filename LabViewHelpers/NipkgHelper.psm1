@@ -2063,10 +2063,10 @@ function Install-Snapshot {
     .PARAMETER NipkgCmdPath
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
-    .PARAMETER SkipFeeds
+    .PARAMETER SkipFeedsInstallation
         Skip adding feeds from the snapshot (only manage packages).
 
-    .PARAMETER SkipPackages
+    .PARAMETER SkipPackagesInstallation
         Skip managing packages from the snapshot (only add feeds).
 
     .PARAMETER Force
@@ -2080,47 +2080,6 @@ function Install-Snapshot {
         This is useful when you want to install packages from specific feeds but don't want
         to keep those feeds permanently in the system.
 
-    .PARAMETER RemoveUnlistedPackages
-        Remove packages that are currently installed but not listed in the snapshot.
-        This ensures the system matches exactly what is defined in the snapshot by
-        removing any extra packages. Use with caution as this can remove important packages.
-
-    .PARAMETER RemoveUnlistedFeeds
-        Remove feeds that are currently configured but not listed in the snapshot.
-        This ensures the feed configuration matches exactly what is defined in the snapshot by
-        removing any extra feeds. Use with caution as this can remove important feeds.
-
-    .PARAMETER ValidateCompliance
-        Validate that the system state matches the snapshot after all operations are complete.
-        Provides detailed compliance reporting and can optionally fail the operation if 
-        the system is not compliant.
-
-    .PARAMETER FailOnNonCompliance
-        When ValidateCompliance is enabled, throw an error if the system is not compliant
-        with the snapshot. Useful for CI/CD pipelines where compliance is required.
-
-    .PARAMETER AllowExtraFeeds
-        When ValidateCompliance is enabled, allow extra feeds beyond those in the snapshot.
-        If false, extra feeds cause non-compliance. Defaults to $false.
-
-    .PARAMETER AllowExtraPackages
-        When ValidateCompliance is enabled, allow extra packages beyond those in the snapshot.
-        If false, extra packages cause non-compliance. Defaults to $false.
-
-    .PARAMETER SyncNipkgVersion
-        Synchronize the NIPKG version with the version specified in the snapshot after processing 
-        feeds and updating the package database. If the snapshot contains an 'ni-package-manager' 
-        package, this will update the current NIPKG installation to match that version. This ensures 
-        compatibility between the snapshot requirements and the package manager version. The sync 
-        happens after feeds are added so that offline installer feeds are available for accessing 
-        the required NIPKG version.
-
-    .PARAMETER ExcludePackages
-        Array of package names to exclude from installation. These packages will be skipped even 
-        if they are present in the snapshot. Useful for avoiding problematic packages or when 
-        certain packages should not be installed in specific environments. Package names should 
-        match exactly as they appear in the snapshot.
-
     .EXAMPLE
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\my-snapshot.json"
         Install-Snapshot -Snapshot $snapshot
@@ -2132,7 +2091,7 @@ function Install-Snapshot {
     .EXAMPLE
         # Only add feeds, don't install packages
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Install-Snapshot -Snapshot $snapshot -SkipPackages
+        Install-Snapshot -Snapshot $snapshot -SkipPackagesInstallation
 
     .EXAMPLE
         # Remove existing feeds before applying snapshot
@@ -2141,34 +2100,6 @@ function Install-Snapshot {
     .EXAMPLE
         # Remove snapshot feeds after installation
         Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveSnapshotFeeds
-
-    .EXAMPLE
-        # Remove packages not in snapshot (exact match)
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveUnlistedPackages
-
-    .EXAMPLE
-        # Remove feeds not in snapshot (exact match)
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveUnlistedFeeds
-
-    .EXAMPLE
-        # Validate compliance after applying snapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ValidateCompliance
-
-    .EXAMPLE
-        # Fail if system is not compliant (for CI/CD)
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ValidateCompliance -FailOnNonCompliance
-
-    .EXAMPLE
-        # Allow extra packages in development environment
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ValidateCompliance -AllowExtraPackages $true
-
-    .EXAMPLE
-        # Exclude specific packages from installation
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ExcludePackages @("problematic-package", "optional-package")
-
-    .EXAMPLE
-        # Complete workflow: clean slate approach
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -2199,10 +2130,10 @@ function Install-Snapshot {
         [string]$NipkgCmdPath = "nipkg",
         
         [Parameter()]
-        [switch]$SkipFeeds,
+        [switch]$SkipFeedsInstallation,
         
         [Parameter()]
-        [switch]$SkipPackages,
+        [switch]$SkipPackagesInstallation,
         
         [Parameter()]
         [switch]$Force,
@@ -2265,12 +2196,12 @@ function Install-Snapshot {
             }
 
             $snapshotFeedsAdded = @()
-            if (-not $SkipFeeds -and $Snapshot.feeds.Count -gt 0) {
+            if (-not $SkipFeedsInstallation -and $Snapshot.feeds.Count -gt 0) {
                 Write-Information "Adding feeds from snapshot..."
                 $snapshotFeedsAdded = $Snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
             }
 
-            if (-not $SkipPackages -and $Snapshot.packages.Count -gt 0) {
+            if (-not $SkipPackagesInstallation -and $Snapshot.packages.Count -gt 0) {
                 Write-Information "Installing Packages..."
                 Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot | Install-Packages @installSwitches   
             }
