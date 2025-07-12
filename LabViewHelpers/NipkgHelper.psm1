@@ -228,6 +228,7 @@ function Install-Packages {
             }
             -125071 {
                 Write-Warning "Installation completed successfully but requires system restart (exit code: $exitCode)"
+                $LASTEXITCODE = 0
             }
             default {
                 throw "Batch installation failed with exit code: $exitCode"
@@ -2046,7 +2047,7 @@ function Apply-NipkgSnapshot {
         Applies a NIPKG snapshot using declarative package management.
 
     .DESCRIPTION
-        Imports a NIPKG snapshot from JSON and applies it to the system using a declarative approach:
+        Applies a NIPKG snapshot using declarative package management:
         1. Analyzing current feed state vs. snapshot requirements and only adding missing feeds
         2. Updating the package database if any feeds were added
         3. Analyzing current package state vs. snapshot requirements
@@ -2056,8 +2057,8 @@ function Apply-NipkgSnapshot {
         The function compares the current system state with the snapshot and only performs
         necessary actions, making it safe to run multiple times (idempotent).
 
-    .PARAMETER SnapshotPath
-        Path to the JSON snapshot file created by Export-NipkgSnapshotToJson.
+    .PARAMETER Snapshot
+        The snapshot object containing feeds and packages to apply to the system.
 
     .PARAMETER NipkgCmdPath
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
@@ -2121,50 +2122,53 @@ function Apply-NipkgSnapshot {
         match exactly as they appear in the snapshot.
 
     .EXAMPLE
-        Apply-NipkgSnapshot -SnapshotPath "C:\Snapshots\my-snapshot.json"
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\my-snapshot.json"
+        Apply-NipkgSnapshot -Snapshot $snapshot
 
     .EXAMPLE
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -Force
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        Apply-NipkgSnapshot -Snapshot $snapshot -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -Force
 
     .EXAMPLE
         # Only add feeds, don't install packages
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -SkipPackages
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        Apply-NipkgSnapshot -Snapshot $snapshot -SkipPackages
 
     .EXAMPLE
         # Remove existing feeds before applying snapshot
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds
 
     .EXAMPLE
         # Remove snapshot feeds after installation
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveSnapshotFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveSnapshotFeeds
 
     .EXAMPLE
         # Remove packages not in snapshot (exact match)
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedPackages
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedPackages
 
     .EXAMPLE
         # Remove feeds not in snapshot (exact match)
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedFeeds
 
     .EXAMPLE
         # Validate compliance after applying snapshot
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ValidateCompliance
 
     .EXAMPLE
         # Fail if system is not compliant (for CI/CD)
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance -FailOnNonCompliance
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ValidateCompliance -FailOnNonCompliance
 
     .EXAMPLE
         # Allow extra packages in development environment
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ValidateCompliance -AllowExtraPackages $true
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ValidateCompliance -AllowExtraPackages $true
 
     .EXAMPLE
         # Exclude specific packages from installation
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -ExcludePackages @("problematic-package", "optional-package")
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ExcludePackages @("problematic-package", "optional-package")
 
     .EXAMPLE
         # Complete workflow: clean slate approach
-        Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -2186,9 +2190,9 @@ function Apply-NipkgSnapshot {
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNullOrEmpty()]
-        [string]$SnapshotPath,
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot,
         
         [Parameter()]
         [ValidateNotNullOrEmpty()]
@@ -2252,10 +2256,9 @@ function Apply-NipkgSnapshot {
                     IncludeRecommended = $true
                 }
 
-            Write-Information "Importing NIPKG snapshot..."
-            $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
-            $originalPackageCount = $snapshot.packages.Count    
-            Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
+            Write-Information "Applying NIPKG snapshot..." -InformationAction Continue
+            $originalPackageCount = $Snapshot.packages.Count    
+            Write-Information "Snapshot contains $($Snapshot.feeds.Count) feeds and $($Snapshot.packages.Count) packages" -InformationAction Continue
 
             if($RemoveExistingFeeds) {
                 Write-Information "Removing existing feeds..."
@@ -2263,14 +2266,14 @@ function Apply-NipkgSnapshot {
             }
 
             $snapshotFeedsAdded = @()
-            if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
+            if (-not $SkipFeeds -and $Snapshot.feeds.Count -gt 0) {
                 Write-Information "Adding feeds from snapshot..."
-                $snapshotFeedsAdded = $snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
+                $snapshotFeedsAdded = $Snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
             }
 
-            if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
+            if (-not $SkipPackages -and $Snapshot.packages.Count -gt 0) {
                 Write-Information "Installing Packages..."
-                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches   
+                Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot | Install-Packages @installSwitches   
             }
 
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
@@ -2280,55 +2283,11 @@ function Apply-NipkgSnapshot {
 
             Write-Information "Snapshot application completed successfully"
 
-            # Create simple result object focused on compliance
-            $applyResult = [PSCustomObject]@{
-                SnapshotPath = $SnapshotPath
-                Success = $true
-                ComplianceValidated = $false
-                SystemCompliant = $null
-                ComplianceSummary = "Compliance validation not requested"
-            }
-
-            # Phase 6: Validate compliance if requested
-            if ($ValidateCompliance) {
-                Write-Information "Phase 6: Validating system compliance with snapshot..." -InformationAction Continue
-                
-                try {
-                    Test-NipkgSnapshotCompliance -SnapshotPath $SnapshotPath -NipkgCmdPath $NipkgCmdPath -ValidateFeeds (-not $SkipFeeds) -ValidatePackages (-not $SkipPackages) -AllowExtraFeeds $AllowExtraFeeds -AllowExtraPackages $AllowExtraPackages -FailOnNonCompliance:$FailOnNonCompliance
-                    
-                    # Add compliance information to the results
-                    $applyResult.ComplianceValidated = $true
-                    $applyResult.SystemCompliant = $complianceResult.OverallCompliant
-                    $applyResult.ComplianceSummary = $complianceResult.Summary
-                    $applyResult | Add-Member -MemberType NoteProperty -Name "ComplianceReport" -Value $complianceResult -Force
-                    
-                    if ($complianceResult.OverallCompliant) {
-                        Write-Information "[OK] System is compliant with snapshot" -InformationAction Continue
-                    } else {
-                        Write-Warning "[ERROR] System is not fully compliant with snapshot"
-                        Write-Warning "Compliance issues found: $($complianceResult.TotalIssues)"
-                        # Note: If FailOnNonCompliance was set, Test-NipkgSnapshotCompliance would have already thrown
-                    }
-                }
-                catch {
-                    if ($_.Exception.Message -like "*not compliant*") {
-                        # This is expected when FailOnNonCompliance is true
-                        throw
-                    } else {
-                        Write-Warning "Failed to validate compliance: $($_.Exception.Message)"
-                        # Add compliance failure info to results
-                        $applyResult.ComplianceValidated = $false
-                        $applyResult.SystemCompliant = $null
-                        $applyResult.ComplianceSummary = "Validation failed: $($_.Exception.Message)"
-                    }
-                }
-            }
-
-            return $applyResult
+            return $Snapshot
         }
         catch {
-            $errorMessage = "Failed to apply NIPKG snapshot - SnapshotPath: '$SnapshotPath'. Error: $($_.Exception.Message)"
-            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $SnapshotPath
+            $errorMessage = "Failed to apply NIPKG snapshot. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Snapshot
             throw
         }
     }

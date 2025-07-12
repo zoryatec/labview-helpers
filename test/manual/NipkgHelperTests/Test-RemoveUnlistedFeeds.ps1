@@ -136,7 +136,7 @@ if (-not $skipActualOperations) {
         Write-Host ""
         
         # Test with WhatIf to see what would be removed
-        $whatIfResult = Apply-NipkgSnapshot -SnapshotPath $tempSnapshotPath -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipPackages -WhatIf -Verbose
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipPackages -WhatIf -Verbose
         
         Write-Host ""
         Write-Host "✓ WhatIf with RemoveUnlistedFeeds completed successfully" -ForegroundColor Green
@@ -166,7 +166,7 @@ try {
     Write-Host "Testing RemoveUnlistedFeeds with SkipFeeds (should skip removal)..." -ForegroundColor Cyan
     
     if (-not $skipActualOperations) {
-        $testResult = Apply-NipkgSnapshot -SnapshotPath $tempSnapshotPath -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipFeeds -SkipPackages -WhatIf
+        $testResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -RemoveUnlistedFeeds -SkipFeeds -SkipPackages -WhatIf
         
         if ($testResult.FeedsUnlistedRemoved -eq 0) {
             Write-Host "  ✓ Correctly skipped unlisted feed removal when SkipFeeds=True" -ForegroundColor Green
@@ -286,9 +286,9 @@ Write-Host "- Can be combined with RemoveUnlistedPackages for exact snapshot mat
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
-Write-Host 'Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedFeeds' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedFeeds' -ForegroundColor Gray
 Write-Host "# Will remove feeds not listed in snapshot" -ForegroundColor Gray
 Write-Host ""
-Write-Host 'Apply-NipkgSnapshot -SnapshotPath "snapshot.json" -RemoveUnlistedFeeds -RemoveUnlistedPackages' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedFeeds -RemoveUnlistedPackages' -ForegroundColor Gray
 Write-Host "# Will ensure exact match to snapshot (feeds and packages)" -ForegroundColor Gray
 Write-Host ""

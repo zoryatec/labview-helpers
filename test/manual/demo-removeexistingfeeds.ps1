@@ -22,16 +22,16 @@ Write-Host "=== Apply-NipkgSnapshot RemoveExistingFeeds Demo ===" -ForegroundCol
 Write-Host "`nNew RemoveExistingFeeds Parameter Usage Examples:" -ForegroundColor Yellow
 
 Write-Host "`n1. Basic usage - remove existing feeds before applying snapshot:" -ForegroundColor Green
-Write-Host '   Apply-NipkgSnapshot -SnapshotPath "my-snapshot.json" -RemoveExistingFeeds'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds'
 
 Write-Host "`n2. With WhatIf to see what would be removed/added:" -ForegroundColor Green
-Write-Host '   Apply-NipkgSnapshot -SnapshotPath "my-snapshot.json" -RemoveExistingFeeds -WhatIf'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -WhatIf'
 
 Write-Host "`n3. Remove existing feeds but only apply feeds (skip packages):" -ForegroundColor Green
-Write-Host '   Apply-NipkgSnapshot -SnapshotPath "my-snapshot.json" -RemoveExistingFeeds -SkipPackages'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -SkipPackages'
 
 Write-Host "`n4. Remove existing feeds and force package installation:" -ForegroundColor Green
-Write-Host '   Apply-NipkgSnapshot -SnapshotPath "my-snapshot.json" -RemoveExistingFeeds -Force'
+Write-Host '   Import-NipkgSnapshotFromJson -InputPath "my-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -Force'
 
 Write-Host "`nOperation Flow with RemoveExistingFeeds:" -ForegroundColor Yellow
 Write-Host "Phase 0: Remove existing feeds (if RemoveExistingFeeds is specified)"

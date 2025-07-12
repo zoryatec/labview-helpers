@@ -357,19 +357,19 @@ if (Test-Path "$tempDirectory\snapshot.json") {
     Write-Host ""
     Write-Host "USAGE EXAMPLES:" -ForegroundColor Yellow
     Write-Host "  # Apply complete snapshot (adds feeds and installs packages):" -ForegroundColor White
-    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json'" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Only add feeds (skip package installation):" -ForegroundColor White  
-    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -SkipPackages" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -SkipPackages" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Only install packages (skip adding feeds):" -ForegroundColor White
-    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -SkipFeeds" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -SkipFeeds" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Use with specific NIPKG path and force installation:" -ForegroundColor White
-    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -NipkgCmdPath '$nipkgPath' -Force" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -NipkgCmdPath '$nipkgPath' -Force" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  # Preview what would be done (safe to run):" -ForegroundColor White
-    Write-Host "  Apply-NipkgSnapshot -SnapshotPath '$tempDirectory\snapshot.json' -WhatIf" -ForegroundColor Gray
+    Write-Host "  Import-NipkgSnapshotFromJson '$tempDirectory\snapshot.json' | Apply-NipkgSnapshot -WhatIf" -ForegroundColor Gray
     Write-Host ""
     
     Write-Host "WARNING: Apply-NipkgSnapshot makes system changes. Test manually with appropriate permissions." -ForegroundColor Red

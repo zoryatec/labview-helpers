@@ -43,7 +43,7 @@ Write-Host "You want to install packages from a snapshot but don't want to keep 
 Write-Host "This keeps your system clean and avoids feed pollution."
 
 Write-Host "`nCommand:" -ForegroundColor Yellow
-Write-Host "Apply-NipkgSnapshot -SnapshotPath 'my-snapshot.json' -RemoveSnapshotFeeds" -ForegroundColor White
+Write-Host "Import-NipkgSnapshotFromJson -InputPath 'my-snapshot.json' | Apply-NipkgSnapshot -RemoveSnapshotFeeds" -ForegroundColor White
 
 Write-Host "`nThis will:"
 Write-Host "  1. Add feeds from the snapshot"
@@ -56,7 +56,7 @@ Write-Host "You want to completely replace the current feeds with those from a s
 Write-Host "install packages, and then remove all feeds for a clean state."
 
 Write-Host "`nCommand:" -ForegroundColor Yellow
-Write-Host "Apply-NipkgSnapshot -SnapshotPath 'snapshot.json' -RemoveExistingFeeds -RemoveSnapshotFeeds" -ForegroundColor White
+Write-Host "Import-NipkgSnapshotFromJson -InputPath 'snapshot.json' | Apply-NipkgSnapshot -RemoveExistingFeeds -RemoveSnapshotFeeds" -ForegroundColor White
 
 Write-Host "`nThis will:"
 Write-Host "  1. Remove all existing feeds from the system"
@@ -70,7 +70,7 @@ Write-Host "You're setting up a development environment and want to install pack
 Write-Host "from development feeds without keeping those feeds permanently."
 
 Write-Host "`nCommand:" -ForegroundColor Yellow
-Write-Host "Apply-NipkgSnapshot -SnapshotPath 'dev-snapshot.json' -RemoveSnapshotFeeds -Force" -ForegroundColor White
+Write-Host "Import-NipkgSnapshotFromJson -InputPath 'dev-snapshot.json' | Apply-NipkgSnapshot -RemoveSnapshotFeeds -Force" -ForegroundColor White
 
 Write-Host "`nThis will:"
 Write-Host "  1. Add development feeds temporarily"
@@ -82,7 +82,7 @@ Write-Host "`n=== Scenario 4: Testing with Skip Options ===" -ForegroundColor Cy
 Write-Host "You want to test the feed management without installing packages."
 
 Write-Host "`nCommand for feeds only:" -ForegroundColor Yellow
-Write-Host "Apply-NipkgSnapshot -SnapshotPath 'snapshot.json' -RemoveSnapshotFeeds -SkipPackages" -ForegroundColor White
+Write-Host "Import-NipkgSnapshotFromJson -InputPath 'snapshot.json' | Apply-NipkgSnapshot -RemoveSnapshotFeeds -SkipPackages" -ForegroundColor White
 
 Write-Host "`nThis will:"
 Write-Host "  1. Add feeds from the snapshot"
@@ -102,7 +102,7 @@ Write-Host "`n=== Real-World Examples ===" -ForegroundColor Magenta
 Write-Host "`nExample 1: Installing from a vendor snapshot" -ForegroundColor Yellow
 $example1 = @"
 # Get packages from vendor, but don't keep their feeds
-Apply-NipkgSnapshot -SnapshotPath 'vendor-packages.json' -RemoveSnapshotFeeds
+Import-NipkgSnapshotFromJson -InputPath 'vendor-packages.json' | Apply-NipkgSnapshot -RemoveSnapshotFeeds
 
 # Result: Packages installed, vendor feeds removed
 "@
@@ -111,7 +111,7 @@ Write-Host $example1 -ForegroundColor White
 Write-Host "`nExample 2: Environment migration" -ForegroundColor Yellow
 $example2 = @"
 # Migrate from dev to prod: remove all feeds, apply prod snapshot, clean up
-Apply-NipkgSnapshot -SnapshotPath 'prod-snapshot.json' -RemoveExistingFeeds -RemoveSnapshotFeeds
+Import-NipkgSnapshotFromJson -InputPath 'prod-snapshot.json' | Apply-NipkgSnapshot -RemoveExistingFeeds -RemoveSnapshotFeeds
 
 # Result: Clean system with only prod packages, no feeds
 "@
@@ -120,7 +120,7 @@ Write-Host $example2 -ForegroundColor White
 Write-Host "`nExample 3: Automated build environment" -ForegroundColor Yellow
 $example3 = @"
 # Set up build environment from snapshot, then clean up
-Apply-NipkgSnapshot -SnapshotPath 'build-tools.json' -RemoveSnapshotFeeds -Force
+Import-NipkgSnapshotFromJson -InputPath 'build-tools.json' | Apply-NipkgSnapshot -RemoveSnapshotFeeds -Force
 
 # Continue with build process...
 # System has build tools installed but no leftover feeds
@@ -137,7 +137,7 @@ Write-Host "`n=== Testing Your Setup ===" -ForegroundColor Cyan
 Write-Host "To test this functionality safely, use -WhatIf:"
 
 $testCommand = @"
-Apply-NipkgSnapshot -SnapshotPath 'your-snapshot.json' -RemoveSnapshotFeeds -WhatIf
+Import-NipkgSnapshotFromJson -InputPath 'your-snapshot.json' | Apply-NipkgSnapshot -RemoveSnapshotFeeds -WhatIf
 "@
 Write-Host $testCommand -ForegroundColor White
 

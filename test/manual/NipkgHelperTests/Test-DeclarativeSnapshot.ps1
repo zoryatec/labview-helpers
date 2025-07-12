@@ -157,7 +157,7 @@ if (-not $skipActualOperations) {
         Write-Host "Running Apply-NipkgSnapshot with -WhatIf..." -ForegroundColor Cyan
         
         # Test with WhatIf to see what would be done
-        $whatIfResult = Apply-NipkgSnapshot -SnapshotPath $tempSnapshotPath -NipkgCmdPath $nipkgCmdPath -WhatIf
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -WhatIf
         
         Write-Host "✓ WhatIf completed successfully" -ForegroundColor Green
         
@@ -250,7 +250,7 @@ Write-Host "- Idempotent - safe to run multiple times" -ForegroundColor White
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
-Write-Host 'Apply-NipkgSnapshot -SnapshotPath "snapshot.json"' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot' -ForegroundColor Gray
 Write-Host "# Will only install/upgrade/downgrade packages that need it" -ForegroundColor Gray
 Write-Host "# Will only add feeds that don't already exist" -ForegroundColor Gray
 Write-Host ""

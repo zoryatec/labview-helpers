@@ -52,7 +52,7 @@ Changed the feed-add commands to include the `--name` parameter:
 1. **Clean up existing malformed feeds** (optional but recommended):
    ```powershell
    # Remove all existing feeds and start fresh
-   Apply-NipkgSnapshot -SnapshotPath "your-snapshot.json" -RemoveExistingFeeds
+   Import-NipkgSnapshotFromJson "your-snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds
    ```
 
 2. **Or remove specific malformed feeds**:
@@ -64,7 +64,7 @@ Changed the feed-add commands to include the `--name` parameter:
 
 3. **Run apply-nipksnapshot again**:
    ```powershell
-   Apply-NipkgSnapshot -SnapshotPath "your-snapshot.json"
+   Import-NipkgSnapshotFromJson "your-snapshot.json" | Apply-NipkgSnapshot
    ```
 
 4. **Verify the fix with compliance check**:

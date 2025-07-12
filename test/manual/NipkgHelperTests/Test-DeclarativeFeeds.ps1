@@ -126,7 +126,7 @@ if (-not $skipActualOperations) {
         Write-Host ""
         
         # Test with WhatIf to see what would be done with feeds
-        $whatIfResult = Apply-NipkgSnapshot -SnapshotPath $tempSnapshotPath -NipkgCmdPath $nipkgCmdPath -SkipPackages -WhatIf -Verbose
+        $whatIfResult = Import-NipkgSnapshotFromJson $tempSnapshotPath | Apply-NipkgSnapshot -NipkgCmdPath $nipkgCmdPath -SkipPackages -WhatIf -Verbose
         
         Write-Host ""
         Write-Host "✓ WhatIf completed successfully" -ForegroundColor Green
@@ -233,6 +233,6 @@ Write-Host "- Idempotent - safe to run multiple times" -ForegroundColor White
 Write-Host ""
 
 Write-Host "USAGE:" -ForegroundColor Yellow
-Write-Host 'Apply-NipkgSnapshot -SnapshotPath "snapshot.json"' -ForegroundColor Gray
+Write-Host 'Import-NipkgSnapshotFromJson "snapshot.json" | Apply-NipkgSnapshot' -ForegroundColor Gray
 Write-Host "# Will only add feeds that don't already exist" -ForegroundColor Gray
 Write-Host ""
