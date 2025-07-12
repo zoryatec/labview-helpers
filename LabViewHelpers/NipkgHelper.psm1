@@ -2218,7 +2218,7 @@ function Apply-NipkgSnapshot {
         end of the process using 'nipkg unlock <package-name>'. Note: LockDuringInstallation is 
         incompatible with UseBatchInstallation.
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
@@ -2338,11 +2338,9 @@ function Apply-NipkgSnapshot {
                     if ($existingFeeds -and $existingFeeds.Count -gt 0) {
                         Write-Information "Found $($existingFeeds.Count) existing feed(s) to remove" -InformationAction Continue
                         
-                        if ($PSCmdlet.ShouldProcess("$($existingFeeds.Count) existing feeds", "Remove existing NIPKG feeds")) {
-                            Remove-Feeds -FeedsInfo $existingFeeds -NipkgCmdPath $NipkgCmdPath
-                            $results.FeedsRemoved = $existingFeeds.Count
-                            Write-Information "Removed $($existingFeeds.Count) existing feed(s)" -InformationAction Continue
-                        }
+                        Remove-Feeds -FeedsInfo $existingFeeds -NipkgCmdPath $NipkgCmdPath
+                        $results.FeedsRemoved = $existingFeeds.Count
+                        Write-Information "Removed $($existingFeeds.Count) existing feed(s)" -InformationAction Continue
                     } else {
                         Write-Information "No existing feeds found to remove" -InformationAction Continue
                     }
@@ -2401,45 +2399,39 @@ function Apply-NipkgSnapshot {
                         }
                         
                         # Feed doesn't exist - add it
-                        if ($PSCmdlet.ShouldProcess($feed.name, "Add NIPKG feed")) {
-                            try {
-                                Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
-                                Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
-                                
-                                & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)"
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    $results.FeedsAdded++
-                                    $snapshotFeedsAdded += $feed
-                                    Write-Verbose "Successfully added feed: $($feed.name)"
-                                } else {
-                                    $results.FeedsFailed++
-                                    Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
-                                }
-                            }
-                            catch {
+                        try {
+                            Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
+                            Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
+                            
+                            & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)"
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                $results.FeedsAdded++
+                                $snapshotFeedsAdded += $feed
+                                Write-Verbose "Successfully added feed: $($feed.name)"
+                            } else {
                                 $results.FeedsFailed++
-                                Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
+                                Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
                             }
-                        } else {
-                            $results.FeedsSkipped++
+                        }
+                        catch {
+                            $results.FeedsFailed++
+                            Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
                         }
                     }
                 }
 
                 # Always update package database before package operations
-                if ($PSCmdlet.ShouldProcess("NIPKG", "Update package database")) {
-                    Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
-                    
-                    # Update package database to ensure all packages from all feeds are available
-                    & $NipkgCmdPath update
-                    
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Information "Package database updated successfully" -InformationAction Continue
-                    } else {
-                        Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
-                        Write-Warning "This may cause package installation failures due to missing package information"
-                    }
+                Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
+                
+                # Update package database to ensure all packages from all feeds are available
+                & $NipkgCmdPath update
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Information "Package database updated successfully" -InformationAction Continue
+                } else {
+                    Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+                    Write-Warning "This may cause package installation failures due to missing package information"
                 }
 
                 # Phase 1.5: Sync NIPKG version with snapshot if requested (after feeds are available)
@@ -2475,45 +2467,43 @@ function Apply-NipkgSnapshot {
                 
                 # Even if feeds are skipped, update package database before package operations
                 if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
-                    if ($PSCmdlet.ShouldProcess("NIPKG", "Update package database")) {
-                        Write-Information "Updating package database before package operations..." -InformationAction Continue
+                    Write-Information "Updating package database before package operations..." -InformationAction Continue
+                    
+                    & $NipkgCmdPath update
+                    
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Information "Package database updated successfully" -InformationAction Continue
+                    } else {
+                        Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+                        Write-Warning "This may cause package installation failures due to missing package information"
+                    }
+                    
+                    # Phase 1.5: Sync NIPKG version with snapshot if requested (even when feeds are skipped)
+                    if ($SyncNipkgVersion) {
+                        Write-Information "Phase 1.5: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
                         
-                        & $NipkgCmdPath update
-                        
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Information "Package database updated successfully" -InformationAction Continue
-                        } else {
-                            Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
-                            Write-Warning "This may cause package installation failures due to missing package information"
-                        }
-                        
-                        # Phase 1.5: Sync NIPKG version with snapshot if requested (even when feeds are skipped)
-                        if ($SyncNipkgVersion) {
-                            Write-Information "Phase 1.5: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
+                        try {
+                            $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
                             
-                            try {
-                                $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
+                            if ($syncResult.VersionChanged) {
+                                Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
                                 
-                                if ($syncResult.VersionChanged) {
-                                    Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
-                                    
-                                    # After NIPKG version change, update package database again to ensure compatibility
-                                    Write-Information "Updating package database after NIPKG version change..." -InformationAction Continue
-                                    & $NipkgCmdPath update
-                                    
-                                    if ($LASTEXITCODE -eq 0) {
-                                        Write-Information "Package database re-updated successfully after NIPKG sync" -InformationAction Continue
-                                    } else {
-                                        Write-Warning "Package database re-update failed after NIPKG sync (exit code: $LASTEXITCODE)"
-                                    }
+                                # After NIPKG version change, update package database again to ensure compatibility
+                                Write-Information "Updating package database after NIPKG version change..." -InformationAction Continue
+                                & $NipkgCmdPath update
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    Write-Information "Package database re-updated successfully after NIPKG sync" -InformationAction Continue
                                 } else {
-                                    Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
+                                    Write-Warning "Package database re-update failed after NIPKG sync (exit code: $LASTEXITCODE)"
                                 }
+                            } else {
+                                Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
                             }
-                            catch {
-                                Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
-                                # Continue with the rest of the process - this is not a critical failure
-                            }
+                        }
+                        catch {
+                            Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
+                            # Continue with the rest of the process - this is not a critical failure
                         }
                     }
                 }
@@ -2685,145 +2675,133 @@ function Apply-NipkgSnapshot {
                         }
                         
                         "install" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($targetVersion)", "Install package")) {
-                                try {
-                                    $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Installing: $($packageName) v$($targetVersion)" -InformationAction Continue
+                            try {
+                                $packageSpec = "$($packageName)=$($targetVersion)"
+                                Write-Information "Installing: $($packageName) v$($targetVersion)" -InformationAction Continue
+                                
+                                # Install with strict control to maintain package installation order
+                                # Use flags to allow NIPKG flexibility in resolving dependencies while maintaining order
+                                & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $results.PackagesInstalled++
+                                    Write-Verbose "Successfully installed $($packageName) v$($targetVersion)"
                                     
-                                    # Install with strict control to maintain package installation order
-                                    # Use flags to allow NIPKG flexibility in resolving dependencies while maintaining order
-                                    & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                                    
-                                    if ($LASTEXITCODE -eq 0) {
-                                        $results.PackagesInstalled++
-                                        Write-Verbose "Successfully installed $($packageName) v$($targetVersion)"
-                                        
-                                        # Lock the package if requested to prevent later packages from modifying it
-                                        if ($LockDuringInstallation) {
-                                            Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                            & $NipkgCmdPath lock $packageName
-                                            if ($LASTEXITCODE -eq 0) {
-                                                Write-Verbose "Successfully locked package $($packageName)"
-                                                $packagesLocked += $packageName
-                                            } else {
-                                                Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                            }
+                                    # Lock the package if requested to prevent later packages from modifying it
+                                    if ($LockDuringInstallation) {
+                                        Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                        & $NipkgCmdPath lock $packageName
+                                        if ($LASTEXITCODE -eq 0) {
+                                            Write-Verbose "Successfully locked package $($packageName)"
+                                            $packagesLocked += $packageName
+                                        } else {
+                                            Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
                                         }
-                                    } else {
-                                        $results.PackagesFailed++
-                                        Write-Warning "Failed to install $($packageName) v$($targetVersion) (exit code: $LASTEXITCODE)"
                                     }
-                                }
-                                catch {
+                                } else {
                                     $results.PackagesFailed++
-                                    Write-Warning "Exception installing $($packageName) v$($targetVersion): $($_.Exception.Message)"
+                                    Write-Warning "Failed to install $($packageName) v$($targetVersion) (exit code: $LASTEXITCODE)"
                                 }
-                            } else {
-                                $results.PackagesSkipped++
+                            }
+                            catch {
+                                $results.PackagesFailed++
+                                Write-Warning "Exception installing $($packageName) v$($targetVersion): $($_.Exception.Message)"
                             }
                         }
                         
                         "upgrade" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentInstalledVersion) -> v$($targetVersion)", "Upgrade package")) {
-                                try {
-                                    $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Upgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
+                            try {
+                                $packageSpec = "$($packageName)=$($targetVersion)"
+                                Write-Information "Upgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
+                                
+                                # Upgrade with strict control - no automatic recommended packages
+                                & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $results.PackagesUpgraded++
+                                    Write-Verbose "Successfully upgraded $($packageName) to v$($targetVersion)"
                                     
-                                    # Upgrade with strict control - no automatic recommended packages
-                                    & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
-                                    
-                                    if ($LASTEXITCODE -eq 0) {
-                                        $results.PackagesUpgraded++
-                                        Write-Verbose "Successfully upgraded $($packageName) to v$($targetVersion)"
-                                        
-                                        # Lock the package if requested to prevent later packages from modifying it
-                                        if ($LockDuringInstallation) {
-                                            Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                            & $NipkgCmdPath lock $packageName
-                                            if ($LASTEXITCODE -eq 0) {
-                                                Write-Verbose "Successfully locked package $($packageName)"
-                                                $packagesLocked += $packageName
-                                            } else {
-                                                Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                            }
+                                    # Lock the package if requested to prevent later packages from modifying it
+                                    if ($LockDuringInstallation) {
+                                        Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                        & $NipkgCmdPath lock $packageName
+                                        if ($LASTEXITCODE -eq 0) {
+                                            Write-Verbose "Successfully locked package $($packageName)"
+                                            $packagesLocked += $packageName
+                                        } else {
+                                            Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
                                         }
-                                    } else {
-                                        $results.PackagesFailed++
-                                        Write-Warning "Failed to upgrade $($packageName) to v$($targetVersion) (exit code: $LASTEXITCODE)"
                                     }
-                                }
-                                catch {
+                                } else {
                                     $results.PackagesFailed++
-                                    Write-Warning "Exception upgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
+                                    Write-Warning "Failed to upgrade $($packageName) to v$($targetVersion) (exit code: $LASTEXITCODE)"
                                 }
-                            } else {
-                                $results.PackagesSkipped++
+                            }
+                            catch {
+                                $results.PackagesFailed++
+                                Write-Warning "Exception upgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
                             }
                         }
                         
                         "downgrade" {
-                            if ($PSCmdlet.ShouldProcess("$($packageName) v$($currentInstalledVersion) -> v$($targetVersion)", "Downgrade package")) {
-                                try {
-                                    $packageSpec = "$($packageName)=$($targetVersion)"
-                                    Write-Information "Downgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
+                            try {
+                                $packageSpec = "$($packageName)=$($targetVersion)"
+                                Write-Information "Downgrading: $($packageName) v$($currentInstalledVersion) -> v$($targetVersion)" -InformationAction Continue
+                                
+                                # For downgrades, use all flags for maximum flexibility
+                                & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $results.PackagesDowngraded++
+                                    Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion)"
                                     
-                                    # For downgrades, use all flags for maximum flexibility
-                                    & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
+                                    # Lock the package if requested to prevent later packages from modifying it
+                                    if ($LockDuringInstallation) {
+                                        Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                        & $NipkgCmdPath lock $packageName
+                                        if ($LASTEXITCODE -eq 0) {
+                                            Write-Verbose "Successfully locked package $($packageName)"
+                                            $packagesLocked += $packageName
+                                        } else {
+                                            Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
+                                        }
+                                    }
+                                } else {
+                                    # If direct downgrade fails, try uninstall then install
+                                    Write-Verbose "Direct downgrade failed, trying uninstall then install approach"
+                                    & $NipkgCmdPath remove $($packageName) -y
                                     
                                     if ($LASTEXITCODE -eq 0) {
-                                        $results.PackagesDowngraded++
-                                        Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion)"
-                                        
-                                        # Lock the package if requested to prevent later packages from modifying it
-                                        if ($LockDuringInstallation) {
-                                            Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                            & $NipkgCmdPath lock $packageName
-                                            if ($LASTEXITCODE -eq 0) {
-                                                Write-Verbose "Successfully locked package $($packageName)"
-                                                $packagesLocked += $packageName
-                                            } else {
-                                                Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                            }
-                                        }
-                                    } else {
-                                        # If direct downgrade fails, try uninstall then install
-                                        Write-Verbose "Direct downgrade failed, trying uninstall then install approach"
-                                        & $NipkgCmdPath remove $($packageName) -y
+                                        & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
                                         
                                         if ($LASTEXITCODE -eq 0) {
-                                            & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --install-also-upgrades
+                                            $results.PackagesDowngraded++
+                                            Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
                                             
-                                            if ($LASTEXITCODE -eq 0) {
-                                                $results.PackagesDowngraded++
-                                                Write-Verbose "Successfully downgraded $($packageName) to v$($targetVersion) using uninstall/install"
-                                                
-                                                # Lock the package if requested to prevent later packages from modifying it
-                                                if ($LockDuringInstallation) {
-                                                    Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
-                                                    & $NipkgCmdPath lock $packageName
-                                                    if ($LASTEXITCODE -eq 0) {
-                                                        Write-Verbose "Successfully locked package $($packageName)"
-                                                        $packagesLocked += $packageName
-                                                    } else {
-                                                        Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
-                                                    }
+                                            # Lock the package if requested to prevent later packages from modifying it
+                                            if ($LockDuringInstallation) {
+                                                Write-Verbose "Locking package $($packageName) to prevent modifications by later packages"
+                                                & $NipkgCmdPath lock $packageName
+                                                if ($LASTEXITCODE -eq 0) {
+                                                    Write-Verbose "Successfully locked package $($packageName)"
+                                                    $packagesLocked += $packageName
+                                                } else {
+                                                    Write-Warning "Failed to lock package $($packageName) (exit code: $LASTEXITCODE)"
                                                 }
-                                            } else {
-                                                $results.PackagesFailed++
-                                                Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
                                             }
                                         } else {
                                             $results.PackagesFailed++
-                                            Write-Warning "Failed to uninstall $($packageName) for downgrade (exit code: $LASTEXITCODE)"
+                                            Write-Warning "Failed to downgrade $($packageName) to v$($targetVersion) even after uninstall/install (exit code: $LASTEXITCODE)"
                                         }
+                                    } else {
+                                        $results.PackagesFailed++
+                                        Write-Warning "Failed to uninstall $($packageName) for downgrade (exit code: $LASTEXITCODE)"
                                     }
                                 }
-                                catch {
-                                    $results.PackagesFailed++
-                                    Write-Warning "Exception downgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
-                                }
-                            } else {
-                                $results.PackagesSkipped++
+                            }
+                            catch {
+                                $results.PackagesFailed++
+                                Write-Warning "Exception downgrading $($packageName) to v$($targetVersion): $($_.Exception.Message)"
                             }
                         }
                     }
@@ -2874,33 +2852,29 @@ function Apply-NipkgSnapshot {
                         Write-Warning "About to remove $($feedsToRemove.Count) feeds not listed in snapshot. This could remove important system feeds!" -WarningAction Continue
                         
                         foreach ($feedToRemove in $feedsToRemove) {
-                            if ($PSCmdlet.ShouldProcess("$($feedToRemove.Name) -> $($feedToRemove.Path)", "Remove unlisted feed")) {
-                                try {
-                                    Write-Information "Removing unlisted feed: $($feedToRemove.Name) -> $($feedToRemove.Path)" -InformationAction Continue
-                                    & $NipkgCmdPath feed-remove "$($feedToRemove.Name)"
-                                    
-                                    if ($LASTEXITCODE -eq 0) {
-                                        $results.FeedsUnlistedRemoved++
-                                        Write-Verbose "Successfully removed unlisted feed $($feedToRemove.Name)"
-                                    } elseif ($LASTEXITCODE -eq -125079) {
-                                        # Feed doesn't exist or is not enabled - this can happen if:
-                                        # 1. Feed was already removed by a previous operation
-                                        # 2. Feed is disabled
-                                        # 3. Feed path no longer exists
-                                        # We'll treat this as a successful removal since the goal is achieved
-                                        $results.FeedsUnlistedRemoved++
-                                        Write-Verbose "Feed '$($feedToRemove.Name)' was already removed or not enabled - goal achieved"
-                                    } else {
-                                        $results.FeedsUnlistedRemovalFailed++
-                                        Write-Warning "Failed to remove unlisted feed '$($feedToRemove.Name)' (exit code: $LASTEXITCODE)"
-                                    }
-                                }
-                                catch {
+                            try {
+                                Write-Information "Removing unlisted feed: $($feedToRemove.Name) -> $($feedToRemove.Path)" -InformationAction Continue
+                                & $NipkgCmdPath feed-remove "$($feedToRemove.Name)"
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $results.FeedsUnlistedRemoved++
+                                    Write-Verbose "Successfully removed unlisted feed $($feedToRemove.Name)"
+                                } elseif ($LASTEXITCODE -eq -125079) {
+                                    # Feed doesn't exist or is not enabled - this can happen if:
+                                    # 1. Feed was already removed by a previous operation
+                                    # 2. Feed is disabled
+                                    # 3. Feed path no longer exists
+                                    # We'll treat this as a successful removal since the goal is achieved
+                                    $results.FeedsUnlistedRemoved++
+                                    Write-Verbose "Feed '$($feedToRemove.Name)' was already removed or not enabled - goal achieved"
+                                } else {
                                     $results.FeedsUnlistedRemovalFailed++
-                                    Write-Warning "Exception removing unlisted feed $($feedToRemove.Name): $($_.Exception.Message)"
+                                    Write-Warning "Failed to remove unlisted feed '$($feedToRemove.Name)' (exit code: $LASTEXITCODE)"
                                 }
-                            } else {
-                                Write-Verbose "Skipped removal of unlisted feed: $($feedToRemove.Name)"
+                            }
+                            catch {
+                                $results.FeedsUnlistedRemovalFailed++
+                                Write-Warning "Exception removing unlisted feed $($feedToRemove.Name): $($_.Exception.Message)"
                             }
                         }
                     } else {
@@ -2947,25 +2921,21 @@ function Apply-NipkgSnapshot {
                         Write-Warning "About to remove $($packagesToRemove.Count) packages not listed in snapshot. This could remove important system packages!" -WarningAction Continue
                         
                         foreach ($packageToRemove in $packagesToRemove) {
-                            if ($PSCmdlet.ShouldProcess("$($packageToRemove.Package) v$($packageToRemove.Version)", "Remove unlisted package")) {
-                                try {
-                                    Write-Information "Removing unlisted package: $($packageToRemove.Package) v$($packageToRemove.Version)" -InformationAction Continue
-                                    & $NipkgCmdPath remove $($packageToRemove.Package) -y
-                                    
-                                    if ($LASTEXITCODE -eq 0) {
-                                        $results.PackagesRemoved++
-                                        Write-Verbose "Successfully removed unlisted package $($packageToRemove.Package)"
-                                    } else {
-                                        $results.PackagesRemovalFailed++
-                                        Write-Warning "Failed to remove unlisted package $($packageToRemove.Package) (exit code: $LASTEXITCODE)"
-                                    }
-                                }
-                                catch {
+                            try {
+                                Write-Information "Removing unlisted package: $($packageToRemove.Package) v$($packageToRemove.Version)" -InformationAction Continue
+                                & $NipkgCmdPath remove $($packageToRemove.Package) -y
+                                
+                                if ($LASTEXITCODE -eq 0) {
+                                    $results.PackagesRemoved++
+                                    Write-Verbose "Successfully removed unlisted package $($packageToRemove.Package)"
+                                } else {
                                     $results.PackagesRemovalFailed++
-                                    Write-Warning "Exception removing unlisted package $($packageToRemove.Package): $($_.Exception.Message)"
+                                    Write-Warning "Failed to remove unlisted package $($packageToRemove.Package) (exit code: $LASTEXITCODE)"
                                 }
-                            } else {
-                                Write-Verbose "Skipped removal of unlisted package: $($packageToRemove.Package)"
+                            }
+                            catch {
+                                $results.PackagesRemovalFailed++
+                                Write-Warning "Exception removing unlisted package $($packageToRemove.Package): $($_.Exception.Message)"
                             }
                         }
                     } else {
@@ -2982,27 +2952,25 @@ function Apply-NipkgSnapshot {
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
                 Write-Information "Phase 5: Removing snapshot feeds after package operations..." -InformationAction Continue
                 
-                if ($PSCmdlet.ShouldProcess("$($snapshotFeedsAdded.Count) snapshot feeds", "Remove snapshot feeds")) {
-                    try {
-                        # Convert snapshot feeds to the format expected by Remove-Feeds
-                        $feedsToRemove = $snapshotFeedsAdded | ForEach-Object {
-                            [PSCustomObject]@{
-                                name = $_.name
-                                uri = $_.uri
-                                enabled = $true
-                            }
+                try {
+                    # Convert snapshot feeds to the format expected by Remove-Feeds
+                    $feedsToRemove = $snapshotFeedsAdded | ForEach-Object {
+                        [PSCustomObject]@{
+                            name = $_.name
+                            uri = $_.uri
+                            enabled = $true
                         }
-                        
-                        Write-Information "Removing $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
-                        Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
-                        $results.SnapshotFeedsRemoved = $feedsToRemove.Count
-                        Write-Information "Successfully removed $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
                     }
-                    catch {
-                        $results.SnapshotFeedsRemovalFailed = $snapshotFeedsAdded.Count
-                        Write-Warning "Failed to remove snapshot feeds: $($_.Exception.Message)"
-                        # Continue - this is not a critical failure
-                    }
+                    
+                    Write-Information "Removing $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
+                    Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
+                    $results.SnapshotFeedsRemoved = $feedsToRemove.Count
+                    Write-Information "Successfully removed $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
+                }
+                catch {
+                    $results.SnapshotFeedsRemovalFailed = $snapshotFeedsAdded.Count
+                    Write-Warning "Failed to remove snapshot feeds: $($_.Exception.Message)"
+                    # Continue - this is not a critical failure
                 }
             } elseif ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -eq 0) {
                 Write-Information "No snapshot feeds were added, nothing to remove" -InformationAction Continue
