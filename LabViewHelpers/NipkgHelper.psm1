@@ -139,6 +139,9 @@ function Install-Packages {
 
     .EXAMPLE
         # Simulate installation to see what would happen
+        Install-Packages -PackageDefinitions $packages -Simulate
+        
+        # Or with explicit verbose output
         Install-Packages -PackageDefinitions $packages -Simulate -VerboseOutput
 
     .NOTES
@@ -165,9 +168,6 @@ function Install-Packages {
         
         [Parameter()]
         [switch]$ForceLocked,
-        
-        [Parameter()]
-        [switch]$VerboseOutput,
         
         [Parameter()]
         [switch]$AllowDowngrade,
@@ -213,7 +213,7 @@ function Install-Packages {
         if ($Yes) { $arguments += "-y" }
         if ($Simulate) { $arguments += "--simulate" }
         if ($ForceLocked) { $arguments += "--force-locked" }
-        if ($VerboseOutput) { $arguments += "--verbose" }
+        if ($VerbosePreference -eq 'Continue') { $arguments += "--verbose" }
         if ($AllowDowngrade) { $arguments += "--allow-downgrade" }
         if ($AllowUninstall) { $arguments += "--allow-uninstall" }
         if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
@@ -2252,7 +2252,6 @@ function Install-Snapshot {
                     AllowDowngrade = $true
                     AllowUninstall = $true
                     InstallAlsoUpgrades = $true
-                    VerboseOutput = $true
                     IncludeRecommended = $true
                 }
 
