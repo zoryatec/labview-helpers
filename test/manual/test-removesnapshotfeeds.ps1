@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Test script for the RemoveSnapshotFeeds functionality in Apply-NipkgSnapshot.
+    Test script for the RemoveSnapshotFeeds functionality in Install-Snapshot.
 
 .DESCRIPTION
     This script tests the new RemoveSnapshotFeeds switch parameter that removes 
@@ -95,15 +95,15 @@ try {
     $initialFeeds = @()
 }
 
-Write-Host "`n=== Phase 3: Testing Apply-NipkgSnapshot with RemoveSnapshotFeeds ===" -ForegroundColor Cyan
+Write-Host "`n=== Phase 3: Testing Install-Snapshot with RemoveSnapshotFeeds ===" -ForegroundColor Cyan
 
 try {
     Write-Host "Applying snapshot with RemoveSnapshotFeeds..." -ForegroundColor Yellow
     
     # Apply the snapshot with RemoveSnapshotFeeds switch
-    $result = Import-NipkgSnapshotFromJson $snapshotPath | Apply-NipkgSnapshot -RemoveSnapshotFeeds -WhatIf
+    $result = Import-NipkgSnapshotFromJson $snapshotPath | Install-Snapshot -RemoveSnapshotFeeds -WhatIf
     
-    Write-Host "✓ Apply-NipkgSnapshot completed successfully" -ForegroundColor Green
+    Write-Host "✓ Install-Snapshot completed successfully" -ForegroundColor Green
     
     # Display results
     Write-Host "`nResults:" -ForegroundColor Yellow
@@ -116,7 +116,7 @@ try {
     Write-Host "  Overall Success: $($result.Success)"
     
 } catch {
-    Write-Host "✗ Apply-NipkgSnapshot failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "✗ Install-Snapshot failed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "This is expected in WhatIf mode or if NIPKG is not available" -ForegroundColor Yellow
 }
 
@@ -126,9 +126,9 @@ try {
     Write-Host "Applying snapshot with both RemoveExistingFeeds and RemoveSnapshotFeeds..." -ForegroundColor Yellow
     
     # Apply the snapshot with both switches
-    $result2 = Import-NipkgSnapshotFromJson $snapshotPath | Apply-NipkgSnapshot -RemoveExistingFeeds -RemoveSnapshotFeeds -WhatIf
+    $result2 = Import-NipkgSnapshotFromJson $snapshotPath | Install-Snapshot -RemoveExistingFeeds -RemoveSnapshotFeeds -WhatIf
     
-    Write-Host "✓ Apply-NipkgSnapshot with both switches completed successfully" -ForegroundColor Green
+    Write-Host "✓ Install-Snapshot with both switches completed successfully" -ForegroundColor Green
     
     # Display results
     Write-Host "`nResults:" -ForegroundColor Yellow
@@ -142,7 +142,7 @@ try {
     Write-Host "  Overall Success: $($result2.Success)"
     
 } catch {
-    Write-Host "✗ Apply-NipkgSnapshot with both switches failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "✗ Install-Snapshot with both switches failed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "This is expected in WhatIf mode or if NIPKG is not available" -ForegroundColor Yellow
 }
 
@@ -151,7 +151,7 @@ Write-Host "`n=== Phase 5: Testing Skip Scenarios ===" -ForegroundColor Cyan
 try {
     Write-Host "Testing with SkipFeeds (should not add or remove feeds)..." -ForegroundColor Yellow
     
-    $result3 = Import-NipkgSnapshotFromJson $snapshotPath | Apply-NipkgSnapshot -RemoveSnapshotFeeds -SkipFeeds -WhatIf
+    $result3 = Import-NipkgSnapshotFromJson $snapshotPath | Install-Snapshot -RemoveSnapshotFeeds -SkipFeeds -WhatIf
     
     Write-Host "✓ SkipFeeds test completed" -ForegroundColor Green
     Write-Host "  Feeds Added: $($result3.FeedsAdded) (should be 0)"
@@ -164,7 +164,7 @@ try {
 try {
     Write-Host "Testing with SkipPackages (should add and remove feeds but not install packages)..." -ForegroundColor Yellow
     
-    $result4 = Import-NipkgSnapshotFromJson $snapshotPath | Apply-NipkgSnapshot -RemoveSnapshotFeeds -SkipPackages -WhatIf
+    $result4 = Import-NipkgSnapshotFromJson $snapshotPath | Install-Snapshot -RemoveSnapshotFeeds -SkipPackages -WhatIf
     
     Write-Host "✓ SkipPackages test completed" -ForegroundColor Green
     Write-Host "  Packages Installed: $($result4.PackagesInstalled) (should be 0)"
@@ -193,7 +193,7 @@ try {
     $emptySnapshot | ConvertTo-Json -Depth 10 | Set-Content -Path $emptySnapshotPath -Encoding UTF8
     
     Write-Host "Testing with empty snapshot (no feeds to remove)..." -ForegroundColor Yellow
-    $result5 = Import-NipkgSnapshotFromJson $emptySnapshotPath | Apply-NipkgSnapshot -RemoveSnapshotFeeds -WhatIf
+    $result5 = Import-NipkgSnapshotFromJson $emptySnapshotPath | Install-Snapshot -RemoveSnapshotFeeds -WhatIf
     
     Write-Host "✓ Empty snapshot test completed" -ForegroundColor Green
     Write-Host "  Snapshot Feeds Removed: $($result5.SnapshotFeedsRemoved) (should be 0)"

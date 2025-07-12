@@ -77,7 +77,7 @@
         'New-NipkgSnapshotFromSystem',
         "Export-NipkgSnapshotToJson",
         "Import-NipkgSnapshotFromJson",
-        "Apply-NipkgSnapshot",
+        "Install-Snapshot",
         "Compare-PackageVersions",
         "Sync-NipkgVersionWithSnapshot",
         "Test-NipkgSnapshotCompliance",

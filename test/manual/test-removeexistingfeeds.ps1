@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 
-Write-Host "Testing Apply-NipkgSnapshot with RemoveExistingFeeds parameter..." -ForegroundColor Yellow
+Write-Host "Testing Install-Snapshot with RemoveExistingFeeds parameter..." -ForegroundColor Yellow
 
 try {
     # Get the script directory and navigate to module path
@@ -16,8 +16,8 @@ try {
     Write-Host "✓ Module imported successfully" -ForegroundColor Green
     
     # Check if the function exists
-    $function = Get-Command Apply-NipkgSnapshot -ErrorAction Stop
-    Write-Host "✓ Apply-NipkgSnapshot function found" -ForegroundColor Green
+    $function = Get-Command Install-Snapshot -ErrorAction Stop
+    Write-Host "✓ Install-Snapshot function found" -ForegroundColor Green
     
     # Check if the RemoveExistingFeeds parameter exists
     $removeExistingFeedsParam = $function.Parameters['RemoveExistingFeeds']
@@ -31,7 +31,7 @@ try {
     
     # Test the help documentation
     Write-Host "`nTesting help documentation..." -ForegroundColor Yellow
-    $help = Get-Help Apply-NipkgSnapshot -Detailed
+    $help = Get-Help Install-Snapshot -Detailed
     if ($help.parameters.parameter | Where-Object { $_.name -eq 'RemoveExistingFeeds' }) {
         Write-Host "✓ RemoveExistingFeeds parameter documented in help" -ForegroundColor Green
     } else {
@@ -50,7 +50,7 @@ try {
     }
     
     Write-Host "`n=== Test Summary ===" -ForegroundColor Yellow
-    Write-Host "Apply-NipkgSnapshot function has been successfully updated with RemoveExistingFeeds parameter!" -ForegroundColor Green
+    Write-Host "Install-Snapshot function has been successfully updated with RemoveExistingFeeds parameter!" -ForegroundColor Green
     
 } catch {
     Write-Host "✗ Test failed: $($_.Exception.Message)" -ForegroundColor Red

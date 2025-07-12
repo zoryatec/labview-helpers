@@ -2041,7 +2041,7 @@ function New-NipkgSnapshotFromSystem {
     }
 }
 
-function Apply-NipkgSnapshot {
+function Install-Snapshot {
     <#
     .SYNOPSIS
         Applies a NIPKG snapshot using declarative package management.
@@ -2123,52 +2123,52 @@ function Apply-NipkgSnapshot {
 
     .EXAMPLE
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\my-snapshot.json"
-        Apply-NipkgSnapshot -Snapshot $snapshot
+        Install-Snapshot -Snapshot $snapshot
 
     .EXAMPLE
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Apply-NipkgSnapshot -Snapshot $snapshot -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -Force
+        Install-Snapshot -Snapshot $snapshot -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -Force
 
     .EXAMPLE
         # Only add feeds, don't install packages
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Apply-NipkgSnapshot -Snapshot $snapshot -SkipPackages
+        Install-Snapshot -Snapshot $snapshot -SkipPackages
 
     .EXAMPLE
         # Remove existing feeds before applying snapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveExistingFeeds
 
     .EXAMPLE
         # Remove snapshot feeds after installation
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveSnapshotFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveSnapshotFeeds
 
     .EXAMPLE
         # Remove packages not in snapshot (exact match)
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedPackages
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveUnlistedPackages
 
     .EXAMPLE
         # Remove feeds not in snapshot (exact match)
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveUnlistedFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveUnlistedFeeds
 
     .EXAMPLE
         # Validate compliance after applying snapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ValidateCompliance
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ValidateCompliance
 
     .EXAMPLE
         # Fail if system is not compliant (for CI/CD)
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ValidateCompliance -FailOnNonCompliance
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ValidateCompliance -FailOnNonCompliance
 
     .EXAMPLE
         # Allow extra packages in development environment
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ValidateCompliance -AllowExtraPackages $true
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ValidateCompliance -AllowExtraPackages $true
 
     .EXAMPLE
         # Exclude specific packages from installation
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -ExcludePackages @("problematic-package", "optional-package")
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -ExcludePackages @("problematic-package", "optional-package")
 
     .EXAMPLE
         # Complete workflow: clean slate approach
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveExistingFeeds -RemoveUnlistedPackages -RemoveUnlistedFeeds -RemoveSnapshotFeeds
 
     .NOTES
         This function requires administrator privileges for feed addition and package installation.
@@ -2239,7 +2239,7 @@ function Apply-NipkgSnapshot {
     )
 
     begin {
-        Write-Verbose "Starting Apply-NipkgSnapshot operation"
+        Write-Verbose "Starting Install-Snapshot operation"
     }
     
     process {
@@ -2293,7 +2293,7 @@ function Apply-NipkgSnapshot {
     }
     
     end {
-        Write-Verbose "Completed Apply-NipkgSnapshot operation"
+        Write-Verbose "Completed Install-Snapshot operation"
     }
 }
 
@@ -2304,11 +2304,11 @@ function Test-NipkgSnapshotCompliance {
 
     .DESCRIPTION
         Compares the current NIPKG configuration (feeds and/or packages) against a snapshot
-        to verify compliance. This function is useful for validating that Apply-NipkgSnapshot
+        to verify compliance. This function is useful for validating that Install-Snapshot
         achieved the desired state or for ongoing compliance monitoring.
 
     .PARAMETER Snapshot
-        The snapshot object containing packages and their versions. Can be passed via pipeline from Apply-NipkgSnapshot.
+        The snapshot object containing packages and their versions. Can be passed via pipeline from Install-Snapshot.
 
     .PARAMETER NipkgCmdPath
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
@@ -2343,8 +2343,8 @@ function Test-NipkgSnapshotCompliance {
         Test-NipkgSnapshotCompliance -Snapshot $snapshot
 
     .EXAMPLE
-        # Pipeline usage with Apply-NipkgSnapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Apply-NipkgSnapshot | Test-NipkgSnapshotCompliance
+        # Pipeline usage with Install-Snapshot
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot | Test-NipkgSnapshotCompliance
 
     .EXAMPLE
         # Validate only packages, allow extra feeds

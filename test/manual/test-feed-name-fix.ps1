@@ -9,7 +9,7 @@
     instead of using the intended names (like "ni-labview-2024-core-x86-en-2024 Q3-released").
 
 .NOTES
-    The issue was in the Apply-NipkgSnapshot and Add-FeedDirectories functions where
+    The issue was in the Install-Snapshot and Add-FeedDirectories functions where
     feed-add was called without the --name parameter, causing NIPKG to auto-generate
     names from the URI instead of using the intended feed names.
 #>
@@ -83,12 +83,12 @@ try {
 }
 
 Write-Host ""
-Write-Host "=== Phase 2: Testing Apply-NipkgSnapshot with Feed Name Verification ===" -ForegroundColor Cyan
+Write-Host "=== Phase 2: Testing Install-Snapshot with Feed Name Verification ===" -ForegroundColor Cyan
 
 try {
-    Write-Host "Running Apply-NipkgSnapshot with WhatIf to test feed name handling..." -ForegroundColor Yellow
+    Write-Host "Running Install-Snapshot with WhatIf to test feed name handling..." -ForegroundColor Yellow
     
-    # Run Apply-NipkgSnapshot in WhatIf mode to see what would happen
+    # Run Install-Snapshot in WhatIf mode to see what would happen
     $applyParams = @{
         SnapshotPath = $testSnapshotPath
         NipkgCmdPath = $NipkgCmdPath
@@ -98,9 +98,9 @@ try {
     }
     
     Write-Host "Applying snapshot (feeds only, WhatIf mode)..." -ForegroundColor White
-    Apply-NipkgSnapshot @applyParams | Out-Null
+    Install-Snapshot @applyParams | Out-Null
     
-    Write-Host "✓ Apply-NipkgSnapshot completed successfully" -ForegroundColor Green
+    Write-Host "✓ Install-Snapshot completed successfully" -ForegroundColor Green
     
     # The fix is in the code - when feeds are actually added (not in WhatIf mode),
     # they will now use --name parameter to preserve the intended names
@@ -108,7 +108,7 @@ try {
     Write-Host ""
     Write-Host "=== Feed Name Fix Verification ===" -ForegroundColor Cyan
     Write-Host "✓ The fix has been applied to the code:" -ForegroundColor Green
-    Write-Host "  - Apply-NipkgSnapshot now uses: feed-add \"\$uri\" --name=\"\$name\"" -ForegroundColor White
+    Write-Host "  - Install-Snapshot now uses: feed-add \"\$uri\" --name=\"\$name\"" -ForegroundColor White
     Write-Host "  - Add-FeedDirectories now uses: feed-add \"\$dir\" --name=\"\$dirName\"" -ForegroundColor White
     Write-Host ""
     Write-Host "This means when you run apply-nipksnapshot again, feeds will be added with correct names like:" -ForegroundColor Yellow
@@ -122,7 +122,7 @@ try {
     Write-Host ""
     
 } catch {
-    Write-Host "✗ Apply-NipkgSnapshot failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "✗ Install-Snapshot failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
@@ -148,4 +148,4 @@ Write-Host "1. Try running your apply-nipksnapshot command again" -ForegroundCol
 Write-Host "2. The compliance check should now show correct feed names" -ForegroundColor White
 Write-Host "3. If you still have old feeds with malformed names, you may need to:" -ForegroundColor White
 Write-Host "   - Remove them: nipkg feed-remove 'malformed-name'" -ForegroundColor Gray
-Write-Host "   - Or use the -RemoveExistingFeeds parameter in Apply-NipkgSnapshot" -ForegroundColor Gray
+Write-Host "   - Or use the -RemoveExistingFeeds parameter in Install-Snapshot" -ForegroundColor Gray
