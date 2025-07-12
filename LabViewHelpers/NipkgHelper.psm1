@@ -108,7 +108,7 @@ function Install-Packages {
     .PARAMETER Simulate
         Perform a simulation of the installation without actually installing packages.
 
-    .PARAMETER ForceUnlocked
+    .PARAMETER ForceLocked
         Force installation even if packages are locked.
 
     .PARAMETER VerboseOutput
@@ -164,7 +164,7 @@ function Install-Packages {
         [switch]$Simulate,
         
         [Parameter()]
-        [switch]$ForceUnlocked,
+        [switch]$ForceLocked,
         
         [Parameter()]
         [switch]$VerboseOutput,
@@ -212,7 +212,7 @@ function Install-Packages {
         if ($AcceptEulas) { $arguments += "--accept-eulas" }
         if ($Yes) { $arguments += "-y" }
         if ($Simulate) { $arguments += "--simulate" }
-        if ($ForceUnlocked) { $arguments += "--force-unlocked" }
+        if ($ForceLocked) { $arguments += "--force-locked" }
         if ($VerboseOutput) { $arguments += "--verbose" }
         if ($AllowDowngrade) { $arguments += "--allow-downgrade" }
         if ($AllowUninstall) { $arguments += "--allow-uninstall" }
@@ -2242,7 +2242,7 @@ function Apply-NipkgSnapshot {
         try {
             $installSwitches = @{
                     NipkgCmdPath = $NipkgCmdPath
-                    ForceUnlocked = $true
+                    ForceLocked = $true
                     AcceptEulas = $true
                     Yes = $true
                     AllowDowngrade = $true
@@ -4085,32 +4085,29 @@ function Add-Feeds {
     begin {
         Write-Verbose "Starting Add-Feeds operation"
         $script:feedsAdded = @()
-        $script:currentFeedsLookup = $null
+        
+        # Get currently configured feeds for duplicate checking
+        Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
+        try {
+            $script:currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
+            Write-Verbose "Found $($script:currentFeeds.Count) currently configured feeds"
+        }
+        catch {
+            Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
+            $script:currentFeeds = @()
+        }
+        
+        # Create lookup table for current feeds (by name and path)
+        $script:currentFeedsLookup = @{}
+        foreach ($currentFeed in $script:currentFeeds) {
+            # Create a key combining name and normalized path for comparison
+            $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
+            $lookupKey = "$($currentFeed.Name)|$normalizedPath"
+            $script:currentFeedsLookup[$lookupKey] = $currentFeed
+        }
     }
     
     process {
-        # Get currently configured feeds on first call only
-        if ($null -eq $script:currentFeedsLookup) {
-            Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
-            try {
-                $script:currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
-                Write-Verbose "Found $($script:currentFeeds.Count) currently configured feeds"
-            }
-            catch {
-                Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
-                $script:currentFeeds = @()
-            }
-            
-            # Create lookup table for current feeds (by name and path)
-            $script:currentFeedsLookup = @{}
-            foreach ($currentFeed in $script:currentFeeds) {
-                # Create a key combining name and normalized path for comparison
-                $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
-                $lookupKey = "$($currentFeed.Name)|$normalizedPath"
-                $script:currentFeedsLookup[$lookupKey] = $currentFeed
-            }
-        }
-
         # Process the individual feed definition
         $feed = $FeedDefinition
         
