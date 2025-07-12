@@ -69,7 +69,7 @@ Changed the feed-add commands to include the `--name` parameter:
 
 4. **Verify the fix with compliance check**:
    ```powershell
-   Test-NipkgSnapshotCompliance -SnapshotPath "your-snapshot.json"
+   Test-SnapshotCompliance -SnapshotPath "your-snapshot.json"
    ```
 
 ## Expected Results After Fix

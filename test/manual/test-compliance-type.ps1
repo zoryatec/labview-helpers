@@ -78,11 +78,11 @@ Write-Host "  Testing compliance validation behavior (using -WhatIf for safety):
 
 try {
     # Since we can't easily test actual compliance without affecting the real system,
-    # let's verify that the Test-NipkgSnapshotCompliance function exists and 
+    # let's verify that the Test-SnapshotCompliance function exists and 
     # can be called with the different snapshot types
     
-    $testFunction = Get-Command Test-NipkgSnapshotCompliance -ErrorAction Stop
-    Write-Host "  ✓ Test-NipkgSnapshotCompliance function found" -ForegroundColor Green
+    $testFunction = Get-Command Test-SnapshotCompliance -ErrorAction Stop
+    Write-Host "  ✓ Test-SnapshotCompliance function found" -ForegroundColor Green
     
     # Check the function parameters
     $hasSnapshotPath = $testFunction.Parameters.ContainsKey("SnapshotPath")
@@ -91,7 +91,7 @@ try {
     Write-Host "  ✓ Function has required parameters: SnapshotPath ($hasSnapshotPath), ValidatePackages ($hasValidatePackages)" -ForegroundColor Green
     
 } catch {
-    Write-Host "  ✗ FAIL: Test-NipkgSnapshotCompliance function not found or accessible" -ForegroundColor Red
+    Write-Host "  ✗ FAIL: Test-SnapshotCompliance function not found or accessible" -ForegroundColor Red
 }
 
 # Test 3: Verify New-NipkgSnapshotFromSystem uses Type parameter correctly

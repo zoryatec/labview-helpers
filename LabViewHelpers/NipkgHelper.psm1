@@ -2297,7 +2297,7 @@ function Install-Snapshot {
     }
 }
 
-function Test-NipkgSnapshotCompliance {
+function Test-SnapshotCompliance {
     <#
     .SYNOPSIS
         Validates that the current system state matches the desired snapshot state.
@@ -2340,19 +2340,19 @@ function Test-NipkgSnapshotCompliance {
 
     .EXAMPLE
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Test-NipkgSnapshotCompliance -Snapshot $snapshot
+        Test-SnapshotCompliance -Snapshot $snapshot
 
     .EXAMPLE
         # Pipeline usage with Install-Snapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot | Test-NipkgSnapshotCompliance
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot | Test-SnapshotCompliance
 
     .EXAMPLE
         # Validate only packages, allow extra feeds
-        $snapshot | Test-NipkgSnapshotCompliance -ValidateFeeds $false -AllowExtraFeeds $true
+        $snapshot | Test-SnapshotCompliance -ValidateFeeds $false -AllowExtraFeeds $true
 
     .EXAMPLE
         # Strict validation - fail build if not compliant
-        $snapshot | Test-NipkgSnapshotCompliance -FailOnNonCompliance
+        $snapshot | Test-SnapshotCompliance -FailOnNonCompliance
 
     .NOTES
         Returns a compliance report object with detailed information about differences.
@@ -2386,7 +2386,7 @@ function Test-NipkgSnapshotCompliance {
     )
 
     begin {
-        Write-Verbose "Starting Test-NipkgSnapshotCompliance operation"
+        Write-Verbose "Starting Test-SnapshotCompliance operation"
     }
     
     process {
@@ -2504,11 +2504,11 @@ function Test-NipkgSnapshotCompliance {
     }
     
     end {
-        Write-Verbose "Completed Test-NipkgSnapshotCompliance operation"
+        Write-Verbose "Completed Test-SnapshotCompliance operation"
     }
 }
 
-function Test-NipkgSnapshotCompliance {
+function Test-SnapshotCompliance {
     <#
     .SYNOPSIS
         Validates that the current system state matches the desired snapshot state.
@@ -2543,19 +2543,19 @@ function Test-NipkgSnapshotCompliance {
         non-compliance. Defaults to $false.
 
     .EXAMPLE
-        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json"
+        Test-SnapshotCompliance -SnapshotPath "snapshot.json"
 
     .EXAMPLE
         # Validate only packages, allow extra feeds
-        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json" -ValidateFeeds $false -AllowExtraFeeds $true
+        Test-SnapshotCompliance -SnapshotPath "snapshot.json" -ValidateFeeds $false -AllowExtraFeeds $true
 
     .EXAMPLE
         # Strict validation - fail build if not compliant
-        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json" -FailOnNonCompliance
+        Test-SnapshotCompliance -SnapshotPath "snapshot.json" -FailOnNonCompliance
 
     .EXAMPLE
         # Validate feeds only with custom NIPKG path
-        Test-NipkgSnapshotCompliance -SnapshotPath "snapshot.json" -ValidatePackages $false -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        Test-SnapshotCompliance -SnapshotPath "snapshot.json" -ValidatePackages $false -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
         Returns a compliance report object with detailed information about differences.
@@ -2588,7 +2588,7 @@ function Test-NipkgSnapshotCompliance {
     )
 
     begin {
-        Write-Verbose "Starting Test-NipkgSnapshotCompliance operation"
+        Write-Verbose "Starting Test-SnapshotCompliance operation"
     }
     
     process {
@@ -2873,7 +2873,7 @@ function Test-NipkgSnapshotCompliance {
     }
     
     end {
-        Write-Verbose "Completed Test-NipkgSnapshotCompliance operation"
+        Write-Verbose "Completed Test-SnapshotCompliance operation"
     }
 }
 
@@ -4189,7 +4189,7 @@ Export-ModuleMember -Function `
     ,   Install-Snapshot `
     ,   Compare-PackageVersions `
     ,   Sync-NipkgVersionWithSnapshot `
-    ,   Test-NipkgSnapshotCompliance `
+    ,   Test-SnapshotCompliance `
     ,   Test-NipkgSnapshotDependencies `
     ,   Resolve-PackageDependencies `
     ,   Remove-DuplicatePackagesByVersion `
