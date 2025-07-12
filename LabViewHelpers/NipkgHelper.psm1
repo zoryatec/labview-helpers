@@ -2238,225 +2238,23 @@ function Apply-NipkgSnapshot {
 
     begin {
         Write-Verbose "Starting Apply-NipkgSnapshot operation"
-        
-        # Check if NIPKG command is available
-        # try {
-        #     $null = Get-Command $NipkgCmdPath -ErrorAction Stop
-        # }
-        # catch {
-        #     throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
-        # }
     }
     
     process {
         try {
-            # Import the snapshot
             Write-Information "Importing NIPKG snapshot..." -InformationAction Continue
             $snapshot = Import-NipkgSnapshotFromJson -InputPath $SnapshotPath
-            
-            # Store original package count before any filtering
-            $originalPackageCount = $snapshot.packages.Count
-            
+            $originalPackageCount = $snapshot.packages.Count    
             Write-Information "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages" -InformationAction Continue
 
-            # Track feeds added from the snapshot for potential removal later
             $snapshotFeedsAdded = @()
-
-            # Note: NIPKG version sync moved to Phase 1.5 (after feeds are added and updated)
-            # This allows the sync to access packages from the newly added offline feeds
-
-            # Phase 0: Remove existing feeds if requested
-            if ($RemoveExistingFeeds -and -not $SkipFeeds) {
-                Write-Information "Phase 0: Removing existing feeds from NIPKG..." -InformationAction Continue
-                
-                try {
-                    # Get current feeds
-                    $existingFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
-                    
-                    if ($existingFeeds -and $existingFeeds.Count -gt 0) {
-                        Write-Information "Found $($existingFeeds.Count) existing feed(s) to remove" -InformationAction Continue
-                        
-                        Write-Information "Removed $($existingFeeds.Count) existing feed(s)" -InformationAction Continue
-                    } else {
-                        Write-Information "No existing feeds found to remove" -InformationAction Continue
-                    }
-                }
-                catch {
-                    Write-Warning "Failed to remove existing feeds: $($_.Exception.Message)"
-                    # Continue with the rest of the operation even if feed removal fails
-                }
-            }
-
-            # Phase 1: Add feeds (declarative approach)
             if (-not $SkipFeeds -and $snapshot.feeds.Count -gt 0) {
-                Write-Information "Phase 1: Processing feeds in declarative mode..." -InformationAction Continue
-                
-                # Get currently configured feeds
-                Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
-                try {
-                    $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
-                    Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
-                }
-                catch {
-                    Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
-                    $currentFeeds = @()
-                }
-                
-                # Create lookup table for current feeds (by name and path)
-                $currentFeedsLookup = @{}
-                foreach ($currentFeed in $currentFeeds) {
-                    # Create a key combining name and normalized path for comparison
-                    $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
-                    $lookupKey = "$($currentFeed.Name)|$normalizedPath"
-                    $currentFeedsLookup[$lookupKey] = $currentFeed
-                }
-                
-                Write-Information "Processing $($snapshot.feeds.Count) feeds from snapshot..." -InformationAction Continue
-                
-                foreach ($feed in $snapshot.feeds) {
-                    # Normalize the snapshot feed URI for comparison
-                    $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
-                    $feedLookupKey = "$($feed.name)|$normalizedUri"
-                    
-                    # Check if this feed already exists with the same name and URI
-                    if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
-                        Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
-                        Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
-                        
-                        # Still track it as a snapshot feed in case we need to remove it later
-                        $snapshotFeedsAdded += $feed
-                    }
-                    else {
-                        # Check if a feed with the same name but different URI exists
-                        $existingFeedWithSameName = $currentFeeds | Where-Object { $_.Name -eq $feed.name }
-                        if ($existingFeedWithSameName) {
-                            Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
-                        }
-                        
-                        # Feed doesn't exist - add it
-                        try {
-                            Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
-                            Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
-                            
-                            & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)"
-                            
-                            if ($LASTEXITCODE -eq 0) {
-                                $snapshotFeedsAdded += $feed
-                                Write-Verbose "Successfully added feed: $($feed.name)"
-                            } else {
-                                Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
-                            }
-                        }
-                        catch {
-                            Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
-                        }
-                    }
-                }
-
-                # Always update package database before package operations
-                Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
-                
-                # Update package database to ensure all packages from all feeds are available
-                & $NipkgCmdPath update
-                
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Information "Package database updated successfully" -InformationAction Continue
-                } else {
-                    Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
-                    Write-Warning "This may cause package installation failures due to missing package information"
-                }
-
-                # Phase 1.5: Sync NIPKG version with snapshot if requested (after feeds are available)
-                if ($SyncNipkgVersion) {
-                    Write-Information "Phase 1.5: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
-                    
-                    try {
-                        $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
-                        
-                        if ($syncResult.VersionChanged) {
-                            Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
-                            
-                            # After NIPKG version change, update package database again to ensure compatibility
-                            Write-Information "Updating package database after NIPKG version change..." -InformationAction Continue
-                            & $NipkgCmdPath update
-                            
-                            if ($LASTEXITCODE -eq 0) {
-                                Write-Information "Package database re-updated successfully after NIPKG sync" -InformationAction Continue
-                            } else {
-                                Write-Warning "Package database re-update failed after NIPKG sync (exit code: $LASTEXITCODE)"
-                            }
-                        } else {
-                            Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
-                        }
-                    }
-                    catch {
-                        Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
-                        # Continue with the rest of the process - this is not a critical failure
-                    }
-                }
-            } else {
-                Write-Information "Skipping feed addition (SkipFeeds=$SkipFeeds, Feed count=$($snapshot.feeds.Count))" -InformationAction Continue
-                
-                # Even if feeds are skipped, update package database before package operations
-                if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
-                    Write-Information "Updating package database before package operations..." -InformationAction Continue
-                    
-                    & $NipkgCmdPath update
-                    
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Information "Package database updated successfully" -InformationAction Continue
-                    } else {
-                        Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
-                        Write-Warning "This may cause package installation failures due to missing package information"
-                    }
-                    
-                    # Phase 1.5: Sync NIPKG version with snapshot if requested (even when feeds are skipped)
-                    if ($SyncNipkgVersion) {
-                        Write-Information "Phase 1.5: Synchronizing NIPKG version with snapshot..." -InformationAction Continue
-                        
-                        try {
-                            $syncResult = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath $NipkgCmdPath -Verbose:$VerbosePreference
-                            
-                            if ($syncResult.VersionChanged) {
-                                Write-Information "NIPKG version synchronized: $($syncResult.OldVersion) -> $($syncResult.NewVersion)" -InformationAction Continue
-                                
-                                # After NIPKG version change, update package database again to ensure compatibility
-                                Write-Information "Updating package database after NIPKG version change..." -InformationAction Continue
-                                & $NipkgCmdPath update
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    Write-Information "Package database re-updated successfully after NIPKG sync" -InformationAction Continue
-                                } else {
-                                    Write-Warning "Package database re-update failed after NIPKG sync (exit code: $LASTEXITCODE)"
-                                }
-                            } else {
-                                Write-Information "NIPKG version sync completed - no change needed" -InformationAction Continue
-                            }
-                        }
-                        catch {
-                            Write-Warning "Failed to sync NIPKG version: $($_.Exception.Message)"
-                            # Continue with the rest of the process - this is not a critical failure
-                        }
-                    }
-                }
+                $snapshotFeedsAdded = $snapshot.feeds |
+                                        Add-Feeds -FeedDefinitions  -NipkgCmdPath $NipkgCmdPath
             }
 
-            # Phase 2: Install packages (declarative approach)
             if (-not $SkipPackages -and $snapshot.packages.Count -gt 0) {
-                Write-Information "Phase 2: Processing packages in installation order..." -InformationAction Continue
-                
-                # Get currently installed packages
-                Write-Information "Retrieving currently installed packages..." -InformationAction Continue
-                try {
-                    $installedPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
-                    Write-Verbose "Found $($installedPackages.Count) currently installed packages"
-                }
-                catch {
-                    Write-Warning "Failed to get installed packages list: $($_.Exception.Message)"
-                    $installedPackages = @()
-                }
 
-                # Batch installation using pipeline and hashtable for switches
                 $installSwitches = @{
                     NipkgCmdPath = $NipkgCmdPath
                     AcceptEulas = $true
@@ -2466,219 +2264,15 @@ function Apply-NipkgSnapshot {
                     InstallAlsoUpgrades = $true
                 }
                 
-                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
-                
-                # Since Install-Packages throws on error, we reach here only on success
-                $results.PackagesInstalled = $snapshot.packages.Count
-
-                # Filter out excluded packages if specified
-                $originalPackageCount = $snapshot.packages.Count
-                if ($ExcludePackages.Count -gt 0) {
-                    Write-Information "Filtering out $($ExcludePackages.Count) excluded packages: $($ExcludePackages -join ', ')" -InformationAction Continue
-                    
-                    $filteredPackages = @()
-                    $excludedPackagesFound = @()
-                    
-                    foreach ($snapshotPackage in $snapshot.packages) {
-                        if ($snapshotPackage.name -in $ExcludePackages) {
-                            $excludedPackagesFound += $snapshotPackage.name
-                            Write-Verbose "Excluding package: $($snapshotPackage.name) v$($snapshotPackage.version)"
-                        } else {
-                            $filteredPackages += $snapshotPackage
-                        }
-                    }
-                    
-                    # Update the snapshot packages with filtered list
-                    $snapshot.packages = $filteredPackages
-                    
-                    Write-Information "Package filtering complete: $($originalPackageCount) -> $($snapshot.packages.Count) packages (excluded: $($excludedPackagesFound.Count))" -InformationAction Continue
-                    
-                    if ($excludedPackagesFound.Count -gt 0) {
-                        Write-Information "Excluded packages: $($excludedPackagesFound -join ', ')" -InformationAction Continue
-                    }
-                    
-                    # Check for packages that were requested to be excluded but not found
-                    $notFoundExclusions = $ExcludePackages | Where-Object { $_ -notin $excludedPackagesFound }
-                    if ($notFoundExclusions.Count -gt 0) {
-                        Write-Warning "The following excluded packages were not found in the snapshot: $($notFoundExclusions -join ', ')"
-                    }
-                }
-
-                # Batch installation using pipeline and hashtable for switches
-                $installSwitches = @{
-                    NipkgCmdPath = $NipkgCmdPath
-                    AcceptEulas = $true
-                    Yes = $true
-                    AllowDowngrade = $true
-                    AllowUninstall = $true
-                    InstallAlsoUpgrades = $true
-                }
-                
-                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | Install-Packages @installSwitches
-                
-                # Since Install-Packages throws on error, we reach here only on success
-                Write-Information "Package installation completed successfully" -InformationAction Continue
-                
-            } else {
-                Write-Information "Skipping package installation (SkipPackages=$SkipPackages, Package count=$($snapshot.packages.Count))" -InformationAction Continue
+                Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot | 
+                Install-Packages @installSwitches   
             }
 
-            # Phase 3: Remove unlisted feeds if requested
-            if ($RemoveUnlistedFeeds -and -not $SkipFeeds) {
-                Write-Information "Phase 3: Removing feeds not listed in snapshot..." -InformationAction Continue
-                
-                # Get current feeds (refresh the list in case it changed during feed addition)
-                try {
-                    $currentConfiguredFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
-                    Write-Verbose "Found $($currentConfiguredFeeds.Count) currently configured feeds for unlisted feed removal"
-                }
-                catch {
-                    Write-Warning "Failed to get current configured feeds for unlisted removal: $($_.Exception.Message)"
-                    $currentConfiguredFeeds = @()
-                }
-                
-                if ($currentConfiguredFeeds.Count -gt 0) {
-                    # Create a set of feed names and URIs from the snapshot for quick lookup
-                    $snapshotFeedLookup = @{}
-                    foreach ($snapshotFeed in $snapshot.feeds) {
-                        # Use same normalization as in Phase 1
-                        $normalizedUri = $snapshotFeed.uri -replace '\\', '/' -replace '/$', ''
-                        $feedLookupKey = "$($snapshotFeed.name)|$normalizedUri"
-                        $snapshotFeedLookup[$feedLookupKey] = $true
-                    }
-                    
-                    # Find feeds that are configured but not in the snapshot
-                    $feedsToRemove = @()
-                    foreach ($configuredFeed in $currentConfiguredFeeds) {
-                        $normalizedPath = $configuredFeed.Path -replace '\\', '/' -replace '/$', ''
-                        $currentFeedKey = "$($configuredFeed.Name)|$normalizedPath"
-                        
-                        if (-not $snapshotFeedLookup.ContainsKey($currentFeedKey)) {
-                            $feedsToRemove += $configuredFeed
-                        }
-                    }
-                    
-                    if ($feedsToRemove.Count -gt 0) {
-                        Write-Information "Found $($feedsToRemove.Count) unlisted feeds to remove" -InformationAction Continue
-                        Write-Warning "About to remove $($feedsToRemove.Count) feeds not listed in snapshot. This could remove important system feeds!" -WarningAction Continue
-                        
-                        foreach ($feedToRemove in $feedsToRemove) {
-                            try {
-                                Write-Information "Removing unlisted feed: $($feedToRemove.Name) -> $($feedToRemove.Path)" -InformationAction Continue
-                                & $NipkgCmdPath feed-remove "$($feedToRemove.Name)"
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    Write-Verbose "Successfully removed unlisted feed $($feedToRemove.Name)"
-                                } elseif ($LASTEXITCODE -eq -125079) {
-                                    # Feed doesn't exist or is not enabled - this can happen if:
-                                    # 1. Feed was already removed by a previous operation
-                                    # 2. Feed is disabled
-                                    # 3. Feed path no longer exists
-                                    # We'll treat this as a successful removal since the goal is achieved
-                                    Write-Verbose "Feed '$($feedToRemove.Name)' was already removed or not enabled - goal achieved"
-                                } else {
-                                    Write-Warning "Failed to remove unlisted feed '$($feedToRemove.Name)' (exit code: $LASTEXITCODE)"
-                                }
-                            }
-                            catch {
-                                Write-Warning "Exception removing unlisted feed $($feedToRemove.Name): $($_.Exception.Message)"
-                            }
-                        }
-                    } else {
-                        Write-Information "No unlisted feeds found to remove" -InformationAction Continue
-                    }
-                } else {
-                    Write-Information "No configured feeds found for unlisted feed removal" -InformationAction Continue
-                }
-            } elseif ($RemoveUnlistedFeeds -and $SkipFeeds) {
-                Write-Information "Skipping unlisted feed removal (SkipFeeds=True)" -InformationAction Continue
-            }
-
-            # Phase 4: Remove unlisted packages if requested
-            if ($RemoveUnlistedPackages -and -not $SkipPackages) {
-                Write-Information "Phase 4: Removing packages not listed in snapshot..." -InformationAction Continue
-                
-                # Get current installed packages (refresh the list in case it changed during installation)
-                try {
-                    $currentInstalledPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
-                    Write-Verbose "Found $($currentInstalledPackages.Count) currently installed packages for unlisted package removal"
-                }
-                catch {
-                    Write-Warning "Failed to get current installed packages for unlisted removal: $($_.Exception.Message)"
-                    $currentInstalledPackages = @()
-                }
-                
-                if ($currentInstalledPackages.Count -gt 0) {
-                    # Create a set of package names from the snapshot for quick lookup
-                    $snapshotPackageNames = @{}
-                    foreach ($pkg in $snapshot.packages) {
-                        $snapshotPackageNames[$pkg.name] = $true
-                    }
-                    
-                    # Find packages that are installed but not in the snapshot
-                    $packagesToRemove = @()
-                    foreach ($installedPkg in $currentInstalledPackages) {
-                        if (-not $snapshotPackageNames.ContainsKey($installedPkg.Package)) {
-                            $packagesToRemove += $installedPkg
-                        }
-                    }
-                    
-                    if ($packagesToRemove.Count -gt 0) {
-                        Write-Information "Found $($packagesToRemove.Count) unlisted packages to remove" -InformationAction Continue
-                        Write-Warning "About to remove $($packagesToRemove.Count) packages not listed in snapshot. This could remove important system packages!" -WarningAction Continue
-                        
-                        foreach ($packageToRemove in $packagesToRemove) {
-                            try {
-                                Write-Information "Removing unlisted package: $($packageToRemove.Package) v$($packageToRemove.Version)" -InformationAction Continue
-                                & $NipkgCmdPath remove $($packageToRemove.Package) -y
-                                
-                                if ($LASTEXITCODE -eq 0) {
-                                    Write-Verbose "Successfully removed unlisted package $($packageToRemove.Package)"
-                                } else {
-                                    Write-Warning "Failed to remove unlisted package $($packageToRemove.Package) (exit code: $LASTEXITCODE)"
-                                }
-                            }
-                            catch {
-                                Write-Warning "Exception removing unlisted package $($packageToRemove.Package): $($_.Exception.Message)"
-                            }
-                        }
-                    } else {
-                        Write-Information "No unlisted packages found to remove" -InformationAction Continue
-                    }
-                } else {
-                    Write-Information "No installed packages found for unlisted package removal" -InformationAction Continue
-                }
-            } elseif ($RemoveUnlistedPackages -and $SkipPackages) {
-                Write-Information "Skipping unlisted package removal (SkipPackages=True)" -InformationAction Continue
-            }
-
-            # Phase 5: Remove snapshot feeds if requested
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
-                Write-Information "Phase 5: Removing snapshot feeds after package operations..." -InformationAction Continue
-                
-                try {
-                    # Convert snapshot feeds to the format expected by Remove-Feeds
-                    $feedsToRemove = $snapshotFeedsAdded | ForEach-Object {
-                        [PSCustomObject]@{
-                            name = $_.name
-                            uri = $_.uri
-                            enabled = $true
-                        }
-                    }
-                    
-                    Write-Information "Removing $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
-                    Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
-                    Write-Information "Successfully removed $($feedsToRemove.Count) snapshot feed(s)" -InformationAction Continue
-                }
-                catch {
-                    Write-Warning "Failed to remove snapshot feeds: $($_.Exception.Message)"
-                    # Continue - this is not a critical failure
-                }
-            } elseif ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -eq 0) {
-                Write-Information "No snapshot feeds were added, nothing to remove" -InformationAction Continue
-            }
+                $snapshotFeedsAdded | 
+                Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath $NipkgCmdPath
+            } 
 
-            # Summary
             Write-Information "Snapshot application completed successfully" -InformationAction Continue
 
             # Create simple result object focused on compliance
@@ -2695,7 +2289,7 @@ function Apply-NipkgSnapshot {
                 Write-Information "Phase 6: Validating system compliance with snapshot..." -InformationAction Continue
                 
                 try {
-                    $complianceResult = Test-NipkgSnapshotCompliance -SnapshotPath $SnapshotPath -NipkgCmdPath $NipkgCmdPath -ValidateFeeds (-not $SkipFeeds) -ValidatePackages (-not $SkipPackages) -AllowExtraFeeds $AllowExtraFeeds -AllowExtraPackages $AllowExtraPackages -FailOnNonCompliance:$FailOnNonCompliance
+                    Test-NipkgSnapshotCompliance -SnapshotPath $SnapshotPath -NipkgCmdPath $NipkgCmdPath -ValidateFeeds (-not $SkipFeeds) -ValidatePackages (-not $SkipPackages) -AllowExtraFeeds $AllowExtraFeeds -AllowExtraPackages $AllowExtraPackages -FailOnNonCompliance:$FailOnNonCompliance
                     
                     # Add compliance information to the results
                     $applyResult.ComplianceValidated = $true
@@ -4440,8 +4034,145 @@ function Get-PackageDefinitionsFromSnapshot {
     }
 }
 
+function Add-Feeds {
+    <#
+    .SYNOPSIS
+        Adds feeds to the system, avoiding duplicates.
+
+    .DESCRIPTION
+        This function adds feeds to the system. It checks for existing feeds
+        by comparing both name and URI to avoid duplicates. If a feed with the same name but different
+        URI already exists, it will show a warning but still attempt to add the new feed.
+
+        After adding feeds, it updates the package database to ensure the latest package information
+        is available.
+
+    .PARAMETER FeedDefinitions
+        Array of feed objects containing 'name' and 'uri' properties to be added.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .OUTPUTS
+        Returns an array of feeds that were successfully added to the system.
+
+    .EXAMPLE
+        $feeds = @(
+            @{ name = "my-feed"; uri = "C:\feeds\my-feed" },
+            @{ name = "online-feed"; uri = "https://example.com/feed" }
+        )
+        $addedFeeds = Add-Feeds -FeedDefinitions $feeds
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        $addedFeeds = Add-Feeds -FeedDefinitions $snapshot.feeds -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+    #>
+    
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$FeedDefinitions,
+        
+        [Parameter()]
+        [string]$NipkgCmdPath = 'nipkg'
+    )
+
+    begin {
+        Write-Verbose "Starting Add-Feeds operation"
+    }
+    
+    process {
+        $feedsAdded = @()
+
+        if ($FeedDefinitions.Count -eq 0) {
+            Write-Information "No feeds to add" -InformationAction Continue
+            return $feedsAdded
+        }
+
+        # Get currently configured feeds
+        Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
+        try {
+            $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $NipkgCmdPath
+            Write-Verbose "Found $($currentFeeds.Count) currently configured feeds"
+        }
+        catch {
+            Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
+            $currentFeeds = @()
+        }
+        
+        # Create lookup table for current feeds (by name and path)
+        $currentFeedsLookup = @{}
+        foreach ($currentFeed in $currentFeeds) {
+            # Create a key combining name and normalized path for comparison
+            $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
+            $lookupKey = "$($currentFeed.Name)|$normalizedPath"
+            $currentFeedsLookup[$lookupKey] = $currentFeed
+        }
+        
+        Write-Information "Processing $($FeedDefinitions.Count) feeds..." -InformationAction Continue
+        
+        foreach ($feed in $FeedDefinitions) {
+            # Normalize the feed URI for comparison
+            $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
+            $feedLookupKey = "$($feed.name)|$normalizedUri"
+            
+            # Check if this feed already exists with the same name and URI
+            if ($currentFeedsLookup.ContainsKey($feedLookupKey)) {
+                Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
+                Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
+                
+                # Still track it as an added feed in case we need to remove it later
+                $feedsAdded += $feed
+            }
+            else {
+                # Check if a feed with the same name but different URI exists
+                $existingFeedWithSameName = $currentFeeds | Where-Object { $_.Name -eq $feed.name }
+                if ($existingFeedWithSameName) {
+                    Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
+                }
+                
+                # Feed doesn't exist - add it
+                try {
+                    Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
+                    Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
+                    
+                    & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)" 2>&1
+                    
+                    if ($LASTEXITCODE -eq 0) {
+                        $feedsAdded += $feed
+                        Write-Verbose "Successfully added feed: $($feed.name)"
+                    } else {
+                        Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
+                    }
+                }
+                catch {
+                    Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
+                }
+            }
+        }
+
+        Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
+        & $NipkgCmdPath update 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Information "Package database updated successfully" -InformationAction Continue
+        } else {
+            Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+            Write-Warning "This may cause package installation failures due to missing package information"
+        }
+
+        return $feedsAdded
+    }
+    
+    end {
+        Write-Verbose "Completed Add-Feeds operation"
+    }
+}
+
 Export-ModuleMember -Function `
-        Add-FeedDirectories `
+        Add-Feeds `
+    ,   Add-FeedDirectories `
     ,   Test-NipkgAvailability `
     ,   Get-NipkgCommandOutput `
     ,   ConvertFrom-NipkgOutput `
