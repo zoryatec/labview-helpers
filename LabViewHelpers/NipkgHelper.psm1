@@ -1823,50 +1823,20 @@ function New-SnapshotFromSystem {
     .PARAMETER IncludeFeeds
         Whether to include current feed configuration in the snapshot. Defaults to $true.
 
-    .PARAMETER Type
-        Specifies the type of snapshot to create. Valid values are:
-        - Full: Include all packages
-        - UserVisible: Include only packages where UserVisible is 'yes'
-        - StoreProduct: Include only packages where StoreProduct is 'yes' (default behavior)
 
-    .EXAMPLE
-        $snapshot = New-SnapshotFromSystem
-
-    .EXAMPLE
-        $snapshot = New-SnapshotFromSystem -PackageType "installed" -IncludeFeeds $true
-
-    .EXAMPLE
-        $snapshot = New-SnapshotFromSystem -PackageType "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
-
-    .EXAMPLE
-        # Create snapshot with only user-visible packages from current system
-        $snapshot = New-SnapshotFromSystem -Type "UserVisible"
-
-    .NOTES
-        Returns a hashtable with:
-        - type: Snapshot type (Full, UserVisible, StoreProduct)
-        - feeds: Array of current feeds with name and uri (if IncludeFeeds is true)
-        - packages: Array of packages with name and version based on PackageType and Type filter
-        
-        This function is useful for creating backups of the current system state or 
-        for creating snapshots to replicate on other systems.
     #>
     [CmdletBinding()]
     param (
-        [Parameter()]
-        [ValidateSet("installed", "available")]
-       
-        
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$NipkgCmdPath = "nipkg",
         
         [Parameter()]
         [bool]$IncludeFeeds = $true,
-        
+
         [Parameter()]
-        [ValidateSet("Full", "UserVisible", "StoreProduct")]
-        [string]$Type = "StoreProduct"
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
+        
     )
 
     begin {
@@ -1876,7 +1846,6 @@ function New-SnapshotFromSystem {
     process {
         try {
             Write-Information "Creating NIPKG snapshot from current system state..." -InformationAction Continue
-            Write-Verbose "Package type: $PackageType, Include feeds: $IncludeFeeds, Snapshot type: $Type"
 
             # Initialize collections
             $feedsInfo = @()
@@ -1900,12 +1869,10 @@ function New-SnapshotFromSystem {
                 Write-Information "Skipping feed configuration (IncludeFeeds=$IncludeFeeds)" -InformationAction Continue
             }
 
-            # Get packages information
-            Write-Information "Retrieving $PackageType packages information..." -InformationAction Continue
-            Write-Verbose "Getting packages info for type: $PackageType"
+
             
             try {
-                $packagesInfo = Get-PackagesInfoFromNipkgCmd -Type $PackageType -NipkgCmdPath $NipkgCmdPath
+                $packagesInfo = Get-PackagesInfoFromNipkgCmd -Type "Installed" -NipkgCmdPath $NipkgCmdPath
                 Write-Verbose "Retrieved $($packagesInfo.Count) packages from system"
                 Write-Information "Found $($packagesInfo.Count) $PackageType package(s)" -InformationAction Continue
             }
@@ -1918,10 +1885,10 @@ function New-SnapshotFromSystem {
             Write-Information "Creating snapshot object..." -InformationAction Continue
             Write-Verbose "Creating snapshot with type '$Type', $($feedsInfo.Count) feeds and $($packagesInfo.Count) packages"
             
-            $snapshot = New-Snapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo -Type $Type
+            $snapshot = New-Snapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo -FilterFunction $FilterFunction
             
             Write-Information "System snapshot created successfully" -InformationAction Continue
-            Write-Verbose "Snapshot contains type '$($snapshot.type)', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            Write-Verbose "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
             return $snapshot
         }
@@ -2097,7 +2064,7 @@ function Install-Snapshot {
     }
 }
 
-function Test-SnapshotCompliance {
+function Test-Snapshot {
     <#
     .SYNOPSIS
         Validates that the current system state matches the desired snapshot state.
@@ -2140,19 +2107,19 @@ function Test-SnapshotCompliance {
 
     .EXAMPLE
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Test-SnapshotCompliance -Snapshot $snapshot
+        Test-Snapshot -Snapshot $snapshot
 
     .EXAMPLE
         # Pipeline usage with Install-Snapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot | Test-SnapshotCompliance
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot | Test-Snapshot
 
     .EXAMPLE
         # Validate only packages, allow extra feeds
-        $snapshot | Test-SnapshotCompliance -ValidateFeeds $false -AllowExtraFeeds $true
+        $snapshot | Test-Snapshot -ValidateFeeds $false -AllowExtraFeeds $true
 
     .EXAMPLE
         # Strict validation - fail build if not compliant
-        $snapshot | Test-SnapshotCompliance -FailOnNonCompliance
+        $snapshot | Test-Snapshot -FailOnNonCompliance
 
     .NOTES
         Returns a compliance report object with detailed information about differences.
@@ -2186,7 +2153,7 @@ function Test-SnapshotCompliance {
     )
 
     begin {
-        Write-Verbose "Starting Test-SnapshotCompliance operation"
+        Write-Verbose "Starting Test-Snapshot operation"
     }
     
     process {
@@ -2304,7 +2271,7 @@ function Test-SnapshotCompliance {
     }
     
     end {
-        Write-Verbose "Completed Test-SnapshotCompliance operation"
+        Write-Verbose "Completed Test-Snapshot operation"
     }
 }
 
@@ -3620,7 +3587,7 @@ Export-ModuleMember -Function `
     ,   Install-Snapshot `
     ,   Compare-PackageVersions `
     ,   Sync-NipkgVersionWithSnapshot `
-    ,   Test-SnapshotCompliance `
+    ,   Test-Snapshot `
     ,   Test-NipkgSnapshotDependencies `
     ,   Resolve-PackageDependencies `
     ,   Remove-DuplicatePackagesByVersion `

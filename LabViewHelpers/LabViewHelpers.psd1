@@ -81,7 +81,7 @@
         "Install-Snapshot",
         "Compare-PackageVersions",
         "Sync-NipkgVersionWithSnapshot",
-        "Test-SnapshotCompliance",
+        "Test-Snapshot",
         "Test-NipkgSnapshotDependencies",
         "Resolve-PackageDependencies"
     )

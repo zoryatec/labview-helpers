@@ -28,4 +28,4 @@ if ($RemoveSnapshotFeeds) {
 
 
 $installerSnapshot | Install-Snapshot @installParams
-Test-SnapshotCompliance -NipkgCmdPath $nipkgCmdPath -Snapshot $installerSnapshot
+Test-Snapshot -NipkgCmdPath $nipkgCmdPath -Snapshot $installerSnapshot

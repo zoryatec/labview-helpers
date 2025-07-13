@@ -273,28 +273,23 @@ function Install-LabViewOffline {
             if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
                 $InstallationSnapshotFile  =  New-TemporaryFile 
             }
-            $installerSnapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $LabViewInstallerDirectory -Verbose
-            Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
-            
-            # Build parameters using PSBoundParameters for cleaner switch handling
+            $installerSnapshot = New-SnapshotFromInstallerDirectory `
+                                        -InstallerDirectory $LabViewInstallerDirectory `
+                                        -FilterFunction {  @($input) | & (Get-StoreProductPackages) | & (Get-ApplicationSoftwarePackages)} `
+                                        -Verbose
 
-            
-            # Add switch parameters that were actually provided
-            foreach ($param in 'RemoveExistingFeeds', 'RemoveSnapshotFeeds') {
-                if ($PSBoundParameters.ContainsKey($param)) {
-                    $installParams[$param] = $true
-                }
-            }
-            
-            $snapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
+            Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
+            $installerSnapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
 
             $installParams = @{
                 NipkgCmdPath = $nipkgCmdPath
-                Snapshot = $snapshot
+                Snapshot = $installerSnapshot
+                RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
+                RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
             }
             
             Install-Snapshot @installParams
-            Test-SnapshotCompliance -NipkgCmdPath $NipkgCmdPath -Snapshot $snapshot
+            Test-Snapshot -NipkgCmdPath $NipkgCmdPath -Snapshot $installerSnapshot
 
         }
         catch {

@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests the Test-SnapshotCompliance functionality.
+    Tests the Test-Snapshot functionality.
 
 .DESCRIPTION
-    Tests that Test-SnapshotCompliance correctly validates system state
+    Tests that Test-Snapshot correctly validates system state
     against snapshot requirements with various validation options.
 #>
 
@@ -49,7 +49,7 @@ try {
     
     # Test compliance against itself (should be perfect)
     Write-Host "Testing compliance against current system snapshot..." -ForegroundColor Cyan
-    $complianceResult = Test-SnapshotCompliance -SnapshotPath $currentSnapshotPath -NipkgCmdPath $nipkgCmdPath -Verbose
+    $complianceResult = Test-Snapshot -SnapshotPath $currentSnapshotPath -NipkgCmdPath $nipkgCmdPath -Verbose
     
     if ($complianceResult.OverallCompliant) {
         Write-Host "✓ Perfect compliance test PASSED" -ForegroundColor Green
@@ -82,7 +82,7 @@ try {
         
         # Test compliance (should fail due to extra feeds)
         Write-Host "Testing compliance with extra feeds not allowed..." -ForegroundColor Cyan
-        $complianceResult = Test-SnapshotCompliance -SnapshotPath $subsetSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidatePackages $false -AllowExtraFeeds $false
+        $complianceResult = Test-Snapshot -SnapshotPath $subsetSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidatePackages $false -AllowExtraFeeds $false
         
         if (-not $complianceResult.OverallCompliant -and $complianceResult.ExtraFeeds.Count -gt 0) {
             Write-Host "✓ Extra feeds non-compliance test PASSED" -ForegroundColor Green
@@ -93,7 +93,7 @@ try {
         
         # Test compliance with extra feeds allowed (should pass)
         Write-Host "Testing compliance with extra feeds allowed..." -ForegroundColor Cyan
-        $complianceResult2 = Test-SnapshotCompliance -SnapshotPath $subsetSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidatePackages $false -AllowExtraFeeds $true
+        $complianceResult2 = Test-Snapshot -SnapshotPath $subsetSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidatePackages $false -AllowExtraFeeds $true
         
         if ($complianceResult2.FeedsCompliant) {
             Write-Host "✓ Allow extra feeds test PASSED" -ForegroundColor Green
@@ -129,7 +129,7 @@ try {
     
     # Test without FailOnNonCompliance (should return non-compliant but not throw)
     Write-Host "Testing without FailOnNonCompliance..." -ForegroundColor Cyan
-    $complianceResult = Test-SnapshotCompliance -SnapshotPath $fakeSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidateFeeds $false
+    $complianceResult = Test-Snapshot -SnapshotPath $fakeSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidateFeeds $false
     
     if (-not $complianceResult.OverallCompliant -and $complianceResult.MissingPackages.Count -gt 0) {
         Write-Host "✓ Non-compliance detection PASSED (no exception thrown)" -ForegroundColor Green
@@ -141,7 +141,7 @@ try {
     # Test with FailOnNonCompliance (should throw exception)
     Write-Host "Testing with FailOnNonCompliance..." -ForegroundColor Cyan
     try {
-        $complianceResult2 = Test-SnapshotCompliance -SnapshotPath $fakeSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidateFeeds $false -FailOnNonCompliance
+        $complianceResult2 = Test-Snapshot -SnapshotPath $fakeSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidateFeeds $false -FailOnNonCompliance
         Write-Host "✗ FailOnNonCompliance test FAILED (no exception thrown)" -ForegroundColor Red
     }
     catch {
@@ -168,7 +168,7 @@ try {
     if (Test-Path $currentSnapshotPath) {
         # Test feeds only validation
         Write-Host "Testing feeds-only validation..." -ForegroundColor Cyan
-        $feedsOnlyResult = Test-SnapshotCompliance -SnapshotPath $currentSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidatePackages $false
+        $feedsOnlyResult = Test-Snapshot -SnapshotPath $currentSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidatePackages $false
         
         if ($feedsOnlyResult.FeedsValidated -and -not $feedsOnlyResult.PackagesValidated) {
             Write-Host "✓ Feeds-only validation PASSED" -ForegroundColor Green
@@ -178,7 +178,7 @@ try {
         
         # Test packages only validation
         Write-Host "Testing packages-only validation..." -ForegroundColor Cyan
-        $packagesOnlyResult = Test-SnapshotCompliance -SnapshotPath $currentSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidateFeeds $false
+        $packagesOnlyResult = Test-Snapshot -SnapshotPath $currentSnapshotPath -NipkgCmdPath $nipkgCmdPath -ValidateFeeds $false
         
         if (-not $packagesOnlyResult.FeedsValidated -and $packagesOnlyResult.PackagesValidated) {
             Write-Host "✓ Packages-only validation PASSED" -ForegroundColor Green
@@ -225,10 +225,10 @@ Write-Host "✓ Selective validation (feeds/packages)" -ForegroundColor Green
 Write-Host ""
 Write-Host "USAGE EXAMPLES:" -ForegroundColor White
 Write-Host "# Basic compliance check" -ForegroundColor Gray
-Write-Host "Test-SnapshotCompliance -SnapshotPath 'snapshot.json'" -ForegroundColor Gray
+Write-Host "Test-Snapshot -SnapshotPath 'snapshot.json'" -ForegroundColor Gray
 Write-Host ""
 Write-Host "# Strict validation for CI/CD" -ForegroundColor Gray
-Write-Host "Test-SnapshotCompliance -SnapshotPath 'snapshot.json' -FailOnNonCompliance" -ForegroundColor Gray
+Write-Host "Test-Snapshot -SnapshotPath 'snapshot.json' -FailOnNonCompliance" -ForegroundColor Gray
 Write-Host ""
 Write-Host "# Allow extra packages in development" -ForegroundColor Gray
-Write-Host "Test-SnapshotCompliance -SnapshotPath 'snapshot.json' -AllowExtraPackages `$true" -ForegroundColor Gray
+Write-Host "Test-Snapshot -SnapshotPath 'snapshot.json' -AllowExtraPackages `$true" -ForegroundColor Gray

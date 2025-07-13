@@ -23,7 +23,7 @@ The NI Package Manager (NIPKG) Helper module's Type parameter functionality has 
 
 ### 2. Enhanced Compliance Validation
 
-#### Test-SnapshotCompliance Function
+#### Test-Snapshot Function
 - **ENHANCED**: Now uses the Type from the original snapshot for compliance validation
 - **Previous Behavior**: Always used all installed packages for compliance checking
 - **New Behavior**: Creates a system snapshot with the same Type filter as the original snapshot for accurate comparison
@@ -96,7 +96,7 @@ $snapshot = New-SnapshotFromSystem -Type "StoreProduct"
 Export-NipkgSnapshotToJson -Snapshot $snapshot -OutputPath "store-products.json"
 
 # Compliance validation now uses StoreProduct filtering for comparison
-$compliance = Test-SnapshotCompliance -SnapshotPath "store-products.json"
+$compliance = Test-Snapshot -SnapshotPath "store-products.json"
 # This will only compare StoreProduct packages, not all installed packages
 ```
 
@@ -138,7 +138,7 @@ $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $dir
 ```powershell
 # No code changes needed - compliance validation now automatically
 # uses the correct Type from the original snapshot for comparison
-$result = Test-SnapshotCompliance -SnapshotPath "snapshot.json"
+$result = Test-Snapshot -SnapshotPath "snapshot.json"
 ```
 
 The updated implementation provides better defaults for commercial software scenarios while maintaining full backward compatibility for users who need the previous behavior.

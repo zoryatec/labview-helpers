@@ -7,7 +7,7 @@
 # Import the module
 Import-Module -Name $PSScriptRoot/../../../LabViewHelpers/LabViewHelpers.psd1 -Force
 
-Write-Host "Testing Test-SnapshotCompliance function..." -ForegroundColor Cyan
+Write-Host "Testing Test-Snapshot function..." -ForegroundColor Cyan
 
 # Test with minimal snapshot (should show compliance)
 $testSnapshot = @{
@@ -20,7 +20,7 @@ $testSnapshot | ConvertTo-Json | Set-Content -Path $tempPath
 
 try {
     Write-Host "Testing minimal snapshot compliance..." -ForegroundColor Yellow
-    $result = Test-SnapshotCompliance -SnapshotPath $tempPath -ValidateFeeds $false -ValidatePackages $false
+    $result = Test-Snapshot -SnapshotPath $tempPath -ValidateFeeds $false -ValidatePackages $false
     
     Write-Host "✓ Function executed successfully" -ForegroundColor Green
     Write-Host "Compliance Result: $($result.OverallCompliant)" -ForegroundColor Green
