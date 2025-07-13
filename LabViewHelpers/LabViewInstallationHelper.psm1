@@ -273,9 +273,14 @@ function Install-LabViewOffline {
             if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
                 $InstallationSnapshotFile  =  New-TemporaryFile 
             }
+            $filterFunction  = {  @($input) |
+                                     & (Get-StoreProductPackages) |
+                                     Where-Object {$_.Package -ne 'ni-labview-2025-linx-toolkit-x86'}
+                                    }
+                                    
             $installerSnapshot = New-SnapshotFromInstallerDirectory `
                                         -InstallerDirectory $LabViewInstallerDirectory `
-                                        -FilterFunction {  @($input) | & (Get-StoreProductPackages) } `
+                                        -FilterFunction $filterFunction `
                                         -Verbose
 
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose

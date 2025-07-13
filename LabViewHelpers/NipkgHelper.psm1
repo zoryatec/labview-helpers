@@ -2012,17 +2012,6 @@ function Install-Snapshot {
     
     process {
         try {
-            $installSwitches = @{
-                    NipkgCmdPath = $NipkgCmdPath
-                    ForceLocked = $true
-                    AcceptEulas = $true
-                    Yes = $true
-                    AllowDowngrade = $true
-                    AllowUninstall = $true
-                    InstallAlsoUpgrades = $true
-                    IncludeRecommended = $true
-                }
-
             Write-Information "Applying NIPKG snapshot..." -InformationAction Continue
             $originalPackageCount = $Snapshot.packages.Count    
             Write-Information "Snapshot contains $($Snapshot.feeds.Count) feeds and $($Snapshot.packages.Count) packages" -InformationAction Continue
@@ -2040,7 +2029,19 @@ function Install-Snapshot {
 
             if (-not $SkipPackagesInstallation -and $Snapshot.packages.Count -gt 0) {
                 Write-Information "Installing Packages..."
-                Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot | Install-Packages @installSwitches   
+                $packagesToInstall = Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot
+                $installSwitches = @{
+                    NipkgCmdPath = $NipkgCmdPath
+                    ForceLocked = $true
+                    AcceptEulas = $true
+                    Yes = $true
+                    AllowDowngrade = $true
+                    AllowUninstall = $true
+                    InstallAlsoUpgrades = $true
+                    IncludeRecommended = $true
+                    PackageDefinitions = $packagesToInstall
+                }
+                Install-Packages @installSwitches   
             }
 
             if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
