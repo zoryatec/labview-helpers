@@ -277,7 +277,7 @@ function Install-LabViewOffline {
                                         -InstallerDirectory $LabViewInstallerDirectory `
                                         -FilterFunction $FilterFunction
 
-            if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
+            if (-not [string]::IsNullOrEmpty($InstallationSnapshotFile)) {
                 Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
                 $installerSnapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
             }
