@@ -2267,7 +2267,7 @@ function Test-SnapshotCompliance {
     param (
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
-        [hashtable]$Snapshot,
+        $Snapshot,
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
