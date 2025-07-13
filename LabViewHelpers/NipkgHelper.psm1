@@ -976,68 +976,104 @@ function Get-PackagesInfoFromPackagesFile {
 function Get-DriverPackages {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$PackagesInfo 
     )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Drivers" }
-    return $filteredPackages | Sort-Object Package
+    
+    process {
+        foreach ($package in $PackagesInfo) {
+            if ($package.Section -eq "Drivers") {
+                Write-Output $package
+            }
+        }
+    }
 }
 
 function Get-ProgrammingEnvironmentsPackages {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$PackagesInfo 
     )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Programming Environments" }
-    return $filteredPackages | Sort-Object Package
+    
+    process {
+        foreach ($package in $PackagesInfo) {
+            if ($package.Section -eq "Programming Environments") {
+                Write-Output $package
+            }
+        }
+    }
 }
 
 function Get-UtilitiesPackages {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$PackagesInfo 
     )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Utilities" }
-    return $filteredPackages | Sort-Object Package
+    
+    process {
+        foreach ($package in $PackagesInfo) {
+            if ($package.Section -eq "Utilities") {
+                Write-Output $package
+            }
+        }
+    }
 }
 
 
 function Get-ApplicationSoftwarePackages {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$PackagesInfo 
     )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Application Software" }
-    return $filteredPackages | Sort-Object Package
+    
+    process {
+        foreach ($package in $PackagesInfo) {
+            if ($package.Section -eq "Application Software") {
+                Write-Output $package
+            }
+        }
+    }
 }
 
 function Get-StoreProductPackages {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$PackagesInfo 
     )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.StoreProduct -eq 'yes' }
-    return $filteredPackages | Sort-Object Package
+    
+    process {
+        foreach ($package in $PackagesInfo) {
+            if ($package.StoreProduct -eq 'yes') {
+                Write-Output $package
+            }
+        }
+    }
 }
 
 function Get-UserVisiblePackages {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$PackagesInfo 
     )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.UserVisible -eq 'yes' }
-    return $filteredPackages | Sort-Object Package
+    
+    process {
+        foreach ($package in $PackagesInfo) {
+            if ($package.UserVisible -eq 'yes') {
+                Write-Output $package
+            }
+        }
+    }
 }
 
 function Install-NipkgManager {
