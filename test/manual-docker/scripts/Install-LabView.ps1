@@ -20,7 +20,7 @@ Install-PackagesFromInstallerIso  `
     -IsoFilePath $installerIsoPath `
     -RemoveIsoFile `
     -RemoveTemporaryDirectory `
-    -FilterFunction $filterFunction
+    -FilterFunction $filterFunction `
     -AcceptEulas
 
 
