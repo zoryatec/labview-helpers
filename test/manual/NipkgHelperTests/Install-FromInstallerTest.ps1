@@ -14,22 +14,18 @@ Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $installerSn
 
 
 
-$applyParams = @{
-    SnapshotPath = $installerSnapshotPath
+$installParams = @{
     NipkgCmdPath = $nipkgCmdPath
-    Verbose = $true
-    ValidateCompliance = $true
-    SyncNipkgVersion = $false
-    ExcludePackages = $ExcludePackages
 }
 
 if ($RemoveExistingFeeds) {
-    $applyParams.RemoveExistingFeeds = $false
+    $installParams.RemoveExistingFeeds = $true
 }
 
 if ($RemoveSnapshotFeeds) {
-    $applyParams.RemoveSnapshotFeeds = $false
+    $installParams.RemoveSnapshotFeeds = $true
 }
 
-Install-Snapshot @applyParams
 
+$installerSnapshot | Install-Snapshot @installParams
+Test-SnapshotCompliance -NipkgCmdPath $nipkgCmdPath -Snapshot $installerSnapshot
