@@ -15,7 +15,7 @@ $VerbosePreference = 'Continue'
 
 $filterFunction = {  @($input) | & (Get-ProgrammingEnvironmentsPackages)}
 
-Install-LabViewIso `
+Install-PackagesFromInstallerIso  `
     -NipkgInstallerPath $nipkgInstallerPath `
     -IsoFilePath $installerIsoPath `
     -RemoveIsoFile `
