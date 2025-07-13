@@ -251,7 +251,10 @@ function Install-LabViewOffline {
         [switch]$RemoveExistingFeeds,
 
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
     begin {
@@ -269,30 +272,30 @@ function Install-LabViewOffline {
                 Write-Information "Installing NIPKG manager first..." -InformationAction Continue
                 Install-NipkgManager -InstallerPath $NipkgInstallerPath
             }
-
-            if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
-                $InstallationSnapshotFile  =  New-TemporaryFile 
-            }
-            $filterFunction  = {  @($input) |
-                                     & (Get-StoreProductPackages) |
-                                     Where-Object {$_.Package -ne 'ni-labview-2025-linx-toolkit-x86'}
-                                    }
                                     
             $installerSnapshot = New-SnapshotFromInstallerDirectory `
                                         -InstallerDirectory $LabViewInstallerDirectory `
-                                        -FilterFunction $filterFunction `
-                                        -Verbose
+                                        -FilterFunction $FilterFunction
 
-            Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
-            $installerSnapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
+            if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
+                Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
+                $installerSnapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
+            }
 
             $installParams = @{
-                NipkgCmdPath = $nipkgCmdPath
+                NipkgCmdPath = $NipkgCmdPath
                 Snapshot = $installerSnapshot
+                AcceptEulas = $true
+                Yes = $true
+                ForceLocked = $true
+                AllowDowngrade = $true
+                AllowUninstall = $true
+                InstallAlsoUpgrades = $true
+                IncludeRecommended = $true
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
             }
-            
+
             Install-Snapshot @installParams
             Test-Snapshot -NipkgCmdPath $NipkgCmdPath -Snapshot $installerSnapshot
 
@@ -476,7 +479,10 @@ function Install-LabViewIso {
         [switch]$RemoveIsoFile,
 
         [Parameter()]
-        [switch]$RemoveTemporaryDirectory
+        [switch]$RemoveTemporaryDirectory,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
     begin {
@@ -510,7 +516,8 @@ function Install-LabViewIso {
                 LabViewInstallerDirectory = $TemporaryExpandDirectory
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
-            }
+                FilterFunction = $FilterFunction
+            }   
             
             # Add optional string parameter if provided
             if ($NipkgInstallerPath) {

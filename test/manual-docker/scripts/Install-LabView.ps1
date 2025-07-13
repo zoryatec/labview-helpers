@@ -11,11 +11,16 @@ $nipkgInstallerPath = "C:\\installer-nipkg\Install.exe"
 $nipkgCmdPath = "$nipkgCmdContainingDir\\nipkg.exe"
 $gcdCmdPath = "$gcdCmdContainingDir\\gcd.exe"
 
+$VerbosePreference = 'Continue'
+
+$filterFunction = {  @($input) | & (Get-ProgrammingEnvironmentsPackages)}
+
 Install-LabViewIso `
     -NipkgInstallerPath $nipkgInstallerPath `
     -IsoFilePath $installerIsoPath `
     -RemoveIsoFile `
-    -RemoveTemporaryDirectory
+    -RemoveTemporaryDirectory `
+    -FilterFunction $filterFunction
 
 
 Set-LabViewForCi `

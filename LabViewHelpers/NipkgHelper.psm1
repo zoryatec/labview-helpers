@@ -1905,83 +1905,6 @@ function New-SnapshotFromSystem {
 }
 
 function Install-Snapshot {
-    <#
-    .SYNOPSIS
-        Applies a NIPKG snapshot using declarative package management.
-
-    .DESCRIPTION
-        Applies a NIPKG snapshot using declarative package management:
-        1. Analyzing current feed state vs. snapshot requirements and only adding missing feeds
-        2. Updating the package database if any feeds were added
-        3. Analyzing current package state vs. snapshot requirements
-        4. Installing missing packages, upgrading outdated packages, and downgrading newer packages
-        5. Leaving unchanged feeds and packages alone
-        
-        The function compares the current system state with the snapshot and only performs
-        necessary actions, making it safe to run multiple times (idempotent).
-
-    .PARAMETER Snapshot
-        The snapshot object containing feeds and packages to apply to the system.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .PARAMETER SkipFeedsInstallation
-        Skip adding feeds from the snapshot (only manage packages).
-
-    .PARAMETER SkipPackagesInstallation
-        Skip managing packages from the snapshot (only add feeds).
-
-    .PARAMETER Force
-        Force operations even if they might cause issues (used for downgrades).
-
-    .PARAMETER RemoveExistingFeeds
-        Remove all existing feeds from the system before applying the snapshot feeds.
-
-    .PARAMETER RemoveSnapshotFeeds
-        Remove the snapshot feeds from the system after package operations are complete.
-        This is useful when you want to install packages from specific feeds but don't want
-        to keep those feeds permanently in the system.
-
-    .EXAMPLE
-        $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\my-snapshot.json"
-        Install-Snapshot -Snapshot $snapshot
-
-    .EXAMPLE
-        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Install-Snapshot -Snapshot $snapshot -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -Force
-
-    .EXAMPLE
-        # Only add feeds, don't install packages
-        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        Install-Snapshot -Snapshot $snapshot -SkipPackagesInstallation
-
-    .EXAMPLE
-        # Remove existing feeds before applying snapshot
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveExistingFeeds
-
-    .EXAMPLE
-        # Remove snapshot feeds after installation
-        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot -RemoveSnapshotFeeds
-
-    .NOTES
-        This function requires administrator privileges for feed addition and package installation.
-        The operation can take significant time depending on the number of packages.
-        
-        PACKAGE DATABASE UPDATES:
-        The function automatically runs 'nipkg update' before package installation to ensure
-        the package database contains the latest information from all configured feeds. This
-        happens regardless of whether feeds were added during this operation. If you see 
-        "Missing packages" errors, verify that:
-        1. All required feeds are accessible and contain the missing packages
-        2. The 'nipkg update' command completed successfully (check the output)
-        3. Network connectivity is available for online feeds
-        
-        By default, packages are installed using batch installation with hardcoded flags 
-        (--allow-downgrade --allow-uninstall --install-also-upgrades) to give NIPKG maximum 
-        flexibility in resolving dependencies. The --include-recommended flag is NOT used to 
-        prevent automatic installation of dependencies that should be installed in the intended order.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
@@ -2002,7 +1925,31 @@ function Install-Snapshot {
         [switch]$RemoveExistingFeeds,
         
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+        
+        [Parameter()]
+        [switch]$Yes,
+        
+        [Parameter()]
+        [switch]$Simulate,
+        
+        [Parameter()]
+        [switch]$ForceLocked,
+        
+        [Parameter()]
+        [switch]$AllowDowngrade,
+        
+        [Parameter()]
+        [switch]$AllowUninstall,
+        
+        [Parameter()]
+        [switch]$InstallAlsoUpgrades,
+        
+        [Parameter()]
+        [switch]$IncludeRecommended
     
     )
 
@@ -2013,7 +1960,6 @@ function Install-Snapshot {
     process {
         try {
             Write-Information "Applying NIPKG snapshot..." -InformationAction Continue
-            $originalPackageCount = $Snapshot.packages.Count    
             Write-Information "Snapshot contains $($Snapshot.feeds.Count) feeds and $($Snapshot.packages.Count) packages" -InformationAction Continue
 
             if($RemoveExistingFeeds) {
@@ -2032,13 +1978,13 @@ function Install-Snapshot {
                 $packagesToInstall = Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot
                 $installSwitches = @{
                     NipkgCmdPath = $NipkgCmdPath
-                    ForceLocked = $true
-                    AcceptEulas = $true
-                    Yes = $true
-                    AllowDowngrade = $true
-                    AllowUninstall = $true
-                    InstallAlsoUpgrades = $true
-                    IncludeRecommended = $true
+                    AcceptEulas = $AcceptEulas
+                    Yes = $Yes
+                    ForceLocked = $ForceLocked
+                    AllowDowngrade = $AllowDowngrade
+                    AllowUninstall = $AllowUninstall
+                    InstallAlsoUpgrades = $InstallAlsoUpgrades
+                    IncludeRecommended = $IncludeRecommended
                     PackageDefinitions = $packagesToInstall
                 }
                 Install-Packages @installSwitches   
