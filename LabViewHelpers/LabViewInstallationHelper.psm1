@@ -275,7 +275,8 @@ function Install-LabViewOffline {
             }
             $installerSnapshot = New-SnapshotFromInstallerDirectory `
                                         -InstallerDirectory $LabViewInstallerDirectory `
-                                        -FilterFunction {  @($input) | & (Get-StoreProductPackages) | & (Get-ApplicationSoftwarePackages)} `
+                                        # -FilterFunction {  @($input) | & (Get-StoreProductPackages) | & (Get-ApplicationSoftwarePackages)} `
+                                        -FilterFunction {  @($input) | & (Get-StoreProductPackages) }`
                                         -Verbose
 
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
