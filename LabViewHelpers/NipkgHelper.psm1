@@ -2136,37 +2136,11 @@ function Install-Snapshot {
         [switch]$SkipPackagesInstallation,
         
         [Parameter()]
-        [switch]$Force,
-        
-        [Parameter()]
         [switch]$RemoveExistingFeeds,
         
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds,
-        
-        [Parameter()]
-        [switch]$RemoveUnlistedPackages,
-        
-        [Parameter()]
-        [switch]$RemoveUnlistedFeeds,
-        
-        [Parameter()]
-        [switch]$ValidateCompliance,
-        
-        [Parameter()]
-        [switch]$FailOnNonCompliance,
-        
-        [Parameter()]
-        [bool]$AllowExtraFeeds = $false,
-        
-        [Parameter()]
-        [bool]$AllowExtraPackages = $false,
-        
-        [Parameter()]
-        [switch]$SyncNipkgVersion,
-        
-        [Parameter()]
-        [string[]]$ExcludePackages = @()
+        [switch]$RemoveSnapshotFeeds
+    
     )
 
     begin {

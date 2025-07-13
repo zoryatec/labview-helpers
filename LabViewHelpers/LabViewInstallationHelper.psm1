@@ -251,10 +251,7 @@ function Install-LabViewOffline {
         [switch]$RemoveExistingFeeds,
 
         [Parameter()]
-        [switch]$RemoveSnapshotFeeds,
-
-        [Parameter()]
-        [string[]]$ExcludePackages = @()
+        [switch]$RemoveSnapshotFeeds
     )
     
     begin {
@@ -282,7 +279,6 @@ function Install-LabViewOffline {
             # Build parameters using PSBoundParameters for cleaner switch handling
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
-                ExcludePackages = $ExcludePackages
             }
             
             # Add switch parameters that were actually provided
