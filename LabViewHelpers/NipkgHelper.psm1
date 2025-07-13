@@ -2190,9 +2190,7 @@ function Install-Snapshot {
                 $snapshotFeedsAdded | Remove-Feeds -NipkgCmdPath $NipkgCmdPath
             } 
 
-            Write-Information "Snapshot application completed successfully"
-
-            return $Snapshot
+            Write-Information "Snapshot application completed successfully" -InformationAction Continue
         }
         catch {
             $errorMessage = "Failed to apply NIPKG snapshot. Error: $($_.Exception.Message)"
@@ -2203,6 +2201,8 @@ function Install-Snapshot {
     
     end {
         Write-Verbose "Completed Install-Snapshot operation"
+        # Return the snapshot for pipeline continuation
+        return $Snapshot
     }
 }
 
