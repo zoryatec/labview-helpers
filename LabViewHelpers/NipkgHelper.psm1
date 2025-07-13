@@ -228,7 +228,7 @@ function Install-Packages {
             }
             -125071 {
                 Write-Warning "Installation completed successfully but requires system restart (exit code: $exitCode)"
-                $LASTEXITCODE = 0
+                $global:LASTEXITCODE = 0
             }
             default {
                 throw "Batch installation failed with exit code: $exitCode"
