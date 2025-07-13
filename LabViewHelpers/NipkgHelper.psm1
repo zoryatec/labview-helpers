@@ -1034,9 +1034,16 @@ function Get-ApplicationSoftwarePackages {
     )
     
     process {
-        foreach ($package in $PackagesInfo) {
-            if ($package.Section -eq "Application Software") {
-                Write-Output $package
+        # Handle both individual objects and arrays
+        if ($PackagesInfo -is [System.Array]) {
+            foreach ($package in $PackagesInfo) {
+                if ($package.Section -eq "Application Software") {
+                    Write-Output $package
+                }
+            }
+        } else {
+            if ($PackagesInfo.Section -eq "Application Software") {
+                Write-Output $PackagesInfo
             }
         }
     }
@@ -1051,9 +1058,16 @@ function Get-StoreProductPackages {
     )
     
     process {
-        foreach ($package in $PackagesInfo) {
-            if ($package.StoreProduct -eq 'yes') {
-                Write-Output $package
+        # Handle both individual objects and arrays
+        if ($PackagesInfo -is [System.Array]) {
+            foreach ($package in $PackagesInfo) {
+                if ($package.StoreProduct -eq 'yes') {
+                    Write-Output $package
+                }
+            }
+        } else {
+            if ($PackagesInfo.StoreProduct -eq 'yes') {
+                Write-Output $PackagesInfo
             }
         }
     }
@@ -1195,11 +1209,9 @@ function New-Snapshot {
     .PARAMETER PackagesInfo
         PSCustomObject containing package information from Get-PackagesInfoFromNipkgCmd.
 
-    .PARAMETER Type
-        Specifies the type of snapshot to create. Valid values are:
-        - Full: Include all packages (default behavior)
-        - UserVisible: Include only packages where UserVisible is 'yes'
-        - StoreProduct: Include only packages where StoreProduct is 'yes'
+    .PARAMETER FilterFunction
+        Optional scriptblock or function name to filter packages. If not provided, all packages are included.
+        The filter function should accept pipeline input and return filtered packages.
 
     .EXAMPLE
         $feeds = Get-FeedDefinitionsFromSystem
@@ -1207,18 +1219,21 @@ function New-Snapshot {
         $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages
 
     .EXAMPLE
-        # Create snapshot with only user-visible packages
-        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
+        # Create snapshot with only user-visible packages using filter function
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -FilterFunction { Get-UserVisiblePackages }
 
     .EXAMPLE
         # Create snapshot with only store products
-        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -FilterFunction { Get-StoreProductPackages }
+
+    .EXAMPLE
+        # Create snapshot with chained filters
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -FilterFunction { Get-UserVisiblePackages | Get-StoreProductPackages }
 
     .NOTES
         Returns a hashtable with:
-        - type: Snapshot type (Full, UserVisible, or StoreProduct)
         - feeds: Array of feeds with name and uri
-        - packages: Array of packages with name and version (filtered based on Type)
+        - packages: Array of packages with name and version (filtered based on FilterFunction)
         - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies ordered for installation (only present when exactly one ni-package-manager package is found)
         
         The packages-nipkg section includes all dependencies for the ni-package-manager package
@@ -1241,8 +1256,7 @@ function New-Snapshot {
         [PSCustomObject[]]$PackagesInfo,
         
         [Parameter()]
-        [ValidateSet("Full", "UserVisible", "StoreProduct")]
-        [string]$Type = "Full"
+        [scriptblock]$FilterFunction
     )
 
     begin {
@@ -1250,60 +1264,21 @@ function New-Snapshot {
     }
     
     process {
-        try {
-            Write-Verbose "Formatting feeds information"
-
-            # Check for multiple ni-package-manager packages BEFORE ordering/filtering
-            Write-Verbose "Checking for multiple ni-package-manager packages in input..."
-            $nipkgPackagesInInput = $PackagesInfo | Where-Object { 
-                $_.Package -eq "ni-package-manager"
-            }
+        try {    
+            $filteredPackages = $PackagesInfo
             
-            if ($nipkgPackagesInInput.Count -gt 1) {
-                $errorMessage = "Multiple ni-package-manager packages found ($($nipkgPackagesInInput.Count) instances). Only exactly one ni-package-manager package is allowed per snapshot. Found packages: $($nipkgPackagesInInput | ForEach-Object { "$($_.Package) v$($_.Version)" } | Join-String -Separator ', ')"
-                Write-Error -Message $errorMessage -Category InvalidData
-                throw $errorMessage
-            }
-
-            # Order packages for installation, allowing circular dependencies which are common in real systems
-            Write-Verbose "Ordering packages for optimal installation sequence..."
-            try {
-                $filteredPackages = Get-PackageInstallationOrder -PackagesInfo $PackagesInfo -AllowCircularDependencies
-                Write-Verbose "Successfully ordered $($filteredPackages.Count) packages (circular dependencies allowed)"
-            } catch {
-                Write-Warning "Package ordering failed, using original order: $($_.Exception.Message)"
-                $filteredPackages = $PackagesInfo
-            }
-            
-            # Filter packages by category
-            # $programingEnvironmentsPackages = Get-ProgrammingEnvironmentsPackages -PackagesInfo $PackagesInfo
-            # $driversPackages = Get-DriverPackages -PackagesInfo $PackagesInfo
-            # $applicationPackages = Get-ApplicationSoftwarePackages -PackagesInfo $PackagesInfo
-            # $utilitiesPackages = Get-UtilitiesPackages -PackagesInfo $PackagesInfo
-
-            # $filteredPackages = @($programingEnvironmentsPackages) + @($driversPackages) + @($applicationPackages) + @($utilitiesPackages) | Where-Object { $_ -ne $null }
-
-            Write-Verbose "Filtered packages: $($filteredPackages.Count) total packages from programming environments, drivers, applications, and utilities"
-            
-            # Apply type-based filtering
-            Write-Verbose "Applying snapshot type filtering: $Type"
-            $originalCount = $filteredPackages.Count
-            
-            switch ($Type) {
-                "UserVisible" {
-                    $filteredPackages = $filteredPackages | Get-UserVisiblePackages
-                    Write-Verbose "Filtered to UserVisible packages: $($filteredPackages.Count) (was $originalCount)"
+            if ($FilterFunction) {
+                Write-Verbose "Applying custom filter function..."
+                $originalCount = $filteredPackages.Count
+                
+                try {
+                    $filteredPackages = $filteredPackages | & $FilterFunction
+                    Write-Verbose "Filtered packages using custom function: $($filteredPackages.Count) (was $originalCount)"
+                } catch {
+                    Write-Warning "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
                 }
-                "StoreProduct" {
-                    $filteredPackages = $filteredPackages | Get-StoreProductPackages
-                    Write-Verbose "Filtered to StoreProduct packages: $($filteredPackages.Count) (was $originalCount)"
-                }
-                "Full" {
-                    Write-Verbose "Using all packages (Full type): $($filteredPackages.Count)"
-                }
-                default {
-                    Write-Warning "Unknown snapshot type '$Type', using Full type"
-                }
+            } else {
+                Write-Verbose "No filter function provided, using all packages: $($filteredPackages.Count)"
             }
             
             # Convert feeds to desired format
@@ -1331,7 +1306,7 @@ function New-Snapshot {
             $packagesNipkg = @()
             
             # Find ni-package-manager packages in the filtered packages (already validated above)
-            $nipkgPackages = $filteredPackages | Where-Object { 
+            $nipkgPackages = $PackagesInfo | Where-Object { 
                 $_.Package -eq "ni-package-manager"
             }
             
@@ -1391,7 +1366,6 @@ function New-Snapshot {
             
             # Create the snapshot object
             $snapshot = @{
-                type = $Type
                 feeds = $feeds
                 packages = $packages
             }
@@ -1405,9 +1379,9 @@ function New-Snapshot {
             }
             
             if ($packagesNipkg.Count -gt 0) {
-                Write-Verbose "Snapshot object contains type '$Type', $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
+                Write-Verbose "Snapshot object contains $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
             } else {
-                Write-Verbose "Snapshot object contains type '$Type', $($feeds.Count) feeds and $($packages.Count) packages"
+                Write-Verbose "Snapshot object contains $($feeds.Count) feeds and $($packages.Count) packages"
             }
             
             return $snapshot
@@ -1722,11 +1696,9 @@ function New-SnapshotFromInstallerDirectory {
     .PARAMETER IncludeFeeds
         Whether to include feed information in the snapshot. Defaults to $true.
 
-    .PARAMETER Type
-        Specifies the type of snapshot to create. Valid values are:
-        - Full: Include all packages
-        - UserVisible: Include only packages where UserVisible is 'yes'
-        - StoreProduct: Include only packages where StoreProduct is 'yes' (default behavior)
+    .PARAMETER FilterFunction
+        Optional scriptblock or function name to filter packages. If not provided, defaults to Get-StoreProductPackages.
+        The filter function should accept pipeline input and return filtered packages.
 
     .EXAMPLE
         $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
@@ -1736,7 +1708,11 @@ function New-SnapshotFromInstallerDirectory {
 
     .EXAMPLE
         # Create snapshot with only user-visible packages from installer
-        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -Type "UserVisible"
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -FilterFunction { Get-UserVisiblePackages }
+
+    .EXAMPLE
+        # Create snapshot with chained filters from installer
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -FilterFunction { Get-UserVisiblePackages | Get-ProgrammingEnvironmentsPackages }
 
     .NOTES
         Returns a hashtable with:
@@ -1762,8 +1738,7 @@ function New-SnapshotFromInstallerDirectory {
         [bool]$IncludeFeeds = $true,
         
         [Parameter()]
-        [ValidateSet("Full", "UserVisible", "StoreProduct")]
-        [string]$Type = "StoreProduct"
+        [scriptblock]$FilterFunction = { $input | Get-StoreProductPackages }
     )
 
     begin {
@@ -1885,9 +1860,9 @@ function New-SnapshotFromInstallerDirectory {
             $uniquePackages = Remove-DuplicatePackagesByVersion -PackagesInfo $allPackages
             Write-Information "After duplicate removal: $($uniquePackages.Count) unique packages (removed $($allPackages.Count - $uniquePackages.Count) duplicates)" -InformationAction Continue
 
-            $snapshot = New-Snapshot -FeedsInfo $allFeeds -PackagesInfo $uniquePackages -Type $Type
+            $snapshot = New-Snapshot -FeedsInfo $allFeeds -PackagesInfo $uniquePackages -FilterFunction $FilterFunction
             
-            Write-Verbose "Created snapshot with type '$Type', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            Write-Verbose "Created snapshot with $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
             return $snapshot
         }
