@@ -288,9 +288,9 @@ function Install-LabViewOffline {
                 }
             }
             
-            Import-NipkgSnapshotFromJson $InstallationSnapshotFile |
-            Install-Snapshot @installParams |
-            Test-SnapshotCompliance -NipkgCmdPath $NipkgCmdPath
+            $snapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile |
+                        Install-Snapshot @installParams
+            Test-SnapshotCompliance -NipkgCmdPath $NipkgCmdPath -Snapshot $snapshot
 
         }
         catch {
