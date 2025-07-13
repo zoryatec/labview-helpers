@@ -28,7 +28,7 @@ $tempSnapshotFile = "$tempDirectory/installation-snapshot.json"
 
 $installParams = @{
     NipkgCmdPath = $NipkgCmdPath
-    LabViewInstallerDirectory = $TemporaryExpandDirectory
+    LabViewInstallerDirectory = $installerDirectory
     RemoveExistingFeeds = $true
     RemoveSnapshotFeeds = $true
     InstallationSnapshotFile = $tempSnapshotFile
