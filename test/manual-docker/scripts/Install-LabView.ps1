@@ -13,7 +13,7 @@ $gcdCmdPath = "$gcdCmdContainingDir\\gcd.exe"
 
 $VerbosePreference = 'Continue'
 
-$filterFunction = {  @($input) | & (Get-ProgrammingEnvironmentsPackages)}
+$filterFunction = {  @($input) | Where-Object { $_.Package -eq 'ni-labview-2025-core-x86-en'}}
 
 Install-PackagesFromInstallerIso  `
     -NipkgInstallerPath $nipkgInstallerPath `
@@ -21,6 +21,7 @@ Install-PackagesFromInstallerIso  `
     -RemoveIsoFile `
     -RemoveTemporaryDirectory `
     -FilterFunction $filterFunction
+    -AcceptEulas
 
 
 Set-LabViewForCi `

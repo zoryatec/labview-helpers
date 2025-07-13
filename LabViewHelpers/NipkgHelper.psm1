@@ -1,55 +1,7 @@
 #Requires -Version 5.1
 
-<#
-.SYNOPSIS
-    NI Package Manager (NIPKG) Helper Module
-
-.DESCRIPTION
-    Provides comprehensive functions for managing National Instruments packages using NIPKG.
-    Supports feed management, package installation, and package information retrieval.
-    
-    ARCHITECTURE:
-    The module uses a modular approach for package information retrieval:
-    - Get-NipkgCommandOutput: Executes NIPKG commands and returns raw output
-    - ConvertFrom-NipkgOutput: Parses raw NIPKG command output (3+ blank line separators)
-    - ConvertFrom-NipkgPackagesFile: Parses NIPKG Packages files (single blank line separators)
-    - Get-PackagesInfoFromNipkgCmd: Convenience function combining command execution and parsing
-    - Get-PackagesInfoFromPackagesFile: Parses NIPKG feed Packages files
-    - New-SnapshotFromInstallerDirectory: Creates snapshots from installer directory structures
-    - New-SnapshotFromSystem: Creates snapshots from current system state
-    
-    This separation allows for flexible data sources and easier testing.
-
-.NOTES
-    File Name      : NipkgHelper.psm1
-    Author         : LabVIEW Helpers Team
-    Prerequisite   : PowerShell 5.1 or higher, NIPKG installed
-    Copyright 2025 : LabVIEW Helpers
-#>
 
 function ConvertTo-PackageSpecifications {
-    <#
-    .SYNOPSIS
-        Converts package definitions to NIPKG package specifications.
-
-    .DESCRIPTION
-        Validates package definitions and converts them to package specifications
-        in the format "package=version" for use with NIPKG commands.
-
-    .PARAMETER PackageDefinitions
-        Array of PSCustomObjects containing package information with Package and Version properties.
-
-    .EXAMPLE
-        $packages = @(
-            [PSCustomObject]@{ Package = "ni-labview-2025"; Version = "25.1.3" }
-            [PSCustomObject]@{ Package = "ni-vision-runtime"; Version = "2025.1.0" }
-        )
-        $specs = ConvertTo-PackageSpecifications -PackageDefinitions $packages
-
-    .NOTES
-        Returns array of package specifications in "package=version" format.
-        Invalid package definitions are skipped with warnings.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -82,72 +34,6 @@ function ConvertTo-PackageSpecifications {
 }
 
 function Install-Packages {
-    <#
-    .SYNOPSIS
-        Installs packages using NI Package Manager with configurable options.
-
-    .DESCRIPTION
-        A reusable function that installs packages from the pipeline using NIPKG with support
-        for all standard installation options. Each package definition should contain Package
-        and Version properties. This function provides a consistent interface for package
-        installation across different scenarios.
-
-    .PARAMETER PackageDefinitions
-        Array of PSCustomObjects containing package information with Package and Version properties.
-        Accepts input from the pipeline.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .PARAMETER AcceptEulas
-        Automatically accept End User License Agreements during installation.
-
-    .PARAMETER Yes
-        Automatically answer 'yes' to all prompts during installation.
-
-    .PARAMETER Simulate
-        Perform a simulation of the installation without actually installing packages.
-
-    .PARAMETER ForceLocked
-        Force installation even if packages are locked.
-
-    .PARAMETER VerboseOutput
-        Enable verbose output from NIPKG command.
-
-    .PARAMETER AllowDowngrade
-        Allow downgrading packages to older versions if necessary.
-
-    .PARAMETER AllowUninstall
-        Allow uninstalling packages during dependency resolution.
-
-    .PARAMETER InstallAlsoUpgrades
-        Also install available upgrades for existing packages.
-
-    .PARAMETER IncludeRecommended
-        Include recommended packages during installation.
-
-    .EXAMPLE
-        $packages = @(
-            [PSCustomObject]@{ Package = "ni-labview-2025"; Version = "25.1.3" }
-            [PSCustomObject]@{ Package = "ni-vision-runtime"; Version = "2025.1.0" }
-        )
-        Install-Packages -PackageDefinitions $packages -AcceptEulas -Yes
-
-    .EXAMPLE
-        # Install packages with all options enabled
-        Install-Packages -PackageDefinitions $packages -NipkgCmdPath "C:\Program Files\NI\nipkg.exe" -AcceptEulas -Yes -AllowDowngrade -AllowUninstall -InstallAlsoUpgrades
-
-    .EXAMPLE
-        # Simulate installation to see what would happen
-        Install-Packages -PackageDefinitions $packages -Simulate
-        
-        # Or with explicit verbose output
-        Install-Packages -PackageDefinitions $packages -Simulate -VerboseOutput
-
-    .NOTES
-        Returns installation results with success/failure status for each package.
-        This function is designed to be reusable across different installation scenarios.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
@@ -246,33 +132,6 @@ function Install-Packages {
 }
 
 function Add-FeedDirectories {
-    <#
-    .SYNOPSIS
-        Adds multiple directory feeds to NI Package Manager.
-
-    .DESCRIPTION
-        Scans a parent directory for subdirectories and adds each as a feed to NIPKG.
-        Updates the package database after adding all feeds. Feed names are generated
-        from folder names using ConvertTo-FeedName to ensure compatibility with feed
-        naming requirements.
-
-    .PARAMETER FeedsDirectory
-        Path to the directory containing feed subdirectories.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .EXAMPLE
-        Add-FeedDirectories -FeedsDirectory "C:\Installers\feeds"
-
-    .EXAMPLE
-        Add-FeedDirectories -FeedsDirectory "C:\feeds" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
-
-    .NOTES
-        Each subdirectory in the FeedsDirectory will be added as a separate feed.
-        Feed names are automatically generated from folder names using ConvertTo-FeedName
-        which replaces dots (.) with underscores (_) for compatibility.
-    #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]

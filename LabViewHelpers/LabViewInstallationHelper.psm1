@@ -181,6 +181,9 @@ function Install-PackagesFromInstallerDirectory {
         [switch]$AcceptEulas,
 
         [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
@@ -218,7 +221,7 @@ function Install-PackagesFromInstallerDirectory {
                 AllowDowngrade = $true
                 AllowUninstall = $true
                 InstallAlsoUpgrades = $true
-                IncludeRecommended = $true
+                IncludeRecommended = $IncludeRecommended.IsPresent
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
             }
@@ -353,6 +356,9 @@ function Install-PackagesFromInstallerIso {
         [switch]$AcceptEulas,
 
         [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
@@ -388,6 +394,7 @@ function Install-PackagesFromInstallerIso {
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
                 AcceptEulas = $AcceptEulas.IsPresent
+                IncludeRecommended = $IncludeRecommended.IsPresent
                 FilterFunction = $FilterFunction
             }   
             
@@ -602,60 +609,6 @@ function Invoke-FileDownload {
 }
 
 function Install-PackagesFromInstallerIsoWithDownload {
-    <#
-    .SYNOPSIS
-        Downloads and installs LabVIEW from an ISO file URL.
-
-    .DESCRIPTION
-        Downloads a LabVIEW ISO file from a URL to a temporary directory and then performs
-        offline installation using Install-PackagesFromInstallerIso. Provides progress reporting during
-        download and handles cleanup of downloaded files.
-
-    .PARAMETER IsoUrl
-        URL of the LabVIEW ISO file to download and install.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to standard installation path.
-
-    .PARAMETER NipkgInstallerPath
-        Optional path to NIPKG installer if it needs to be installed first.
-
-    .PARAMETER TemporaryDownloadDirectory
-        Directory to download the ISO file. Defaults to system temp directory with unique subfolder.
-
-    .PARAMETER TemporaryExpandDirectory
-        Directory to temporarily extract ISO contents. Defaults to C:\installer-labview.
-
-    .PARAMETER RemoveExistingFeeds
-        Remove all existing feeds from the system before applying the installer feeds.
-
-    .PARAMETER RemoveSnapshotFeeds
-        Remove the installer feeds from the system after package installation is complete.
-
-    .PARAMETER RemoveDownloadedFiles
-        Remove the downloaded ISO file and download directory after installation completes.
-        Defaults to $true to save disk space.
-
-    .PARAMETER RemoveTemporaryDirectory
-        Remove the temporary extraction directory after installation completes.
-
-    .PARAMETER TimeoutMinutes
-        Download timeout in minutes. Defaults to 60 minutes for large ISO files.
-
-    .EXAMPLE
-        Install-PackagesFromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso"
-
-    .EXAMPLE
-        Install-PackagesFromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -RemoveDownloadedFiles -RemoveTemporaryDirectory
-
-    .EXAMPLE
-        Install-PackagesFromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -TemporaryDownloadDirectory "D:\temp\downloads" -TimeoutMinutes 120
-
-    .NOTES
-        Requires administrative privileges and sufficient disk space for download and extraction.
-        Large ISO files (40GB+) require significant temporary disk space.
-        Progress reporting shows download progress and file sizes.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -687,6 +640,12 @@ function Install-PackagesFromInstallerIsoWithDownload {
 
         [Parameter()]
         [switch]$RemoveTemporaryDirectory,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+
+        [Parameter()]
+        [switch]$IncludeRecommended,
 
         [Parameter()]
         [ValidateRange(1, 480)]
@@ -737,8 +696,10 @@ function Install-PackagesFromInstallerIsoWithDownload {
                 NipkgCmdPath = $NipkgCmdPath
                 IsoFilePath = $downloadedIsoPath
                 TemporaryExpandDirectory = $TemporaryExpandDirectory
-                RemoveIsoFile = $RemoveDownloadedFiles  # Remove ISO after extraction if cleanup requested
+                RemoveIsoFile = $RemoveDownloadedFiles
                 RemoveTemporaryDirectory = $RemoveTemporaryDirectory
+                AcceptEulas = $AcceptEulas.IsPresent
+                IncludeRecommended = $IncludeRecommended.IsPresent
             }
             
             if ($NipkgInstallerPath) {
