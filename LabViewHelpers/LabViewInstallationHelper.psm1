@@ -279,10 +279,17 @@ function Install-LabViewOffline {
             $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
             
+            # Build parameters using PSBoundParameters for cleaner switch handling
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
-                RemoveExistingFeeds = $RemoveExistingFeeds
-                RemoveSnapshotFeeds = $RemoveSnapshotFeeds
+                ExcludePackages = $ExcludePackages
+            }
+            
+            # Add switch parameters that were actually provided
+            foreach ($param in 'RemoveExistingFeeds', 'RemoveSnapshotFeeds') {
+                if ($PSBoundParameters.ContainsKey($param)) {
+                    $installParams[$param] = $true
+                }
             }
             
             Import-NipkgSnapshotFromJson $InstallationSnapshotFile |
@@ -497,13 +504,17 @@ function Install-LabViewIso {
 
             Write-Information "Step 2: Installing LabVIEW from extracted files..." -InformationAction Continue
             
-            # Build parameters for Install-LabViewOffline
+            # Build parameters for Install-LabViewOffline with hardcoded switches
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
                 LabViewInstallerDirectory = $TemporaryExpandDirectory
-                NipkgInstallerPath = $NipkgInstallerPath
                 RemoveExistingFeeds = $true
                 RemoveSnapshotFeeds = $true
+            }
+            
+            # Add optional string parameter if provided
+            if ($NipkgInstallerPath) {
+                $installParams.NipkgInstallerPath = $NipkgInstallerPath
             }
             
             Install-LabViewOffline @installParams
