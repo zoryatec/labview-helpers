@@ -213,7 +213,7 @@ function Install-Packages {
         if ($Yes) { $arguments += "-y" }
         if ($Simulate) { $arguments += "--simulate" }
         if ($ForceLocked) { $arguments += "--force-locked" }
-        if ($VerbosePreference -eq 'Continue') { $arguments += "--verbose" }
+        $arguments += "--verbose"
         if ($AllowDowngrade) { $arguments += "--allow-downgrade" }
         if ($AllowUninstall) { $arguments += "--allow-uninstall" }
         if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
