@@ -2270,7 +2270,7 @@ function Test-SnapshotCompliance {
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         $Snapshot,
 
