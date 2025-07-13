@@ -974,23 +974,6 @@ function Get-PackagesInfoFromPackagesFile {
 }
 
 function Get-DriverPackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only driver packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Drivers" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
-        Get-DriverPackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only driver packages.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -1002,23 +985,6 @@ function Get-DriverPackages {
 }
 
 function Get-ProgrammingEnvironmentsPackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only programming environment packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Programming Environments" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfoFromNipkgCmd -Type "available"
-        Get-ProgrammingEnvironmentsPackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only programming environment packages.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -1030,23 +996,6 @@ function Get-ProgrammingEnvironmentsPackages {
 }
 
 function Get-UtilitiesPackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only utility packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Utilities" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
-        Get-UtilitiesPackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only utility packages.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -1059,23 +1008,6 @@ function Get-UtilitiesPackages {
 
 
 function Get-ApplicationSoftwarePackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only application software packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Application Software" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfoFromNipkgCmd.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfoFromNipkgCmd -Type "available"
-        Get-ApplicationSoftwarePackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only application software packages.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -1083,6 +1015,28 @@ function Get-ApplicationSoftwarePackages {
         [PSCustomObject]$PackagesInfo 
     )
     $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Application Software" }
+    return $filteredPackages | Sort-Object Package
+}
+
+function Get-StoreProductPackages {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$PackagesInfo 
+    )
+    $filteredPackages = $PackagesInfo | Where-Object { $_.StoreProduct -eq 'yes' }
+    return $filteredPackages | Sort-Object Package
+}
+
+function Get-UserVisiblePackages {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject]$PackagesInfo 
+    )
+    $filteredPackages = $PackagesInfo | Where-Object { $_.UserVisible -eq 'yes' }
     return $filteredPackages | Sort-Object Package
 }
 
@@ -1301,11 +1255,11 @@ function New-Snapshot {
             
             switch ($Type) {
                 "UserVisible" {
-                    $filteredPackages = $filteredPackages | Where-Object { $_.UserVisible -eq 'yes' }
+                    $filteredPackages = $filteredPackages | Get-UserVisiblePackages
                     Write-Verbose "Filtered to UserVisible packages: $($filteredPackages.Count) (was $originalCount)"
                 }
                 "StoreProduct" {
-                    $filteredPackages = $filteredPackages | Where-Object { $_.StoreProduct -eq 'yes' }
+                    $filteredPackages = $filteredPackages | Get-StoreProductPackages
                     Write-Verbose "Filtered to StoreProduct packages: $($filteredPackages.Count) (was $originalCount)"
                 }
                 "Full" {
@@ -1964,7 +1918,7 @@ function New-SnapshotFromSystem {
     param (
         [Parameter()]
         [ValidateSet("installed", "available")]
-        [string]$PackageType = "installed",
+       
         
         [Parameter()]
         [ValidateNotNullOrEmpty()]
@@ -3610,7 +3564,7 @@ function Install-Feeds {
         # Get currently configured feeds for duplicate checking
         Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
         try {
-            $script:currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
+            $script:currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath -ExcludeLocalFeeds
             Write-Verbose "Found $($script:currentFeeds.Count) currently configured feeds"
         }
         catch {
@@ -3715,6 +3669,7 @@ Export-ModuleMember -Function `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
     ,   Get-ApplicationSoftwarePackages `
+    ,   Get-StoreProductPackages `
     ,   Get-FeedDefinitionsFromSystem `
     ,   Install-Feeds `
     ,   Remove-Feeds `

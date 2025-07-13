@@ -277,9 +277,7 @@ function Install-LabViewOffline {
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
             
             # Build parameters using PSBoundParameters for cleaner switch handling
-            $installParams = @{
-                NipkgCmdPath = $NipkgCmdPath
-            }
+
             
             # Add switch parameters that were actually provided
             foreach ($param in 'RemoveExistingFeeds', 'RemoveSnapshotFeeds') {
@@ -288,8 +286,14 @@ function Install-LabViewOffline {
                 }
             }
             
-            $snapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile |
-                        Install-Snapshot @installParams
+            $snapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
+
+            $installParams = @{
+                NipkgCmdPath = $nipkgCmdPath
+                Snapshot = $snapshot
+            }
+            
+            Install-Snapshot @installParams
             Test-SnapshotCompliance -NipkgCmdPath $NipkgCmdPath -Snapshot $snapshot
 
         }
