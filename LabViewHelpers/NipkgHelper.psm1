@@ -219,19 +219,24 @@ function Install-Packages {
         if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
         if ($IncludeRecommended) { $arguments += "--include-recommended" }
         
-        & $NipkgCmdPath @arguments 2>&1
-
-        $exitCode = $LASTEXITCODE 
+        Write-Verbose "Executing NIPKG command: $NipkgCmdPath $($arguments -join ' ')"
+        
+        # Execute NIPKG command with interactive output
+        & $NipkgCmdPath @arguments
+        $exitCode = $LASTEXITCODE
+        
+        Write-Verbose "NIPKG installation completed with exit code: $exitCode"
+        
         switch ($exitCode) {
             0 {
-                Write-Information "Successfully installed $($packageSpecs.Count) packages"
+                Write-Information "Successfully installed $($packageSpecs.Count) packages" -InformationAction Continue
             }
             -125071 {
                 Write-Warning "Installation completed successfully but requires system restart (exit code: $exitCode)"
                 $global:LASTEXITCODE = 0
             }
             default {
-                throw "Batch installation failed with exit code: $exitCode"
+                throw "Packages Installation failed with exit code: $exitCode"
             }
         }
     }
