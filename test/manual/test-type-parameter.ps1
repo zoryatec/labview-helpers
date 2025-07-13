@@ -5,8 +5,8 @@
     Tests the Type parameter functionality in NIPKG Helper functions.
 
 .DESCRIPTION
-    This script tests the Type parameter implementation in New-NipkgSnapshot,
-    New-NipkgSnapshotFromInstaller, and New-NipkgSnapshotFromSystem functions.
+    This script tests the Type parameter implementation in New-Snapshot,
+    New-SnapshotFromInstallerDirectory, and New-SnapshotFromSystem functions.
 #>
 
 # Import the module
@@ -63,7 +63,7 @@ Write-Host "`n=== Testing Type Parameter Functionality ===" -ForegroundColor Cya
 # Test 1: Full type (should include all packages)
 Write-Host "`n--- Test 1: Full Type ---" -ForegroundColor Yellow
 try {
-    $fullSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "Full"
+    $fullSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "Full"
     Write-Host "✓ Full snapshot created successfully" -ForegroundColor Green
     Write-Host "  Type: $($fullSnapshot.type)" -ForegroundColor White
     Write-Host "  Packages count: $($fullSnapshot.packages.Count)" -ForegroundColor White
@@ -75,7 +75,7 @@ try {
 # Test 2: UserVisible type (should include packages with UserVisible = 'yes')
 Write-Host "`n--- Test 2: UserVisible Type ---" -ForegroundColor Yellow
 try {
-    $userVisibleSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "UserVisible"
+    $userVisibleSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "UserVisible"
     Write-Host "✓ UserVisible snapshot created successfully" -ForegroundColor Green
     Write-Host "  Type: $($userVisibleSnapshot.type)" -ForegroundColor White
     Write-Host "  Packages count: $($userVisibleSnapshot.packages.Count)" -ForegroundColor White
@@ -101,7 +101,7 @@ try {
 # Test 3: StoreProduct type (should include packages with StoreProduct = 'yes')
 Write-Host "`n--- Test 3: StoreProduct Type ---" -ForegroundColor Yellow
 try {
-    $storeProductSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "StoreProduct"
+    $storeProductSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "StoreProduct"
     Write-Host "✓ StoreProduct snapshot created successfully" -ForegroundColor Green
     Write-Host "  Type: $($storeProductSnapshot.type)" -ForegroundColor White
     Write-Host "  Packages count: $($storeProductSnapshot.packages.Count)" -ForegroundColor White

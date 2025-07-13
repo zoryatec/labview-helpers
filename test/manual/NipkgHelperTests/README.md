@@ -23,11 +23,11 @@ Tests the circular dependency handling capabilities of the `Get-PackageInstallat
 - Simple circular dependencies (A→B→A)
 - Real-world NI Vision package circular dependencies
 - Complex dependency chains with cycles
-- Updated `New-NipkgSnapshot` function with circular dependency handling
+- Updated `New-Snapshot` function with circular dependency handling
 
-### New-NipkgSnapshotFromSystemTests.ps1
+### New-SnapshotFromSystemTests.ps1
 
-Tests the `New-NipkgSnapshotFromSystem` function which creates snapshots from the current system state.
+Tests the `New-SnapshotFromSystem` function which creates snapshots from the current system state.
 
 **Features tested:**
 - System snapshot creation with installed packages

@@ -17,7 +17,7 @@ $mockPackages = @(
 )
 
 Write-Host "Creating snapshot with $($mockPackages.Count) non-NIPKG packages..."
-$snapshot1 = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $mockPackages
+$snapshot1 = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $mockPackages
 
 Write-Host "Snapshot contains:"
 Write-Host "  Feeds: $($snapshot1.feeds.Count)"
@@ -44,7 +44,7 @@ $mockPackages2 = @(
 )
 
 Write-Host "Creating snapshot with $($mockPackages2.Count) packages including NIPKG..."
-$snapshot2 = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $mockPackages2
+$snapshot2 = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $mockPackages2
 
 Write-Host "Snapshot contains:"
 Write-Host "  Feeds: $($snapshot2.feeds.Count)"

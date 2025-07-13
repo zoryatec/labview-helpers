@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Tests the Remove-DuplicatePackagesByVersion function and its integration with New-NipkgSnapshotFromInstaller.
+    Tests the Remove-DuplicatePackagesByVersion function and its integration with New-SnapshotFromInstallerDirectory.
 
 .DESCRIPTION
     This script tests that duplicate packages are properly removed by selecting the highest version
@@ -151,12 +151,12 @@ $mockPackagesWithDuplicates = @(
 
 Write-Host "`n--- Integration Test: Snapshot with Duplicates ---" -ForegroundColor Yellow
 
-Write-Host "Mock packages before New-NipkgSnapshot: $($mockPackagesWithDuplicates.Count)" -ForegroundColor White
+Write-Host "Mock packages before New-Snapshot: $($mockPackagesWithDuplicates.Count)" -ForegroundColor White
 $duplicateGroups = $mockPackagesWithDuplicates | Group-Object -Property Package | Where-Object { $_.Count -gt 1 }
 Write-Host "Packages with duplicates: $($duplicateGroups.Count)" -ForegroundColor White
 
-# Test with direct New-NipkgSnapshot (should receive duplicates as-is)
-$snapshotWithDuplicates = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $mockPackagesWithDuplicates -Type "Full"
+# Test with direct New-Snapshot (should receive duplicates as-is)
+$snapshotWithDuplicates = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $mockPackagesWithDuplicates -Type "Full"
 Write-Host "Snapshot with duplicates: $($snapshotWithDuplicates.packages.Count) packages" -ForegroundColor Green
 
 # Test duplicate removal function directly
@@ -164,7 +164,7 @@ $uniqueMockPackages = Remove-DuplicatePackagesByVersion -PackagesInfo $mockPacka
 Write-Host "After duplicate removal: $($uniqueMockPackages.Count) packages" -ForegroundColor Green
 
 # Test with cleaned packages
-$snapshotWithoutDuplicates = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $uniqueMockPackages -Type "Full"
+$snapshotWithoutDuplicates = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $uniqueMockPackages -Type "Full"
 Write-Host "Snapshot without duplicates: $($snapshotWithoutDuplicates.packages.Count) packages" -ForegroundColor Green
 
 if ($snapshotWithoutDuplicates.packages.Count -eq 3) {
@@ -175,4 +175,4 @@ if ($snapshotWithoutDuplicates.packages.Count -eq 3) {
 
 Write-Host "`n=== Tests Complete ===" -ForegroundColor Cyan
 Write-Host "The Remove-DuplicatePackagesByVersion function is ready for use!" -ForegroundColor Green
-Write-Host "New-NipkgSnapshotFromInstaller will automatically use this function to remove duplicates." -ForegroundColor Green
+Write-Host "New-SnapshotFromInstallerDirectory will automatically use this function to remove duplicates." -ForegroundColor Green

@@ -39,7 +39,7 @@ Write-Host "==============================" -ForegroundColor Yellow
 try {
     # Create snapshot from current system
     Write-Host "Creating snapshot from current system state..." -ForegroundColor Cyan
-    $currentSnapshot = New-NipkgSnapshotFromSystem -PackageType "installed" -NipkgCmdPath $nipkgCmdPath
+    $currentSnapshot = New-SnapshotFromSystem -PackageType "installed" -NipkgCmdPath $nipkgCmdPath
     
     # Export to temporary file
     $currentSnapshotPath = Join-Path $tempDir "current-system-snapshot.json"
@@ -73,7 +73,7 @@ try {
     $currentFeeds = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $nipkgCmdPath
     if ($currentFeeds.Count -gt 3) {
         $subsetFeeds = $currentFeeds | Select-Object -First 3
-        $subsetSnapshot = New-NipkgSnapshot -FeedsInfo $subsetFeeds -PackagesInfo @()
+        $subsetSnapshot = New-Snapshot -FeedsInfo $subsetFeeds -PackagesInfo @()
         
         $subsetSnapshotPath = Join-Path $tempDir "subset-feeds-snapshot.json"
         Export-NipkgSnapshotToJson -Snapshot $subsetSnapshot -OutputPath $subsetSnapshotPath

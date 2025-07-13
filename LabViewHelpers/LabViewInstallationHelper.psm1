@@ -273,7 +273,7 @@ function Install-LabViewOffline {
             if ([string]::IsNullOrEmpty($InstallationSnapshotFile)) {
                 $InstallationSnapshotFile  =  New-TemporaryFile 
             }
-            $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
+            $installerSnapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $LabViewInstallerDirectory -Verbose
             Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
             
             # Build parameters using PSBoundParameters for cleaner switch handling

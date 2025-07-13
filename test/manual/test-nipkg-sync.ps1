@@ -11,7 +11,7 @@ try {
     # Create snapshot from installer
     Write-Host "1. Creating snapshot from installer..." -ForegroundColor Yellow
     $installerPath = "$PSScriptRoot\..\manual-docker\installers\ni-labview-2025-community-x86_25.1.3_offline"
-    $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerPath
+    $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $installerPath
     
     Write-Host "2. Checking NIPKG packages in snapshot..." -ForegroundColor Yellow
     $nipkgPkgs = $snapshot.packages | Where-Object { $_.name -like "*ni-package-manager*" }

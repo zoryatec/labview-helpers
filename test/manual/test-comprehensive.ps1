@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     Tests all the functions in the NipkgHelper module, including the newly added and renamed functions:
-    - New-NipkgSnapshotFromSystem
+    - New-SnapshotFromSystem
     - Get-PackagesInfoFromNipkgCmd (renamed from Get-PackagesInfoFromFile)
     - Install-Snapshot with RemoveExistingFeeds parameter
 
@@ -65,9 +65,9 @@ try {
         'Get-FeedsInfoFromNipkgCmd',
         'Remove-Feeds',
         'Install-NipkgManager',
-        'New-NipkgSnapshot',
-        'New-NipkgSnapshotFromInstaller',
-        'New-NipkgSnapshotFromSystem',
+        'New-Snapshot',
+        'New-SnapshotFromInstallerDirectory',
+        'New-SnapshotFromSystem',
         'Export-NipkgSnapshotToJson',
         'Import-NipkgSnapshotFromJson',
         'Install-Snapshot'
@@ -92,7 +92,7 @@ try {
 
     # Test 3: New Functions
     Write-Host "`n=== Test 3: New Functions ===" -ForegroundColor Yellow
-    $newFunctions = @('New-NipkgSnapshotFromSystem')
+    $newFunctions = @('New-SnapshotFromSystem')
     
     foreach ($func in $newFunctions) {
         $command = Get-Command $func -ErrorAction SilentlyContinue
@@ -145,11 +145,11 @@ try {
     Write-Host "`n=== Test 6: Help Documentation ===" -ForegroundColor Yellow
     
     # Test help for new function
-    $help = Get-Help New-NipkgSnapshotFromSystem -ErrorAction SilentlyContinue
+    $help = Get-Help New-SnapshotFromSystem -ErrorAction SilentlyContinue
     if ($help -and $help.synopsis) {
-        Write-Host "✓ New-NipkgSnapshotFromSystem has help documentation" -ForegroundColor Green
+        Write-Host "✓ New-SnapshotFromSystem has help documentation" -ForegroundColor Green
     } else {
-        Write-Host "✗ New-NipkgSnapshotFromSystem missing help documentation" -ForegroundColor Red
+        Write-Host "✗ New-SnapshotFromSystem missing help documentation" -ForegroundColor Red
     }
     
     # Test help for renamed function

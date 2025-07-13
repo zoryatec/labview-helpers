@@ -9,8 +9,8 @@ Import-Module $ModulePath -Force
 Write-Host "Final Comprehensive Test for Enhanced NIPKG Helper Module" -ForegroundColor Cyan
 Write-Host "="*70 -ForegroundColor Cyan
 
-# Test 1: New-NipkgSnapshot with ni-package-manager (triggers dependency resolution)
-Write-Host "`n1. Testing New-NipkgSnapshot with ni-package-manager..." -ForegroundColor Yellow
+# Test 1: New-Snapshot with ni-package-manager (triggers dependency resolution)
+Write-Host "`n1. Testing New-Snapshot with ni-package-manager..." -ForegroundColor Yellow
 
 $feeds = @(
     @{ name = "ni-internal"; uri = "https://niinternal.com/feed" }
@@ -23,7 +23,7 @@ $packagesWithNipkg = @(
 )
 
 try {
-    $snapshotWithNipkg = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packagesWithNipkg
+    $snapshotWithNipkg = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packagesWithNipkg
     
     Write-Host "Snapshot created successfully!" -ForegroundColor Green
     Write-Host "  Feeds: $($snapshotWithNipkg.feeds.Count)"
@@ -39,8 +39,8 @@ try {
     Write-Host "  ERROR: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# Test 2: New-NipkgSnapshot without ni-package-manager (fallback ordering)
-Write-Host "`n2. Testing New-NipkgSnapshot without ni-package-manager..." -ForegroundColor Yellow
+# Test 2: New-Snapshot without ni-package-manager (fallback ordering)
+Write-Host "`n2. Testing New-Snapshot without ni-package-manager..." -ForegroundColor Yellow
 
 $packagesWithoutNipkg = @(
     @{ name = "labview"; version = "24.5.0" },
@@ -48,7 +48,7 @@ $packagesWithoutNipkg = @(
 )
 
 try {
-    $snapshotWithoutNipkg = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packagesWithoutNipkg
+    $snapshotWithoutNipkg = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packagesWithoutNipkg
     
     Write-Host "Snapshot created successfully!" -ForegroundColor Green
     Write-Host "  Feeds: $($snapshotWithoutNipkg.feeds.Count)"
@@ -186,7 +186,7 @@ Write-Host "FINAL TEST SUMMARY" -ForegroundColor Cyan
 Write-Host "="*70 -ForegroundColor Cyan
 
 Write-Host "`nAll key functionality has been tested:" -ForegroundColor Green
-Write-Host "  [√] New-NipkgSnapshot creates packages-nipkg section"
+Write-Host "  [√] New-Snapshot creates packages-nipkg section"
 Write-Host "  [√] Dependency resolution triggered by exact 'ni-package-manager' name"
 Write-Host "  [√] Fallback ordering when ni-package-manager not present"
 Write-Host "  [√] Export preserves all sections including packages-nipkg"

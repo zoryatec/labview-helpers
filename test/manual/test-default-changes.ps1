@@ -22,8 +22,8 @@ if (Test-Path $ModulePath) {
 
 Write-Host "`n=== Testing Updated Type Parameter Defaults ===" -ForegroundColor Cyan
 
-# Test 1: Verify New-NipkgSnapshot still defaults to Full
-Write-Host "`n--- Test 1: New-NipkgSnapshot Default Type ---" -ForegroundColor Yellow
+# Test 1: Verify New-Snapshot still defaults to Full
+Write-Host "`n--- Test 1: New-Snapshot Default Type ---" -ForegroundColor Yellow
 
 $testFeeds = @([PSCustomObject]@{ Name = "test"; Path = "C:\test" })
 $testPackages = @(
@@ -33,10 +33,10 @@ $testPackages = @(
 
 try {
     # Test without specifying Type parameter (should default to Full)
-    $fullSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages
+    $fullSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages
     $defaultIsFull = $fullSnapshot.type -eq "Full" -and $fullSnapshot.packages.Count -eq 2
     
-    Write-Host "  New-NipkgSnapshot default Type: $($fullSnapshot.type)" -ForegroundColor White
+    Write-Host "  New-Snapshot default Type: $($fullSnapshot.type)" -ForegroundColor White
     Write-Host "  Result: $(if ($defaultIsFull) { '✓ PASS - Still defaults to Full' } else { '✗ FAIL - Should default to Full' })" -ForegroundColor $(if ($defaultIsFull) { 'Green' } else { 'Red' })
 } catch {
     Write-Host "  ✗ FAIL: $($_.Exception.Message)" -ForegroundColor Red
@@ -47,15 +47,15 @@ Write-Host "`n--- Test 2: Function Documentation Check ---" -ForegroundColor Yel
 
 try {
     # Get help for the functions to check default values
-    $installerHelp = Get-Help New-NipkgSnapshotFromInstaller -Full | Out-String
-    $systemHelp = Get-Help New-NipkgSnapshotFromSystem -Full | Out-String
+    $installerHelp = Get-Help New-SnapshotFromInstallerDirectory -Full | Out-String
+    $systemHelp = Get-Help New-SnapshotFromSystem -Full | Out-String
     
     # Check if "StoreProduct" appears as default in the documentation
     $installerHasStoreDefault = $installerHelp -like "*StoreProduct*" -and $installerHelp -like "*default*"
     $systemHasStoreDefault = $systemHelp -like "*StoreProduct*" -and $systemHelp -like "*default*"
     
-    Write-Host "  New-NipkgSnapshotFromInstaller help mentions StoreProduct default: $(if ($installerHasStoreDefault) { 'Yes ✓' } else { 'No ✗' })" -ForegroundColor $(if ($installerHasStoreDefault) { 'Green' } else { 'Red' })
-    Write-Host "  New-NipkgSnapshotFromSystem help mentions StoreProduct default: $(if ($systemHasStoreDefault) { 'Yes ✓' } else { 'No ✗' })" -ForegroundColor $(if ($systemHasStoreDefault) { 'Green' } else { 'Red' })
+    Write-Host "  New-SnapshotFromInstallerDirectory help mentions StoreProduct default: $(if ($installerHasStoreDefault) { 'Yes ✓' } else { 'No ✗' })" -ForegroundColor $(if ($installerHasStoreDefault) { 'Green' } else { 'Red' })
+    Write-Host "  New-SnapshotFromSystem help mentions StoreProduct default: $(if ($systemHasStoreDefault) { 'Yes ✓' } else { 'No ✗' })" -ForegroundColor $(if ($systemHasStoreDefault) { 'Green' } else { 'Red' })
 } catch {
     Write-Host "  ✗ FAIL: $($_.Exception.Message)" -ForegroundColor Red
 }
@@ -99,10 +99,10 @@ $mockPackagesContent | Out-File -FilePath $mockPackagesFile -Encoding UTF8
 
 try {
     # Test installer snapshot default (should be StoreProduct, so only 1 package)
-    $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $testInstallerDir
+    $installerSnapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $testInstallerDir
     $installerDefaultIsStore = $installerSnapshot.type -eq "StoreProduct" -and $installerSnapshot.packages.Count -eq 1
     
-    Write-Host "  New-NipkgSnapshotFromInstaller default behavior:" -ForegroundColor White
+    Write-Host "  New-SnapshotFromInstallerDirectory default behavior:" -ForegroundColor White
     Write-Host "    Type: $($installerSnapshot.type)" -ForegroundColor White
     Write-Host "    Package count: $($installerSnapshot.packages.Count) (expected 1 for StoreProduct)" -ForegroundColor White
     Write-Host "    Result: $(if ($installerDefaultIsStore) { '✓ PASS - Defaults to StoreProduct' } else { '✗ FAIL - Should default to StoreProduct' })" -ForegroundColor $(if ($installerDefaultIsStore) { 'Green' } else { 'Red' })
@@ -148,7 +148,7 @@ $typeTests = @(
 
 foreach ($test in $typeTests) {
     try {
-        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $testInstallerDir -Type $test.Type
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $testInstallerDir -Type $test.Type
         $success = $snapshot.type -eq $test.Type -and $snapshot.packages.Count -eq $test.ExpectedCount
         
         Write-Host "  Type '$($test.Type)': $(if ($success) { '✓ PASS' } else { '✗ FAIL' })" -ForegroundColor $(if ($success) { 'Green' } else { 'Red' })

@@ -182,8 +182,8 @@ try {
 
 Write-Host ""
 
-# Test 4: Test the updated New-NipkgSnapshot function
-Write-Host "Test 4: New-NipkgSnapshot with Circular Dependencies" -ForegroundColor Yellow
+# Test 4: Test the updated New-Snapshot function
+Write-Host "Test 4: New-Snapshot with Circular Dependencies" -ForegroundColor Yellow
 Write-Host "====================================================" -ForegroundColor Yellow
 
 $fakeFeed = @([PSCustomObject]@{
@@ -191,14 +191,14 @@ $fakeFeed = @([PSCustomObject]@{
     Path = "file:///test"
 })
 
-Write-Host "Testing New-NipkgSnapshot with circular dependency packages..." -ForegroundColor Cyan
+Write-Host "Testing New-Snapshot with circular dependency packages..." -ForegroundColor Cyan
 
 try {
-    $snapshot = New-NipkgSnapshot -FeedsInfo $fakeFeed -PackagesInfo $circularPackages
-    Write-Host "✓ New-NipkgSnapshot successfully handled circular dependencies" -ForegroundColor Green
+    $snapshot = New-Snapshot -FeedsInfo $fakeFeed -PackagesInfo $circularPackages
+    Write-Host "✓ New-Snapshot successfully handled circular dependencies" -ForegroundColor Green
     Write-Host "  Snapshot contains $($snapshot.packages.Count) packages" -ForegroundColor White
 } catch {
-    Write-Host "✗ New-NipkgSnapshot failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "✗ New-Snapshot failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
 Write-Host ""
@@ -211,5 +211,5 @@ Write-Host "KEY POINTS:" -ForegroundColor Yellow
 Write-Host "• Circular dependencies are common in real package systems" -ForegroundColor White
 Write-Host "• Use -AllowCircularDependencies to handle them gracefully" -ForegroundColor White
 Write-Host "• The function will break cycles at arbitrary points but maintain overall order" -ForegroundColor White
-Write-Host "• Updated New-NipkgSnapshot now automatically allows circular dependencies" -ForegroundColor White
+Write-Host "• Updated New-Snapshot now automatically allows circular dependencies" -ForegroundColor White
 Write-Host ""

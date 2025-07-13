@@ -14,8 +14,8 @@ $nipkgFunctions = @(
     'ConvertFrom-NipkgPackagesFile',
     'Get-PackagesInfoFromPackagesFile',
     'Get-PackageInstallationOrder',
-    'New-NipkgSnapshotFromInstaller',
-    'New-NipkgSnapshotFromSystem',
+    'New-SnapshotFromInstallerDirectory',
+    'New-SnapshotFromSystem',
     'Install-Snapshot',
     'Export-NipkgSnapshotToJson',
     'Import-NipkgSnapshotFromJson'
@@ -82,7 +82,7 @@ $feedsInfo = Get-FeedsInfoFromNipkgCmd -NipkgCmdPath $nipkgPath
 # $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $packagesInfo
 # $utilitiesPackages | Sort-Object Section | Format-Table Package, Version, Architecture, Section
 
-$snapshot = New-NipkgSnapshot `
+$snapshot = New-Snapshot `
     -PackagesInfo $packagesInfo `
     -FeedsInfo $feedsInfo 
 
@@ -261,7 +261,7 @@ if (Test-Path $nipkgPackagesFile) {
 Write-Host ""
 
 # Test the new installer snapshot function
-Write-Host "Testing New-NipkgSnapshotFromInstaller function..." -ForegroundColor Green
+Write-Host "Testing New-SnapshotFromInstallerDirectory function..." -ForegroundColor Green
 
 $installerDirectory = "$PSScriptRoot\..\manual-docker\installers\ni-labview-2025-community-x86_25.1.3_offline"
 if (Test-Path $installerDirectory) {
@@ -269,7 +269,7 @@ if (Test-Path $installerDirectory) {
     Write-Host "   Installer: $installerDirectory" -ForegroundColor White
     
     try {
-        $installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerDirectory -Verbose
+        $installerSnapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $installerDirectory -Verbose
         Write-Host "   ✓ Created installer snapshot: $($installerSnapshot.feeds.Count) feeds, $($installerSnapshot.packages.Count) packages" -ForegroundColor Green
 
         if ($installerSnapshot.feeds.Count -gt 0) {
@@ -323,7 +323,7 @@ if (Test-Path $installerDirectory) {
         # Test without feeds
         Write-Host "4. Testing installer snapshot without feeds..." -ForegroundColor Yellow
         try {
-            $noFeedsSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerDirectory -IncludeFeeds $false
+            $noFeedsSnapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $installerDirectory -IncludeFeeds $false
             Write-Host "   ✓ Created snapshot without feeds: $($noFeedsSnapshot.feeds.Count) feeds, $($noFeedsSnapshot.packages.Count) packages" -ForegroundColor Green
             
             if ($noFeedsSnapshot.feeds.Count -eq 0 -and $noFeedsSnapshot.packages.Count -eq $installerSnapshot.packages.Count) {

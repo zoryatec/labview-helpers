@@ -10,7 +10,7 @@ try {
     # Create snapshot from installer
     Write-Host "Creating snapshot from installer..." -ForegroundColor Yellow
     $installerPath = "$PSScriptRoot\..\manual-docker\installers\ni-labview-2025-community-x86_25.1.3_offline"
-    $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerPath
+    $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $installerPath
     
     Write-Host "Checking first few packages structure:" -ForegroundColor Yellow
     $firstPackages = $snapshot.packages | Select-Object -First 3

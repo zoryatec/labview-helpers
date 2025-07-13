@@ -32,9 +32,9 @@ $testPackages = @(
 # Create snapshots with different types
 Write-Host "`n--- Creating Test Snapshots ---" -ForegroundColor Yellow
 
-$fullSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "Full"
-$userVisibleSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "UserVisible" 
-$storeProductSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "StoreProduct"
+$fullSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "Full"
+$userVisibleSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "UserVisible" 
+$storeProductSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "StoreProduct"
 
 Write-Host "  Full snapshot: $($fullSnapshot.packages.Count) packages, type: $($fullSnapshot.type)" -ForegroundColor Green
 Write-Host "  UserVisible snapshot: $($userVisibleSnapshot.packages.Count) packages, type: $($userVisibleSnapshot.type)" -ForegroundColor Green
@@ -94,19 +94,19 @@ try {
     Write-Host "  ✗ FAIL: Test-SnapshotCompliance function not found or accessible" -ForegroundColor Red
 }
 
-# Test 3: Verify New-NipkgSnapshotFromSystem uses Type parameter correctly
+# Test 3: Verify New-SnapshotFromSystem uses Type parameter correctly
 Write-Host "`n--- Test 3: System Snapshot Type Filtering ---" -ForegroundColor Yellow
 
 # Mock a system test by using the packages we have
-Write-Host "  Testing New-NipkgSnapshotFromSystem with different Type values:" -ForegroundColor White
+Write-Host "  Testing New-SnapshotFromSystem with different Type values:" -ForegroundColor White
 
 try {
     # We can't test with real system data, but we can verify the function accepts the parameter
-    $systemFunction = Get-Command New-NipkgSnapshotFromSystem -ErrorAction Stop
+    $systemFunction = Get-Command New-SnapshotFromSystem -ErrorAction Stop
     $hasTypeParam = $systemFunction.Parameters.ContainsKey("Type")
     $typeParamInfo = $systemFunction.Parameters["Type"]
     
-    Write-Host "  ✓ New-NipkgSnapshotFromSystem has Type parameter: $hasTypeParam" -ForegroundColor Green
+    Write-Host "  ✓ New-SnapshotFromSystem has Type parameter: $hasTypeParam" -ForegroundColor Green
     
     if ($hasTypeParam) {
         $defaultValue = $typeParamInfo.Attributes | Where-Object { $_.TypeId -eq [System.Management.Automation.PSDefaultValueAttribute] } | Select-Object -First 1
@@ -119,7 +119,7 @@ try {
     }
     
 } catch {
-    Write-Host "  ✗ FAIL: New-NipkgSnapshotFromSystem function not found or accessible" -ForegroundColor Red
+    Write-Host "  ✗ FAIL: New-SnapshotFromSystem function not found or accessible" -ForegroundColor Red
 }
 
 # Test 4: Manual verification of the compliance logic change
@@ -133,7 +133,7 @@ try {
     
     # Check if our enhancement is present
     $hasTypeAwareCompliance = $moduleContent -like "*snapshotType = if (`$snapshot.type)*" -and 
-                              $moduleContent -like "*New-NipkgSnapshotFromSystem*Type `$snapshotType*"
+                              $moduleContent -like "*New-SnapshotFromSystem*Type `$snapshotType*"
     
     Write-Host "  ✓ Compliance validation uses snapshot type: $hasTypeAwareCompliance" -ForegroundColor $(if ($hasTypeAwareCompliance) { 'Green' } else { 'Red' })
     

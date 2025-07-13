@@ -178,7 +178,7 @@ $feedName = $feedName.ToLower()                 # Future: case normalization
 - Maintains all existing functionality
 
 ### Future Functions
-- Ready for integration with `New-NipkgSnapshotFromInstaller` (when restored)
+- Ready for integration with `New-SnapshotFromInstallerDirectory` (when restored)
 - Can be used in any scenario requiring folder-to-feed name conversion
 - Available for custom feed management scripts
 

@@ -2,10 +2,10 @@
 
 <#
 .SYNOPSIS
-    Demonstrates the duplicate removal functionality in New-NipkgSnapshotFromInstaller.
+    Demonstrates the duplicate removal functionality in New-SnapshotFromInstallerDirectory.
 
 .DESCRIPTION
-    This script shows how the New-NipkgSnapshotFromInstaller function automatically removes
+    This script shows how the New-SnapshotFromInstallerDirectory function automatically removes
     duplicate packages by selecting the highest version before creating snapshots.
 #>
 
@@ -19,7 +19,7 @@ if (Test-Path $ModulePath) {
     exit 1
 }
 
-Write-Host "`n=== Duplicate Removal in New-NipkgSnapshotFromInstaller Demo ===" -ForegroundColor Cyan
+Write-Host "`n=== Duplicate Removal in New-SnapshotFromInstallerDirectory Demo ===" -ForegroundColor Cyan
 
 Write-Host "`n--- Scenario: Installer with Multiple Package Versions ---" -ForegroundColor Yellow
 
@@ -76,19 +76,19 @@ Write-Host "`n--- Type Filtering with Duplicates ---" -ForegroundColor Yellow
 
 Write-Host "`nWhen combined with Type parameter:" -ForegroundColor White
 
-# Simulate what New-NipkgSnapshotFromInstaller would do with different Type values
+# Simulate what New-SnapshotFromInstallerDirectory would do with different Type values
 $mockFeeds = @([PSCustomObject]@{ Name = "installer-feeds"; Path = "C:\mock\installer" })
 
 # Full snapshot (with duplicate removal)
-$fullSnapshot = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $uniquePackages -Type "Full"
+$fullSnapshot = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $uniquePackages -Type "Full"
 Write-Host "Full snapshot: $($fullSnapshot.packages.Count) packages" -ForegroundColor Green
 
 # UserVisible snapshot (with duplicate removal)
-$userSnapshot = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $uniquePackages -Type "UserVisible"
+$userSnapshot = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $uniquePackages -Type "UserVisible"
 Write-Host "UserVisible snapshot: $($userSnapshot.packages.Count) packages" -ForegroundColor Green
 
 # StoreProduct snapshot (with duplicate removal)
-$storeSnapshot = New-NipkgSnapshot -FeedsInfo $mockFeeds -PackagesInfo $uniquePackages -Type "StoreProduct"
+$storeSnapshot = New-Snapshot -FeedsInfo $mockFeeds -PackagesInfo $uniquePackages -Type "StoreProduct"
 Write-Host "StoreProduct snapshot: $($storeSnapshot.packages.Count) packages" -ForegroundColor Green
 
 Write-Host "`n--- Benefits of Duplicate Removal ---" -ForegroundColor Yellow
@@ -109,7 +109,7 @@ Write-Host "• Falls back to string comparison for non-semantic versions" -Fore
 Write-Host "• Preserves all properties from the highest version package" -ForegroundColor Cyan
 Write-Host "• Handles empty arrays gracefully" -ForegroundColor Cyan
 
-Write-Host "`nIntegration with New-NipkgSnapshotFromInstaller:" -ForegroundColor White
+Write-Host "`nIntegration with New-SnapshotFromInstallerDirectory:" -ForegroundColor White
 Write-Host "• Automatically called before creating snapshots" -ForegroundColor Cyan
 Write-Host "• Works with all Type parameter values" -ForegroundColor Cyan
 Write-Host "• Provides verbose logging of duplicate removal process" -ForegroundColor Cyan
@@ -120,11 +120,11 @@ Write-Host "`n--- Example Usage Patterns ---" -ForegroundColor Yellow
 Write-Host "`nTypical workflows:" -ForegroundColor White
 
 Write-Host "`n1. Create installer snapshot without duplicates:" -ForegroundColor Cyan
-Write-Host "   `$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory 'C:\Installer'" -ForegroundColor Gray
+Write-Host "   `$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory 'C:\Installer'" -ForegroundColor Gray
 Write-Host "   # Automatically removes duplicates, selects highest versions" -ForegroundColor Gray
 
 Write-Host "`n2. Create user-visible snapshot from installer:" -ForegroundColor Cyan
-Write-Host "   `$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory 'C:\Installer' -Type 'UserVisible'" -ForegroundColor Gray
+Write-Host "   `$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory 'C:\Installer' -Type 'UserVisible'" -ForegroundColor Gray
 Write-Host "   # Removes duplicates, then filters to user-visible packages" -ForegroundColor Gray
 
 Write-Host "`n3. Manual duplicate removal:" -ForegroundColor Cyan

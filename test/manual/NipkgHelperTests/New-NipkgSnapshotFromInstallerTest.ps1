@@ -9,6 +9,6 @@ $installerSnapshotPath = "$tempDirectory/installer-snapshot.json"
 $LabViewInstallerDirectory  = "$PsScriptRoot/../../manual-docker/installers/ni-labview-2025-community-x86_25.1.3_offline"
 $LabViewInstallerDirectory = "C:\Projects\LabVIEW\ni-labview-2024-x86_24.5.0.49229-0+f77_offline"
 
-$installerSnapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $LabViewInstallerDirectory -Verbose
+$installerSnapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $LabViewInstallerDirectory -Verbose
 Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $installerSnapshotPath -Verbose
 

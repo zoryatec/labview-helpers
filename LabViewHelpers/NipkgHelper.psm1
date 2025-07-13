@@ -15,8 +15,8 @@
     - ConvertFrom-NipkgPackagesFile: Parses NIPKG Packages files (single blank line separators)
     - Get-PackagesInfoFromNipkgCmd: Convenience function combining command execution and parsing
     - Get-PackagesInfoFromPackagesFile: Parses NIPKG feed Packages files
-    - New-NipkgSnapshotFromInstaller: Creates snapshots from installer directory structures
-    - New-NipkgSnapshotFromSystem: Creates snapshots from current system state
+    - New-SnapshotFromInstallerDirectory: Creates snapshots from installer directory structures
+    - New-SnapshotFromSystem: Creates snapshots from current system state
     
     This separation allows for flexible data sources and easier testing.
 
@@ -1181,7 +1181,7 @@ function Install-NipkgManager {
     }
 }
 
-function New-NipkgSnapshot {
+function New-Snapshot {
     <#
     .SYNOPSIS
         Creates a snapshot object from provided NIPKG feeds and packages information.
@@ -1214,15 +1214,15 @@ function New-NipkgSnapshot {
     .EXAMPLE
         $feeds = Get-FeedDefinitionsFromSystem
         $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
-        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages
 
     .EXAMPLE
         # Create snapshot with only user-visible packages
-        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
 
     .EXAMPLE
         # Create snapshot with only store products
-        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
 
     .NOTES
         Returns a hashtable with:
@@ -1256,7 +1256,7 @@ function New-NipkgSnapshot {
     )
 
     begin {
-        Write-Verbose "Starting New-NipkgSnapshot operation"
+        Write-Verbose "Starting New-Snapshot operation"
     }
     
     process {
@@ -1430,7 +1430,7 @@ function New-NipkgSnapshot {
     }
     
     end {
-        Write-Verbose "Completed New-NipkgSnapshot operation"
+        Write-Verbose "Completed New-Snapshot operation"
     }
 }
 
@@ -1440,7 +1440,7 @@ function Export-NipkgSnapshotToJson {
         Exports a snapshot object to a JSON file.
 
     .DESCRIPTION
-        Serializes a snapshot object (from New-NipkgSnapshot) to a JSON file.
+        Serializes a snapshot object (from New-Snapshot) to a JSON file.
         Creates the output directory if it doesn't exist.
 
     .PARAMETER Snapshot
@@ -1450,7 +1450,7 @@ function Export-NipkgSnapshotToJson {
         Path where the JSON snapshot file will be created.
 
     .EXAMPLE
-        $snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages
         Export-NipkgSnapshotToJson -Snapshot $snapshot -OutputPath "C:\Snapshots\nipkg-snapshot.json"
 
     .NOTES
@@ -1706,7 +1706,7 @@ function Test-NipkgAvailability {
     }
 }
 
-function New-NipkgSnapshotFromInstaller {
+function New-SnapshotFromInstallerDirectory {
     <#
     .SYNOPSIS
         Creates a NIPKG snapshot from an installer directory structure.
@@ -1739,14 +1739,14 @@ function New-NipkgSnapshotFromInstaller {
         - StoreProduct: Include only packages where StoreProduct is 'yes' (default behavior)
 
     .EXAMPLE
-        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
 
     .EXAMPLE
-        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
 
     .EXAMPLE
         # Create snapshot with only user-visible packages from installer
-        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory ".\installers\labview-2025" -Type "UserVisible"
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -Type "UserVisible"
 
     .NOTES
         Returns a hashtable with:
@@ -1777,7 +1777,7 @@ function New-NipkgSnapshotFromInstaller {
     )
 
     begin {
-        Write-Verbose "Starting New-NipkgSnapshotFromInstaller operation"
+        Write-Verbose "Starting New-SnapshotFromInstallerDirectory operation"
     }
     
     process {
@@ -1895,7 +1895,7 @@ function New-NipkgSnapshotFromInstaller {
             $uniquePackages = Remove-DuplicatePackagesByVersion -PackagesInfo $allPackages
             Write-Information "After duplicate removal: $($uniquePackages.Count) unique packages (removed $($allPackages.Count - $uniquePackages.Count) duplicates)" -InformationAction Continue
 
-            $snapshot = New-NipkgSnapshot -FeedsInfo $allFeeds -PackagesInfo $uniquePackages -Type $Type
+            $snapshot = New-Snapshot -FeedsInfo $allFeeds -PackagesInfo $uniquePackages -Type $Type
             
             Write-Verbose "Created snapshot with type '$Type', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
             
@@ -1909,11 +1909,11 @@ function New-NipkgSnapshotFromInstaller {
     }
     
     end {
-        Write-Verbose "Completed New-NipkgSnapshotFromInstaller operation"
+        Write-Verbose "Completed New-SnapshotFromInstallerDirectory operation"
     }
 }
 
-function New-NipkgSnapshotFromSystem {
+function New-SnapshotFromSystem {
     <#
     .SYNOPSIS
         Creates a NIPKG snapshot from the current system state.
@@ -1921,7 +1921,7 @@ function New-NipkgSnapshotFromSystem {
     .DESCRIPTION
         Creates a snapshot by capturing the current NIPKG configuration including configured feeds
         and installed packages. This function combines Get-FeedDefinitionsFromSystem, Get-PackagesInfo, 
-        and New-NipkgSnapshot to create a complete system state snapshot.
+        and New-Snapshot to create a complete system state snapshot.
 
     .PARAMETER PackageType
         Specifies whether to capture 'installed' or 'available' packages. Defaults to 'installed'.
@@ -1939,17 +1939,17 @@ function New-NipkgSnapshotFromSystem {
         - StoreProduct: Include only packages where StoreProduct is 'yes' (default behavior)
 
     .EXAMPLE
-        $snapshot = New-NipkgSnapshotFromSystem
+        $snapshot = New-SnapshotFromSystem
 
     .EXAMPLE
-        $snapshot = New-NipkgSnapshotFromSystem -PackageType "installed" -IncludeFeeds $true
+        $snapshot = New-SnapshotFromSystem -PackageType "installed" -IncludeFeeds $true
 
     .EXAMPLE
-        $snapshot = New-NipkgSnapshotFromSystem -PackageType "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        $snapshot = New-SnapshotFromSystem -PackageType "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .EXAMPLE
         # Create snapshot with only user-visible packages from current system
-        $snapshot = New-NipkgSnapshotFromSystem -Type "UserVisible"
+        $snapshot = New-SnapshotFromSystem -Type "UserVisible"
 
     .NOTES
         Returns a hashtable with:
@@ -1979,7 +1979,7 @@ function New-NipkgSnapshotFromSystem {
     )
 
     begin {
-        Write-Verbose "Starting New-NipkgSnapshotFromSystem operation"
+        Write-Verbose "Starting New-SnapshotFromSystem operation"
     }
     
     process {
@@ -2027,7 +2027,7 @@ function New-NipkgSnapshotFromSystem {
             Write-Information "Creating snapshot object..." -InformationAction Continue
             Write-Verbose "Creating snapshot with type '$Type', $($feedsInfo.Count) feeds and $($packagesInfo.Count) packages"
             
-            $snapshot = New-NipkgSnapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo -Type $Type
+            $snapshot = New-Snapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo -Type $Type
             
             Write-Information "System snapshot created successfully" -InformationAction Continue
             Write-Verbose "Snapshot contains type '$($snapshot.type)', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
@@ -2042,7 +2042,7 @@ function New-NipkgSnapshotFromSystem {
     }
     
     end {
-        Write-Verbose "Completed New-NipkgSnapshotFromSystem operation"
+        Write-Verbose "Completed New-SnapshotFromSystem operation"
     }
 }
 
@@ -2177,7 +2177,7 @@ function Install-Snapshot {
             $snapshotFeedsAdded = @()
             if (-not $SkipFeedsInstallation -and $Snapshot.feeds.Count -gt 0) {
                 Write-Information "Adding feeds from snapshot..."
-                $snapshotFeedsAdded = $Snapshot.feeds | Add-Feeds -NipkgCmdPath $NipkgCmdPath
+                $snapshotFeedsAdded = $Snapshot.feeds | Install-Feeds -NipkgCmdPath $NipkgCmdPath
             }
 
             if (-not $SkipPackagesInstallation -and $Snapshot.packages.Count -gt 0) {
@@ -3118,7 +3118,7 @@ function Resolve-PackageDependencies {
 
     .EXAMPLE
         # Get package info from installer and resolve dependencies
-        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\labview-2025"
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installers\labview-2025"
         $allPackages = $snapshot.packages | ForEach-Object { 
             # Convert snapshot format back to package info format
             [PSCustomObject]@{
@@ -3560,7 +3560,7 @@ function Get-PackageDefinitionsFromSnapshot {
     }
 }
 
-function Add-Feeds {
+function Install-Feeds {
     <#
     .SYNOPSIS
         Adds feeds to the system, avoiding duplicates.
@@ -3587,11 +3587,11 @@ function Add-Feeds {
             @{ name = "my-feed"; uri = "C:\feeds\my-feed" },
             @{ name = "online-feed"; uri = "https://example.com/feed" }
         )
-        $addedFeeds = Add-Feeds -FeedDefinitions $feeds
+        $addedFeeds = Install-Feeds -FeedDefinitions $feeds
 
     .EXAMPLE
         $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
-        $addedFeeds = Add-Feeds -FeedDefinitions $snapshot.feeds -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        $addedFeeds = Install-Feeds -FeedDefinitions $snapshot.feeds -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
     #>
     
     [CmdletBinding()]
@@ -3604,7 +3604,7 @@ function Add-Feeds {
     )
 
     begin {
-        Write-Verbose "Starting Add-Feeds operation"
+        Write-Verbose "Starting Install-Feeds operation"
         $script:feedsAdded = @()
         
         # Get currently configured feeds for duplicate checking
@@ -3695,14 +3695,13 @@ function Add-Feeds {
             }
         }
         
-        Write-Verbose "Completed Add-Feeds operation"
+        Write-Verbose "Completed Install-Feeds operation"
         return $script:feedsAdded
     }
 }
 
 Export-ModuleMember -Function `
-        Add-Feeds `
-    ,   Add-FeedDirectories `
+        Add-FeedDirectories `
     ,   Test-NipkgAvailability `
     ,   Get-NipkgCommandOutput `
     ,   ConvertFrom-NipkgOutput `
@@ -3717,13 +3716,13 @@ Export-ModuleMember -Function `
     ,   Get-UtilitiesPackages `
     ,   Get-ApplicationSoftwarePackages `
     ,   Get-FeedDefinitionsFromSystem `
-    ,   Add-Feeds `
+    ,   Install-Feeds `
     ,   Remove-Feeds `
     ,   Install-Packages `
     ,   Install-NipkgManager `
-    ,   New-NipkgSnapshot `
-    ,   New-NipkgSnapshotFromInstaller `
-    ,   New-NipkgSnapshotFromSystem `
+    ,   New-Snapshot `
+    ,   New-SnapshotFromInstallerDirectory `
+    ,   New-SnapshotFromSystem `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
     ,   Install-Snapshot `

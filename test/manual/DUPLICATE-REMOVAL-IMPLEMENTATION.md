@@ -8,7 +8,7 @@ Added dedicated functionality to remove duplicate packages by selecting the high
 
 ### 1. New Function: `Remove-DuplicatePackagesByVersion`
 
-**Location**: `NipkgHelper.psm1` (added before `New-NipkgSnapshot`)
+**Location**: `NipkgHelper.psm1` (added before `New-Snapshot`)
 
 **Purpose**: Removes duplicate packages by selecting the highest version of each package.
 
@@ -25,7 +25,7 @@ Added dedicated functionality to remove duplicate packages by selecting the high
 
 **Returns**: Array of unique packages with highest versions
 
-### 2. Modified Function: `New-NipkgSnapshotFromInstaller`
+### 2. Modified Function: `New-SnapshotFromInstallerDirectory`
 
 **Changes**:
 - Added call to `Remove-DuplicatePackagesByVersion` before creating snapshot
@@ -47,7 +47,7 @@ Added dedicated functionality to remove duplicate packages by selecting the high
 ### 3. Updated Documentation
 
 **Function Documentation**:
-- Updated `New-NipkgSnapshotFromInstaller` description
+- Updated `New-SnapshotFromInstallerDirectory` description
 - Added notes about automatic duplicate removal
 - Updated examples and usage patterns
 
@@ -60,7 +60,7 @@ Added dedicated functionality to remove duplicate packages by selecting the high
 ### Automatic (Recommended)
 ```powershell
 # Duplicate removal happens automatically
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installer"
 ```
 
 ### Manual Control
@@ -68,7 +68,7 @@ $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer"
 # Explicit duplicate removal when needed
 $packages = Get-PackagesInfoFromPackagesFile -InputPath "Packages"
 $unique = Remove-DuplicatePackagesByVersion -PackagesInfo $packages
-$snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $unique
+$snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $unique
 ```
 
 ## Testing
@@ -85,7 +85,7 @@ Created comprehensive tests:
 - Empty array handling
 - No duplicates scenario
 - Properties preservation
-- Integration with `New-NipkgSnapshot`
+- Integration with `New-Snapshot`
 
 ### Test Results
 ✅ All tests pass
@@ -126,7 +126,7 @@ Created comprehensive tests:
 
 ## Summary
 
-The implementation successfully addresses the requirement to remove duplicate packages by selecting the highest version before passing arrays to `New-NipkgSnapshot`. The solution is:
+The implementation successfully addresses the requirement to remove duplicate packages by selecting the highest version before passing arrays to `New-Snapshot`. The solution is:
 
 - **Robust**: Handles edge cases and error conditions
 - **Efficient**: Uses appropriate PowerShell cmdlets for performance

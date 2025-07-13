@@ -1,9 +1,9 @@
-# Test script for the enhanced New-NipkgSnapshot function
+# Test script for the enhanced New-Snapshot function
 # This script demonstrates the new packages-nipkg dependency resolution feature
 
 Import-Module -Force "../../LabViewHelpers/LabViewHelpers.psd1" -Verbose:$false
 
-Write-Host "=== Testing Enhanced New-NipkgSnapshot Function ===" -ForegroundColor Cyan
+Write-Host "=== Testing Enhanced New-Snapshot Function ===" -ForegroundColor Cyan
 Write-Host "This test demonstrates the new packages-nipkg dependency resolution feature" -ForegroundColor Yellow
 Write-Host ""
 
@@ -22,7 +22,7 @@ $mockPackagesInfo = @(
     [PSCustomObject]@{ Package = "other-package"; Version = "1.0.0"; Depends = "" }
 )
 
-$testSnapshot = New-NipkgSnapshot -FeedsInfo $mockFeedsInfo -PackagesInfo $mockPackagesInfo
+$testSnapshot = New-Snapshot -FeedsInfo $mockFeedsInfo -PackagesInfo $mockPackagesInfo
 
 Write-Host "✓ Snapshot created successfully!" -ForegroundColor Green
 Write-Host "  Feeds: $($testSnapshot.feeds.Count)"
@@ -71,7 +71,7 @@ Write-Host ""
 Write-Host "Test 4: Testing with data that has no ni-package-manager packages..." -ForegroundColor Green
 
 $noNipkgPackagesInfo = $mockPackagesInfo | Where-Object { $_.Package -ne "ni-package-manager" }
-$snapshotWithoutNipkg = New-NipkgSnapshot -FeedsInfo $mockFeedsInfo -PackagesInfo $noNipkgPackagesInfo
+$snapshotWithoutNipkg = New-Snapshot -FeedsInfo $mockFeedsInfo -PackagesInfo $noNipkgPackagesInfo
 
 Write-Host "✓ Snapshot created successfully!" -ForegroundColor Green
 Write-Host "  Regular packages: $($snapshotWithoutNipkg.packages.Count)"
@@ -79,7 +79,7 @@ Write-Host "  NIPKG packages: $($snapshotWithoutNipkg.'packages-nipkg'.Count) (s
 Write-Host ""
 
 Write-Host "=== Summary ===" -ForegroundColor Cyan
-Write-Host "✓ Enhanced New-NipkgSnapshot function is working correctly!" -ForegroundColor Green
+Write-Host "✓ Enhanced New-Snapshot function is working correctly!" -ForegroundColor Green
 Write-Host "✓ Automatically resolves ni-package-manager dependencies" -ForegroundColor Green
 Write-Host "✓ Creates packages-nipkg section with resolved dependencies" -ForegroundColor Green
 Write-Host "✓ Handles cases with and without ni-package-manager packages" -ForegroundColor Green

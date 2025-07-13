@@ -10,7 +10,7 @@ Write-Host "=== Testing Offline Installer Diagnosis ===" -ForegroundColor Cyan
 try {
     # Step 1: Create snapshot from installer
     Write-Host "`n1. Creating snapshot from installer..." -ForegroundColor Yellow
-    $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $InstallerDirectory -Verbose
+    $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $InstallerDirectory -Verbose
     Write-Host "✓ Snapshot created successfully with $($snapshot.packages.Count) packages" -ForegroundColor Green
 
     # Step 2: Export snapshot to temporary file

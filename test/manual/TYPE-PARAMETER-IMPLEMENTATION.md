@@ -22,7 +22,7 @@ The NI Package Manager (NIPKG) Helper module has been enhanced with a new **Type
 
 ## Updated Functions
 
-### 1. New-NipkgSnapshot
+### 1. New-Snapshot
 - **Added**: `[string]$Type = "Full"` parameter with ValidateSet
 - **Enhanced**: Filtering logic for UserVisible and StoreProduct types
 - **Enhanced**: Type field included in snapshot object output
@@ -30,31 +30,31 @@ The NI Package Manager (NIPKG) Helper module has been enhanced with a new **Type
 
 ```powershell
 # Examples
-$snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "Full"
-$snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
-$snapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
+$snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "Full"
+$snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
+$snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
 ```
 
-### 2. New-NipkgSnapshotFromInstaller
+### 2. New-SnapshotFromInstallerDirectory
 - **Added**: `[string]$Type = "Full"` parameter with ValidateSet
-- **Enhanced**: Passes Type parameter through to New-NipkgSnapshot
+- **Enhanced**: Passes Type parameter through to New-Snapshot
 - **Enhanced**: Documentation updated with Type parameter examples
 
 ```powershell
 # Examples
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer" -Type "UserVisible"
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer" -Type "StoreProduct"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installer" -Type "UserVisible"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installer" -Type "StoreProduct"
 ```
 
-### 3. New-NipkgSnapshotFromSystem
+### 3. New-SnapshotFromSystem
 - **Added**: `[string]$Type = "Full"` parameter with ValidateSet
-- **Enhanced**: Passes Type parameter through to New-NipkgSnapshot
+- **Enhanced**: Passes Type parameter through to New-Snapshot
 - **Enhanced**: Documentation updated with Type parameter examples
 
 ```powershell
 # Examples
-$snapshot = New-NipkgSnapshotFromSystem -PackageType "installed" -Type "UserVisible"
-$snapshot = New-NipkgSnapshotFromSystem -PackageType "available" -Type "StoreProduct"
+$snapshot = New-SnapshotFromSystem -PackageType "installed" -Type "UserVisible"
+$snapshot = New-SnapshotFromSystem -PackageType "available" -Type "StoreProduct"
 ```
 
 ### 4. Export-NipkgSnapshotToJson
@@ -121,28 +121,28 @@ All tests pass successfully, confirming:
 ### Software Audit
 ```powershell
 # Create snapshot of only user-visible software
-$userSoftware = New-NipkgSnapshotFromSystem -Type "UserVisible"
+$userSoftware = New-SnapshotFromSystem -Type "UserVisible"
 Export-NipkgSnapshotToJson -Snapshot $userSoftware -OutputPath "user-software-audit.json"
 ```
 
 ### License Compliance
 ```powershell
 # Create snapshot of only commercial products
-$commercialSoftware = New-NipkgSnapshotFromSystem -Type "StoreProduct"
+$commercialSoftware = New-SnapshotFromSystem -Type "StoreProduct"
 Export-NipkgSnapshotToJson -Snapshot $commercialSoftware -OutputPath "license-inventory.json"
 ```
 
 ### Complete System Backup
 ```powershell
 # Create complete system snapshot (default behavior)
-$fullBackup = New-NipkgSnapshotFromSystem -Type "Full"
+$fullBackup = New-SnapshotFromSystem -Type "Full"
 Export-NipkgSnapshotToJson -Snapshot $fullBackup -OutputPath "full-system-backup.json"
 ```
 
 ### Installer Analysis
 ```powershell
 # Analyze only user-visible packages in an installer
-$installerAnalysis = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installers\LabVIEW-2025" -Type "UserVisible"
+$installerAnalysis = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installers\LabVIEW-2025" -Type "UserVisible"
 Export-NipkgSnapshotToJson -Snapshot $installerAnalysis -OutputPath "installer-user-packages.json"
 ```
 

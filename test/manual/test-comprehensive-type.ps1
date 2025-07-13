@@ -122,7 +122,7 @@ Write-Host "  StoreProduct: $expectedStoreProduct" -ForegroundColor White
 # Test 1: Full type
 Write-Host "`n--- Test 1: Full Type ---" -ForegroundColor Yellow
 try {
-    $fullSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "Full"
+    $fullSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "Full"
     $success = $fullSnapshot.packages.Count -eq $expectedFull
     Write-Host "  Result: $(if ($success) { '✓ PASS' } else { '✗ FAIL' })" -ForegroundColor $(if ($success) { 'Green' } else { 'Red' })
     Write-Host "  Type: $($fullSnapshot.type)" -ForegroundColor White
@@ -134,7 +134,7 @@ try {
 # Test 2: UserVisible type
 Write-Host "`n--- Test 2: UserVisible Type ---" -ForegroundColor Yellow
 try {
-    $userVisibleSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "UserVisible"
+    $userVisibleSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "UserVisible"
     $success = $userVisibleSnapshot.packages.Count -eq $expectedUserVisible
     Write-Host "  Result: $(if ($success) { '✓ PASS' } else { '✗ FAIL' })" -ForegroundColor $(if ($success) { 'Green' } else { 'Red' })
     Write-Host "  Type: $($userVisibleSnapshot.type)" -ForegroundColor White
@@ -152,7 +152,7 @@ try {
 # Test 3: StoreProduct type
 Write-Host "`n--- Test 3: StoreProduct Type ---" -ForegroundColor Yellow
 try {
-    $storeProductSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "StoreProduct"
+    $storeProductSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "StoreProduct"
     $success = $storeProductSnapshot.packages.Count -eq $expectedStoreProduct
     Write-Host "  Result: $(if ($success) { '✓ PASS' } else { '✗ FAIL' })" -ForegroundColor $(if ($success) { 'Green' } else { 'Red' })
     Write-Host "  Type: $($storeProductSnapshot.type)" -ForegroundColor White
@@ -215,7 +215,7 @@ Write-Host "`n--- Test 5: Function Parameter Validation ---" -ForegroundColor Ye
 try {
     # Test invalid type
     try {
-        $invalidSnapshot = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "InvalidType"
+        $invalidSnapshot = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $testPackages -Type "InvalidType"
         Write-Host "  Parameter validation: ✗ FAIL - Should have rejected invalid type" -ForegroundColor Red
     } catch {
         Write-Host "  Parameter validation: ✓ PASS - Correctly rejected invalid type" -ForegroundColor Green
@@ -227,7 +227,7 @@ try {
 Write-Host "`n=== Test Summary ===" -ForegroundColor Cyan
 Write-Host "The Type parameter functionality has been comprehensively tested!" -ForegroundColor Green
 Write-Host "`nKey Features Verified:" -ForegroundColor White
-Write-Host "✓ Type parameter filtering in New-NipkgSnapshot" -ForegroundColor Green
+Write-Host "✓ Type parameter filtering in New-Snapshot" -ForegroundColor Green
 Write-Host "✓ Type preservation in Export-NipkgSnapshotToJson" -ForegroundColor Green
 Write-Host "✓ Type restoration in Import-NipkgSnapshotFromJson" -ForegroundColor Green
 Write-Host "✓ Parameter validation with ValidateSet" -ForegroundColor Green

@@ -1,5 +1,5 @@
 # Test script to verify packages-nipkg section is only created when ni-package-manager is present
-# This script validates the enhanced logic for New-NipkgSnapshot, Export-NipkgSnapshotToJson, and Import-NipkgSnapshotFromJson
+# This script validates the enhanced logic for New-Snapshot, Export-NipkgSnapshotToJson, and Import-NipkgSnapshotFromJson
 
 param(
     [string]$ModulePath = "..\..\LabViewHelpers\LabViewHelpers.psd1",
@@ -35,7 +35,7 @@ try {
 
     # Create snapshot without ni-package-manager
     Write-Host "Creating snapshot without ni-package-manager package..."
-    $snapshotWithoutNipkg = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $packagesWithoutNipkg
+    $snapshotWithoutNipkg = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $packagesWithoutNipkg
     
     # Verify packages-nipkg section is NOT present
     if ($snapshotWithoutNipkg.ContainsKey("packages-nipkg")) {
@@ -75,7 +75,7 @@ try {
 
     # Create snapshot with ni-package-manager
     Write-Host "Creating snapshot with ni-package-manager package..."
-    $snapshotWithNipkg = New-NipkgSnapshot -FeedsInfo $testFeeds -PackagesInfo $packagesWithNipkg
+    $snapshotWithNipkg = New-Snapshot -FeedsInfo $testFeeds -PackagesInfo $packagesWithNipkg
     
     # Verify packages-nipkg section IS present and contains packages
     if (-not $snapshotWithNipkg.ContainsKey("packages-nipkg")) {

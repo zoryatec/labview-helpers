@@ -7,17 +7,17 @@ The NI Package Manager (NIPKG) Helper module's Type parameter functionality has 
 
 ### 1. Updated Default Type Parameter Values
 
-#### New-NipkgSnapshotFromInstaller
+#### New-SnapshotFromInstallerDirectory
 - **CHANGED**: Default Type parameter value from `"Full"` to `"StoreProduct"`
 - **Reason**: Focus on commercial/purchasable packages by default for installer scenarios
 - **Impact**: Better alignment with commercial software deployment use cases
 
-#### New-NipkgSnapshotFromSystem  
+#### New-SnapshotFromSystem  
 - **CHANGED**: Default Type parameter value from `"Full"` to `"StoreProduct"`
 - **Reason**: Focus on commercial/purchasable packages by default for system snapshots
 - **Impact**: Better alignment with license tracking and commercial software auditing
 
-#### New-NipkgSnapshot
+#### New-Snapshot
 - **UNCHANGED**: Still defaults to `"Full"` for backward compatibility
 - **Reason**: This is the core function used by other functions; changing its default would break existing code
 
@@ -35,7 +35,7 @@ $installedPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPat
 
 # NEW CODE (Type-aware comparison):
 $snapshotType = if ($snapshot.type) { $snapshot.type } else { "Full" }
-$systemSnapshot = New-NipkgSnapshotFromSystem -PackageType "installed" -IncludeFeeds $false -Type $snapshotType -NipkgCmdPath $NipkgCmdPath
+$systemSnapshot = New-SnapshotFromSystem -PackageType "installed" -IncludeFeeds $false -Type $snapshotType -NipkgCmdPath $NipkgCmdPath
 $installedPackages = $systemSnapshot.packages
 ```
 
@@ -54,12 +54,12 @@ $installedPackages = $systemSnapshot.packages
 
 ### Maintained Compatibility
 - ✅ All existing code using explicit Type parameters continues to work unchanged
-- ✅ `New-NipkgSnapshot` maintains `"Full"` default for backward compatibility
+- ✅ `New-Snapshot` maintains `"Full"` default for backward compatibility
 - ✅ All existing Type values (`"Full"`, `"UserVisible"`, `"StoreProduct"`) work exactly as before
 
 ### Breaking Changes
-- ⚠️ **New-NipkgSnapshotFromInstaller**: Now defaults to `"StoreProduct"` instead of `"Full"`
-- ⚠️ **New-NipkgSnapshotFromSystem**: Now defaults to `"StoreProduct"` instead of `"Full"`
+- ⚠️ **New-SnapshotFromInstallerDirectory**: Now defaults to `"StoreProduct"` instead of `"Full"`
+- ⚠️ **New-SnapshotFromSystem**: Now defaults to `"StoreProduct"` instead of `"Full"`
 - ✅ **Mitigation**: Code that relied on the old defaults can explicitly specify `-Type "Full"` to maintain previous behavior
 
 ## Use Case Alignment
@@ -80,19 +80,19 @@ $installedPackages = $systemSnapshot.packages
 ### Updated Default Behavior
 ```powershell
 # OLD: Would include all packages (Full)
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installer"
 
 # NEW: Now includes only StoreProduct packages by default
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installer"
 
 # To get old behavior, explicitly specify Full:
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory "C:\Installer" -Type "Full"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installer" -Type "Full"
 ```
 
 ### Enhanced Compliance Validation
 ```powershell
 # Create a StoreProduct snapshot
-$snapshot = New-NipkgSnapshotFromSystem -Type "StoreProduct"
+$snapshot = New-SnapshotFromSystem -Type "StoreProduct"
 Export-NipkgSnapshotToJson -Snapshot $snapshot -OutputPath "store-products.json"
 
 # Compliance validation now uses StoreProduct filtering for comparison
@@ -122,16 +122,16 @@ $compliance = Test-SnapshotCompliance -SnapshotPath "store-products.json"
 #### If your code relies on the old "Full" defaults:
 ```powershell
 # OLD (relied on Full default):
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $dir
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $dir
 
 # NEW (explicit Full to maintain behavior):  
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $dir -Type "Full"
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $dir -Type "Full"
 ```
 
 #### If your code wants the new StoreProduct focus:
 ```powershell
 # No changes needed - new default provides StoreProduct filtering
-$snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $dir
+$snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $dir
 ```
 
 #### For compliance validation:

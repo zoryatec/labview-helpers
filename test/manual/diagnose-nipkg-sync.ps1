@@ -37,7 +37,7 @@ try {
     
     if (Test-Path $installerPath) {
         Write-Host "  Creating snapshot from installer..." -ForegroundColor Gray
-        $snapshot = New-NipkgSnapshotFromInstaller -InstallerDirectory $installerPath
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory $installerPath
         
         Write-Host "  NIPKG packages in snapshot:" -ForegroundColor Gray
         $nipkgPkgs = $snapshot.packages | Where-Object { $_.name -like "*ni-package-manager*" }

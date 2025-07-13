@@ -11,7 +11,7 @@ $testFeedsInfo = @(
     [PSCustomObject]@{ Name = "TestFeed1"; Path = "https://test1.com" }
 )
 
-Write-Host "`n1. Testing New-NipkgSnapshot enhancements..." -ForegroundColor Green
+Write-Host "`n1. Testing New-Snapshot enhancements..." -ForegroundColor Green
 
 # Test 1.1: Single ni-package-manager creates packages-nipkg
 Write-Host "  - Testing single ni-package-manager package..." -ForegroundColor Yellow
@@ -21,7 +21,7 @@ $packagesWithSingleNipkg = @(
 )
 
 try {
-    $snapshot1 = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $packagesWithSingleNipkg
+    $snapshot1 = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $packagesWithSingleNipkg
     $hasPackagesNipkg = $snapshot1.ContainsKey("packages-nipkg")
     Write-Host "    ✓ Creates packages-nipkg: $hasPackagesNipkg" -ForegroundColor Green
 } catch {
@@ -36,7 +36,7 @@ $packagesWithMultipleNipkg = @(
 )
 
 try {
-    $snapshot2 = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $packagesWithMultipleNipkg
+    $snapshot2 = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $packagesWithMultipleNipkg
     Write-Host "    ✗ Should have thrown error" -ForegroundColor Red
 } catch {
     if ($_.Exception.Message -like "*Multiple ni-package-manager packages found*") {
@@ -53,7 +53,7 @@ $packagesWithoutNipkg = @(
 )
 
 try {
-    $snapshot3 = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $packagesWithoutNipkg
+    $snapshot3 = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $packagesWithoutNipkg
     $hasPackagesNipkg = $snapshot3.ContainsKey("packages-nipkg")
     Write-Host "    ✓ Omits packages-nipkg: $(-not $hasPackagesNipkg)" -ForegroundColor Green
 } catch {
@@ -151,8 +151,8 @@ Remove-Item $tempFile2 -ErrorAction SilentlyContinue
 Write-Host "    ✓ Test files cleaned up" -ForegroundColor Green
 
 Write-Host "`n=== Enhancement Test Summary ===" -ForegroundColor Cyan
-Write-Host "✓ New-NipkgSnapshot creates packages-nipkg only when exactly one ni-package-manager is present" -ForegroundColor Green
-Write-Host "✓ New-NipkgSnapshot throws error when multiple ni-package-manager packages are found" -ForegroundColor Green
+Write-Host "✓ New-Snapshot creates packages-nipkg only when exactly one ni-package-manager is present" -ForegroundColor Green
+Write-Host "✓ New-Snapshot throws error when multiple ni-package-manager packages are found" -ForegroundColor Green
 Write-Host "✓ Export/Import functions preserve packages-nipkg section correctly" -ForegroundColor Green
 Write-Host "✓ Round-trip consistency maintained for both scenarios" -ForegroundColor Green
 Write-Host "✓ Sync function handles both scenarios gracefully" -ForegroundColor Green

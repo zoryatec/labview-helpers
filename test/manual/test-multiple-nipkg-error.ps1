@@ -20,7 +20,7 @@ $testPackagesInfo = @(
 )
 
 try {
-    $snapshot = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfo -Verbose
+    $snapshot = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfo -Verbose
     if ($snapshot.ContainsKey("packages-nipkg")) {
         Write-Host "✓ PASS: Single ni-package-manager created packages-nipkg section" -ForegroundColor Green
         Write-Host "  packages-nipkg contains $($snapshot["packages-nipkg"].Count) packages" -ForegroundColor Gray
@@ -41,7 +41,7 @@ $testPackagesInfoMultiple = @(
 )
 
 try {
-    $snapshot = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfoMultiple -Verbose
+    $snapshot = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfoMultiple -Verbose
     Write-Host "✗ FAIL: Multiple ni-package-manager packages should have thrown an error" -ForegroundColor Red
 } catch {
     if ($_.Exception.Message -like "*Multiple ni-package-manager packages found*") {
@@ -61,7 +61,7 @@ $testPackagesInfoNone = @(
 )
 
 try {
-    $snapshot = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfoNone -Verbose
+    $snapshot = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfoNone -Verbose
     if (-not $snapshot.ContainsKey("packages-nipkg")) {
         Write-Host "✓ PASS: No ni-package-manager correctly omitted packages-nipkg section" -ForegroundColor Green
     } else {
@@ -82,7 +82,7 @@ $testPackagesInfoThree = @(
 )
 
 try {
-    $snapshot = New-NipkgSnapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfoThree -Verbose
+    $snapshot = New-Snapshot -FeedsInfo $testFeedsInfo -PackagesInfo $testPackagesInfoThree -Verbose
     Write-Host "✗ FAIL: Three ni-package-manager packages should have thrown an error" -ForegroundColor Red
 } catch {
     if ($_.Exception.Message -like "*Multiple ni-package-manager packages found*" -and $_.Exception.Message -like "*3 instances*") {

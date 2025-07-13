@@ -39,15 +39,15 @@ $packages = @(
 Write-Host "`nOriginal package count: $($packages.Count)" -ForegroundColor White
 
 # Create Full snapshot (default - includes all packages)
-$fullSnapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "Full"
+$fullSnapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "Full"
 Write-Host "Full snapshot: $($fullSnapshot.packages.Count) packages, type: $($fullSnapshot.type)" -ForegroundColor Green
 
 # Create UserVisible snapshot (only packages with UserVisible = 'yes')
-$userSnapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
+$userSnapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "UserVisible"
 Write-Host "UserVisible snapshot: $($userSnapshot.packages.Count) packages, type: $($userSnapshot.type)" -ForegroundColor Green
 
 # Create StoreProduct snapshot (only packages with StoreProduct = 'yes')
-$storeSnapshot = New-NipkgSnapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
+$storeSnapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -Type "StoreProduct"
 Write-Host "StoreProduct snapshot: $($storeSnapshot.packages.Count) packages, type: $($storeSnapshot.type)" -ForegroundColor Green
 
 # Example 2: Export/Import preserves Type
@@ -75,16 +75,16 @@ Remove-Item $snapshotPath -Force -ErrorAction SilentlyContinue
 # Example 3: Using Type parameter with system snapshots
 Write-Host "`n--- Example 3: Function Signatures ---" -ForegroundColor Yellow
 
-Write-Host "`nNew-NipkgSnapshot supports Type parameter:" -ForegroundColor White
-Write-Host "  New-NipkgSnapshot -FeedsInfo `$feeds -PackagesInfo `$packages -Type 'Full'" -ForegroundColor Gray
-Write-Host "  New-NipkgSnapshot -FeedsInfo `$feeds -PackagesInfo `$packages -Type 'UserVisible'" -ForegroundColor Gray
-Write-Host "  New-NipkgSnapshot -FeedsInfo `$feeds -PackagesInfo `$packages -Type 'StoreProduct'" -ForegroundColor Gray
+Write-Host "`nNew-Snapshot supports Type parameter:" -ForegroundColor White
+Write-Host "  New-Snapshot -FeedsInfo `$feeds -PackagesInfo `$packages -Type 'Full'" -ForegroundColor Gray
+Write-Host "  New-Snapshot -FeedsInfo `$feeds -PackagesInfo `$packages -Type 'UserVisible'" -ForegroundColor Gray
+Write-Host "  New-Snapshot -FeedsInfo `$feeds -PackagesInfo `$packages -Type 'StoreProduct'" -ForegroundColor Gray
 
-Write-Host "`nNew-NipkgSnapshotFromInstaller supports Type parameter:" -ForegroundColor White
-Write-Host "  New-NipkgSnapshotFromInstaller -InstallerDirectory 'C:\Installer' -Type 'UserVisible'" -ForegroundColor Gray
+Write-Host "`nNew-SnapshotFromInstallerDirectory supports Type parameter:" -ForegroundColor White
+Write-Host "  New-SnapshotFromInstallerDirectory -InstallerDirectory 'C:\Installer' -Type 'UserVisible'" -ForegroundColor Gray
 
-Write-Host "`nNew-NipkgSnapshotFromSystem supports Type parameter:" -ForegroundColor White
-Write-Host "  New-NipkgSnapshotFromSystem -PackageType 'installed' -Type 'StoreProduct'" -ForegroundColor Gray
+Write-Host "`nNew-SnapshotFromSystem supports Type parameter:" -ForegroundColor White
+Write-Host "  New-SnapshotFromSystem -PackageType 'installed' -Type 'StoreProduct'" -ForegroundColor Gray
 
 # Example 4: Real-world usage patterns
 Write-Host "`n--- Example 4: Real-world Usage Patterns ---" -ForegroundColor Yellow

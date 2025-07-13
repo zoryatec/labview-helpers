@@ -7,7 +7,7 @@ This directory contains manual test and demonstration scripts for the LabViewHel
 ### `test-comprehensive.ps1`
 Comprehensive test suite that validates all module functionality including:
 - Module import and function exports
-- New functions (New-NipkgSnapshotFromSystem)
+- New functions (New-SnapshotFromSystem)
 - Renamed functions (Get-PackagesInfoFromNipkgCmd)
 - New parameters (RemoveExistingFeeds in Install-Snapshot)
 - Help documentation

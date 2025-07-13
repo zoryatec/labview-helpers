@@ -1,7 +1,7 @@
 Import-Module -Name $PSScriptRoot/../../../LabViewHelpers/LabViewHelpers.psd1 -Force
 
 Write-Host "====================================================================================" -ForegroundColor Cyan
-Write-Host "Testing New-NipkgSnapshotFromSystem Function" -ForegroundColor Cyan
+Write-Host "Testing New-SnapshotFromSystem Function" -ForegroundColor Cyan
 Write-Host "====================================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -27,7 +27,7 @@ Write-Host ""
 Write-Host "Creating system snapshot..." -ForegroundColor Yellow
 
 try {
-    $snapshot = New-NipkgSnapshotFromSystem `
+    $snapshot = New-SnapshotFromSystem `
                     -NipkgCmdPath $nipkgCmdPath `
                     -PackageType "installed" `
                     -IncludeFeeds $true
