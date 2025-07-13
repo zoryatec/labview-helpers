@@ -500,12 +500,12 @@ function Install-LabViewIso {
 
             Write-Information "Step 2: Installing LabVIEW from extracted files..." -InformationAction Continue
             
-            # Build parameters for Install-LabViewOffline with hardcoded switches
+            # Build parameters for Install-LabViewOffline using actual parameter values
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
                 LabViewInstallerDirectory = $TemporaryExpandDirectory
-                RemoveExistingFeeds = $true
-                RemoveSnapshotFeeds = $true
+                RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
+                RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
             }
             
             # Add optional string parameter if provided
