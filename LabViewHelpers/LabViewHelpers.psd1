@@ -67,6 +67,7 @@
         'Get-ProgrammingEnvironmentsPackages',
         'Get-UtilitiesPackages',
         'Get-ApplicationSoftwarePackages',
+        'Get-StoreProductPackages',
         'Get-FeedDefinitionsFromSystem',
         'Install-Feeds',
         'Remove-Feeds',

@@ -974,119 +974,44 @@ function Get-PackagesInfoFromPackagesFile {
 }
 
 function Get-DriverPackages {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    
-    process {
-        foreach ($package in $PackagesInfo) {
-            if ($package.Section -eq "Drivers") {
-                Write-Output $package
-            }
-        }
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Drivers' }
     }
 }
 
 function Get-ProgrammingEnvironmentsPackages {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    
-    process {
-        foreach ($package in $PackagesInfo) {
-            if ($package.Section -eq "Programming Environments") {
-                Write-Output $package
-            }
-        }
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Programming Environments' }
     }
 }
 
 function Get-UtilitiesPackages {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    
-    process {
-        foreach ($package in $PackagesInfo) {
-            if ($package.Section -eq "Utilities") {
-                Write-Output $package
-            }
-        }
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Utilities' }
     }
 }
 
-
 function Get-ApplicationSoftwarePackages {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    
-    process {
-        # Handle both individual objects and arrays
-        if ($PackagesInfo -is [System.Array]) {
-            foreach ($package in $PackagesInfo) {
-                if ($package.Section -eq "Application Software") {
-                    Write-Output $package
-                }
-            }
-        } else {
-            if ($PackagesInfo.Section -eq "Application Software") {
-                Write-Output $PackagesInfo
-            }
-        }
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Application Software' }
     }
 }
 
 function Get-StoreProductPackages {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    
-    process {
-        # Handle both individual objects and arrays
-        if ($PackagesInfo -is [System.Array]) {
-            foreach ($package in $PackagesInfo) {
-                if ($package.StoreProduct -eq 'yes') {
-                    Write-Output $package
-                }
-            }
-        } else {
-            if ($PackagesInfo.StoreProduct -eq 'yes') {
-                Write-Output $PackagesInfo
-            }
-        }
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.StoreProduct -eq 'yes' }
     }
 }
 
 function Get-UserVisiblePackages {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    
-    process {
-        foreach ($package in $PackagesInfo) {
-            if ($package.UserVisible -eq 'yes') {
-                Write-Output $package
-            }
-        }
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.UserVisible -eq 'yes' }
     }
 }
 
@@ -1275,7 +1200,8 @@ function New-Snapshot {
                     $filteredPackages = $filteredPackages | & $FilterFunction
                     Write-Verbose "Filtered packages using custom function: $($filteredPackages.Count) (was $originalCount)"
                 } catch {
-                    Write-Warning "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
+                    Write-Error "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
+                    throw
                 }
             } else {
                 Write-Verbose "No filter function provided, using all packages: $($filteredPackages.Count)"
@@ -1738,7 +1664,7 @@ function New-SnapshotFromInstallerDirectory {
         [bool]$IncludeFeeds = $true,
         
         [Parameter()]
-        [scriptblock]$FilterFunction = { $input | Get-StoreProductPackages }
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
 
     begin {
