@@ -104,30 +104,6 @@ function Install-ChocolateyPackage7zip {
 }
 
 function Install-Gcd {
-    <#
-    .SYNOPSIS
-        Installs the GCD (Generic Configuration Deployer) tool via NIPKG.
-
-    .DESCRIPTION
-        Adds the GCD feed to NIPKG, updates the package list, and installs the GCD tool.
-        Also adds GCD to the system PATH for global access.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .PARAMETER GcdFeed
-        URL of the GCD package feed. Defaults to the official Zoryatec GCD feed.
-
-    .EXAMPLE
-        Install-Gcd
-
-    .EXAMPLE
-        Install-Gcd -NipkgCmdPath "C:\Program Files\National Instruments\NI Package Manager\nipkg.exe"
-
-    .NOTES
-        Requires NIPKG to be installed and administrative privileges.
-        Adds GCD to system PATH automatically.
-    #>
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -178,59 +154,7 @@ function Install-Gcd {
 }
 
 
-function Install-LabViewOffline {
-    <#
-    .SYNOPSIS
-        Performs offline installation of LabVIEW from installer directory.
-
-    .DESCRIPTION
-        Installs LabVIEW using offline installer files. Optionally installs NIPKG manager
-        first, then adds feeds and performs the LabVIEW installation.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to standard installation path.
-
-    .PARAMETER LabViewInstallerDirectory
-        Path to the directory containing LabVIEW installer files and feeds.
-
-    .PARAMETER NipkgInstallerPath
-        Optional path to NIPKG installer if it needs to be installed first.
-
-    .PARAMETER InstallationSnapshotFile
-        Optional path to save the installation snapshot file.
-
-    .PARAMETER RemoveExistingFeeds
-        Remove all existing feeds from the system before applying the installer feeds.
-
-    .PARAMETER RemoveSnapshotFeeds
-        Remove the installer feeds from the system after package installation is complete.
-        This is useful when you want to install packages from the installer but don't want
-        to keep those feeds permanently in the system.
-
-    .PARAMETER ExcludePackages
-        Array of package names to exclude from installation. These packages will be skipped even 
-        if they are present in the installer snapshot. Useful for avoiding problematic packages 
-        or when certain packages should not be installed in specific environments.
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview"
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -NipkgInstallerPath "C:\installers\nipkg\Install.exe"
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -RemoveSnapshotFeeds
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -RemoveExistingFeeds -RemoveSnapshotFeeds
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -ExcludePackages @("problematic-package", "optional-driver")
-
-    .NOTES
-        Requires administrative privileges.
-        The installer directory must contain a 'feeds' subdirectory with NIPKG feeds.
-    #>
+function Install-PackagesFromInstallerDirectory {
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -254,11 +178,14 @@ function Install-LabViewOffline {
         [switch]$RemoveSnapshotFeeds,
 
         [Parameter()]
+        [switch]$AcceptEulas,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
     begin {
-        Write-Verbose "Starting Install-LabViewOffline operation"
+        Write-Verbose "Starting Install-PackagesFromInstallerDirectory operation"
     }
     
     process {
@@ -285,7 +212,7 @@ function Install-LabViewOffline {
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
                 Snapshot = $installerSnapshot
-                AcceptEulas = $true
+                AcceptEulas = $AcceptEulas.IsPresent
                 Yes = $true
                 ForceLocked = $true
                 AllowDowngrade = $true
@@ -308,7 +235,7 @@ function Install-LabViewOffline {
     }
     
     end {
-        Write-Verbose "Completed Install-LabViewOffline operation"
+        Write-Verbose "Completed Install-PackagesFromInstallerDirectory operation"
     }
 }
 
@@ -392,66 +319,7 @@ function Expand-Iso {
     }
 }
 
-function Install-LabViewIso {
-    <#
-    .SYNOPSIS
-        Installs LabVIEW from an ISO file.
-
-    .DESCRIPTION
-        Extracts a LabVIEW ISO file and performs offline installation. Combines
-        ISO extraction and offline installation in a single operation.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to standard installation path.
-
-    .PARAMETER IsoFilePath
-        Path to the LabVIEW ISO file to install from.
-
-    .PARAMETER NipkgInstallerPath
-        Optional path to NIPKG installer if it needs to be installed first.
-
-    .PARAMETER TemporaryExpandDirectory
-        Directory to temporarily extract ISO contents. Defaults to C:\installer-labview.
-
-    .PARAMETER RemoveExistingFeeds
-        Remove all existing feeds from the system before applying the installer feeds.
-
-    .PARAMETER RemoveSnapshotFeeds
-        Remove the installer feeds from the system after package installation is complete.
-        This is useful when you want to install packages from the installer but don't want
-        to keep those feeds permanently in the system.
-
-    .PARAMETER RemoveIsoFile
-        Remove the ISO file immediately after successful extraction to free up disk space.
-        This is especially useful for large ISO files (40GB+) to prevent disk space issues.
-
-    .PARAMETER RemoveTemporaryDirectory
-        Remove the temporary extraction directory after installation completes.
-        This happens regardless of installation success or failure.
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso"
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso" -NipkgInstallerPath "C:\nipkg\Install.exe" -TemporaryExpandDirectory "D:\temp"
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveSnapshotFeeds
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveExistingFeeds -RemoveSnapshotFeeds
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveIsoFile -RemoveTemporaryDirectory
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso" -RemoveExistingFeeds -RemoveSnapshotFeeds -RemoveIsoFile -RemoveTemporaryDirectory
-
-    .NOTES
-        Requires administrative privileges and sufficient disk space for extraction.
-        Temporary directory will be created if it doesn't exist.
-        Cleanup operations in finally block ensure temporary files are removed even on failure.
-    #>
+function Install-PackagesFromInstallerIso {
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -482,11 +350,14 @@ function Install-LabViewIso {
         [switch]$RemoveTemporaryDirectory,
 
         [Parameter()]
+        [switch]$AcceptEulas,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
     begin {
-        Write-Verbose "Starting Install-LabViewIso operation"
+        Write-Verbose "Starting Install-PackagesFromInstallerIso operation"
     }
     
     process {
@@ -510,12 +381,13 @@ function Install-LabViewIso {
 
             Write-Information "Step 2: Installing LabVIEW from extracted files..." -InformationAction Continue
             
-            # Build parameters for Install-LabViewOffline using actual parameter values
+            # Build parameters for Install-PackagesFromInstallerDirectory using actual parameter values
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
                 LabViewInstallerDirectory = $TemporaryExpandDirectory
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
+                AcceptEulas = $AcceptEulas.IsPresent
                 FilterFunction = $FilterFunction
             }   
             
@@ -524,7 +396,7 @@ function Install-LabViewIso {
                 $installParams.NipkgInstallerPath = $NipkgInstallerPath
             }
             
-            Install-LabViewOffline @installParams
+            Install-PackagesFromInstallerDirectory @installParams
             
             Write-Information "LabVIEW ISO installation completed successfully" -InformationAction Continue
         }
@@ -567,7 +439,7 @@ function Install-LabViewIso {
     }
     
     end {
-        Write-Verbose "Completed Install-LabViewIso operation"
+        Write-Verbose "Completed Install-PackagesFromInstallerIso operation"
     }
 }
 
@@ -729,14 +601,14 @@ function Invoke-FileDownload {
     }
 }
 
-function Install-FromInstallerIsoWithDownload {
+function Install-PackagesFromInstallerIsoWithDownload {
     <#
     .SYNOPSIS
         Downloads and installs LabVIEW from an ISO file URL.
 
     .DESCRIPTION
         Downloads a LabVIEW ISO file from a URL to a temporary directory and then performs
-        offline installation using Install-LabViewIso. Provides progress reporting during
+        offline installation using Install-PackagesFromInstallerIso. Provides progress reporting during
         download and handles cleanup of downloaded files.
 
     .PARAMETER IsoUrl
@@ -771,13 +643,13 @@ function Install-FromInstallerIsoWithDownload {
         Download timeout in minutes. Defaults to 60 minutes for large ISO files.
 
     .EXAMPLE
-        Install-FromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso"
+        Install-PackagesFromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso"
 
     .EXAMPLE
-        Install-FromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -RemoveDownloadedFiles -RemoveTemporaryDirectory
+        Install-PackagesFromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -RemoveDownloadedFiles -RemoveTemporaryDirectory
 
     .EXAMPLE
-        Install-FromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -TemporaryDownloadDirectory "D:\temp\downloads" -TimeoutMinutes 120
+        Install-PackagesFromInstallerIsoWithDownload -IsoUrl "https://example.com/labview-2024.iso" -TemporaryDownloadDirectory "D:\temp\downloads" -TimeoutMinutes 120
 
     .NOTES
         Requires administrative privileges and sufficient disk space for download and extraction.
@@ -822,7 +694,7 @@ function Install-FromInstallerIsoWithDownload {
     )
     
     begin {
-        Write-Verbose "Starting Install-FromInstallerIsoWithDownload operation"
+        Write-Verbose "Starting Install-PackagesFromInstallerIsoWithDownload operation"
         
         # Generate unique temporary download directory if not provided
         if ([string]::IsNullOrEmpty($TemporaryDownloadDirectory)) {
@@ -860,7 +732,7 @@ function Install-FromInstallerIsoWithDownload {
             
             Write-Information "Step 2: Installing LabVIEW from downloaded ISO..." -InformationAction Continue
             
-            # Build parameters for Install-LabViewIso
+            # Build parameters for Install-PackagesFromInstallerIso
             $installParams = @{
                 NipkgCmdPath = $NipkgCmdPath
                 IsoFilePath = $downloadedIsoPath
@@ -882,7 +754,7 @@ function Install-FromInstallerIsoWithDownload {
             }
             
             # Install using existing function
-            Install-LabViewIso @installParams
+            Install-PackagesFromInstallerIso @installParams
             
             Write-Information "LabVIEW installation from downloaded ISO completed successfully" -InformationAction Continue
         }
@@ -933,7 +805,7 @@ function Install-FromInstallerIsoWithDownload {
     }
     
     end {
-        Write-Verbose "Completed Install-FromInstallerIsoWithDownload operation"
+        Write-Verbose "Completed Install-PackagesFromInstallerIsoWithDownload operation"
     }
 }
 
@@ -1021,12 +893,12 @@ function Set-LabViewForCi {
 
 
 Export-ModuleMember -Function `
-        Install-LabViewOffline `
+        Install-PackagesFromInstallerDirectory `
     ,   Install-Chocolatey `
     ,   Install-ChocolateyPackage7zip `
     ,   Install-Gcd `
     ,   Expand-Iso `
-    ,   Install-LabViewIso `
+    ,   Install-PackagesFromInstallerIso `
     ,   Invoke-FileDownload `
-    ,   Install-FromInstallerIsoWithDownload `
+    ,   Install-PackagesFromInstallerIsoWithDownload `
     ,   Set-LabViewForCi

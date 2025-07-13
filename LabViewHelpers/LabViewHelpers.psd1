@@ -45,12 +45,12 @@
         'Initialize-LabVIEWCLIConfig',
         
         # LabViewInstallationHelper functions
-        'Install-LabViewOffline',
+        'Install-PackagesFromInstallerDirectory',
         'Install-Chocolatey',
         'Install-ChocolateyPackage7zip',
         'Install-Gcd',
         'Expand-Iso',
-        'Install-LabViewIso',
+        'Install-PackagesFromInstallerIso',
         'Set-LabViewForCi',
         
         # NipkgHelper functions

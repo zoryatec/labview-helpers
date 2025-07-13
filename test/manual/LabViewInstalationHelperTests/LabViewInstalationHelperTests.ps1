@@ -27,4 +27,4 @@ $installParams = @{
     NipkgInstallerPath = $nipkgInstallerPath
 }
 
-Install-LabViewOffline @installParams
+Install-PackagesFromInstallerDirectory @installParams

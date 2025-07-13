@@ -87,7 +87,7 @@ The LabViewHelpers PowerShell module is now fully productionized and ready for d
 
 ### Installation Management (LabViewInstallationHelper.psm1)
 
-- **LabVIEW Installation**: `Install-LabView`, `Install-LabViewOffline`, `Install-LabViewIso`
+- **LabVIEW Installation**: `Install-LabView`, `Install-PackagesFromInstallerDirectory`, `Install-PackagesFromInstallerIso`
 - **Dependencies**: `Install-Chocolatey`, `Install-ChocolateyPackage7zip`, `Install-Gcd`
 - **CI/CD Support**: `Set-LabViewForCi`, `Expand-Iso`
 

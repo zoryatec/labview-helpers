@@ -1978,13 +1978,13 @@ function Install-Snapshot {
                 $packagesToInstall = Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot
                 $installSwitches = @{
                     NipkgCmdPath = $NipkgCmdPath
-                    AcceptEulas = $AcceptEulas
-                    Yes = $Yes
-                    ForceLocked = $ForceLocked
-                    AllowDowngrade = $AllowDowngrade
-                    AllowUninstall = $AllowUninstall
-                    InstallAlsoUpgrades = $InstallAlsoUpgrades
-                    IncludeRecommended = $IncludeRecommended
+                    AcceptEulas = $AcceptEulas.IsPresent
+                    Yes = $Yes.IsPresent
+                    ForceLocked = $ForceLocked.IsPresent
+                    AllowDowngrade = $AllowDowngrade.IsPresent
+                    AllowUninstall = $AllowUninstall.IsPresent
+                    InstallAlsoUpgrades = $InstallAlsoUpgrades.IsPresent
+                    IncludeRecommended = $IncludeRecommended.IsPresent
                     PackageDefinitions = $packagesToInstall
                 }
                 Install-Packages @installSwitches   
