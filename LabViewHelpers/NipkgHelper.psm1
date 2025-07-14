@@ -1085,8 +1085,13 @@ function New-Snapshot {
             $packages = @()
             foreach ($package in $filteredPackages) {
                 $packages += [ordered]@{
-                    name = $package.Package
-                    version = $package.Version
+                    Package = $package.Package
+                    Version = $package.Version
+                    Depends = $package.Depends 
+                    Description = $package.Description
+                    Section = $package.Section
+                    UserVisible = $package.UserVisible
+                    StoreProduct = $package.StoreProduct
                 }
             }
             
@@ -1125,11 +1130,16 @@ function New-Snapshot {
                         # Add ordered dependencies to packages-nipkg section
                         foreach ($dependency in $orderedDependencies) {
                             # Check if not already added (avoid duplicates)
-                            $existingPackage = $packagesNipkg | Where-Object { $_.name -eq $dependency.Package }
+                            $existingPackage = $packagesNipkg | Where-Object { $_.Package -eq $dependency.Package }
                             if (-not $existingPackage) {
                                 $packagesNipkg += [ordered]@{
-                                    name = $dependency.Package
-                                    version = $dependency.Version
+                                    Package = $dependency.Package
+                                    Version = $dependency.Version
+                                    Depends = $dependency.Depends 
+                                    Description = $dependency.Description
+                                    Section = $dependency.Section
+                                    UserVisible = $dependency.UserVisible
+                                    StoreProduct = $dependency.StoreProduct
                                 }
                             }
                         }
@@ -1137,11 +1147,11 @@ function New-Snapshot {
                     catch {
                         Write-Warning "Failed to resolve dependencies for ni-package-manager package '$($nipkgPackage.Package)': $($_.Exception.Message)"
                         # Still add the ni-package-manager package itself even if dependency resolution fails
-                        $existingPackage = $packagesNipkg | Where-Object { $_.name -eq $nipkgPackage.Package }
+                        $existingPackage = $packagesNipkg | Where-Object { $_.Package -eq $nipkgPackage.Package }
                         if (-not $existingPackage) {
                             $packagesNipkg += [ordered]@{
-                                name = $nipkgPackage.Package
-                                version = $nipkgPackage.Version
+                                Package = $nipkgPackage.Package
+                                Version = $nipkgPackage.Version
                             }
                         }
                     }
@@ -1248,14 +1258,12 @@ function Export-NipkgSnapshotToJson {
                 $feedsCount = if ($Snapshot.feeds) { $Snapshot.feeds.Count } else { 0 }
                 $packagesCount = if ($Snapshot.packages) { $Snapshot.packages.Count } else { 0 }
                 $nipkgPackagesCount = if ($Snapshot."packages-nipkg") { $Snapshot."packages-nipkg".Count } else { 0 }
-                $snapshotType = if ($Snapshot.type) { $Snapshot.type } else { "Unknown" }
                 
                 Write-Verbose "Exported snapshot contains type '$snapshotType', $feedsCount feeds, $packagesCount packages, and $nipkgPackagesCount NIPKG packages"
                 
                 # Return summary information
                 return [PSCustomObject]@{
                     SnapshotPath = $OutputPath
-                    Type = $snapshotType
                     FeedsCount = $feedsCount
                     PackagesCount = $packagesCount
                     NipkgPackagesCount = $nipkgPackagesCount
@@ -1333,7 +1341,6 @@ function Import-NipkgSnapshotFromJson {
             
             # Convert back to hashtable format
             $snapshot = @{
-                type = if ($snapshotData.type) { $snapshotData.type } else { "Unknown" }
                 feeds = @()
                 packages = @()
             }
@@ -1354,8 +1361,13 @@ function Import-NipkgSnapshotFromJson {
                 Write-Verbose "Processing $($snapshotData.packages.Count) packages"
                 foreach ($package in $snapshotData.packages) {
                     $snapshot.packages += [ordered]@{
-                        name = $package.name
-                        version = $package.version
+                        Package = $package.Package
+                        Version = $package.Version
+                        Depends = $package.Depends 
+                        Description = $package.Description
+                        Section = $package.Section
+                        UserVisible = $package.UserVisible
+                        StoreProduct = $package.StoreProduct
                     }
                 }
             }
@@ -1366,8 +1378,13 @@ function Import-NipkgSnapshotFromJson {
                 $snapshot."packages-nipkg" = @()
                 foreach ($package in $snapshotData."packages-nipkg") {
                     $snapshot."packages-nipkg" += [ordered]@{
-                        name = $package.name
-                        version = $package.version
+                        Package = $package.Package
+                        Version = $package.Version
+                        Depends = $package.Depends 
+                        Description = $package.Description
+                        Section = $package.Section
+                        UserVisible = $package.UserVisible
+                        StoreProduct = $package.StoreProduct
                     }
                 }
             }
@@ -1588,7 +1605,7 @@ function New-SnapshotFromInstallerDirectory {
                         # Add feed information if requested
                         if ($IncludeFeeds) {
                             $nipkgFeedInfo = [PSCustomObject]@{
-                                Name = "ni-package-manager-packages"
+                                Name = "local-installer-ni-package-manager-packages"
                                 Path = $nipkgFeedDirectory
                             }
                             $allFeeds += $nipkgFeedInfo
@@ -1698,7 +1715,7 @@ function New-SnapshotFromSystem {
         [bool]$IncludeFeeds = $true,
 
         [Parameter()]
-        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
+        [scriptblock]$FilterFunction
         
     )
 
@@ -2028,12 +2045,12 @@ function Test-Snapshot {
                     
                     # Check for missing or incorrect versions
                     foreach ($snapshotPackage in $Snapshot.packages) {
-                        $matchingPackage = $installedPackages | Where-Object { $_.Package -eq $snapshotPackage.name }
+                        $matchingPackage = $installedPackages | Where-Object { $_.Package -eq $snapshotPackage.Package }
                         if (-not $matchingPackage) {
-                            $complianceReport.PackagesDifferences += "Missing package: $($snapshotPackage.name) $($snapshotPackage.version)"
+                            $complianceReport.PackagesDifferences += "Missing package: $($snapshotPackage.Package) $($snapshotPackage.Version)"
                             $complianceReport.PackagesCompliant = $false
                         } elseif ($matchingPackage.Version -ne $snapshotPackage.version) {
-                            $complianceReport.PackagesDifferences += "Version mismatch: $($snapshotPackage.name) (expected: $($snapshotPackage.version), actual: $($matchingPackage.Version))"
+                            $complianceReport.PackagesDifferences += "Version mismatch: $($snapshotPackage.Package) (expected: $($snapshotPackage.version), actual: $($matchingPackage.Version))"
                             $complianceReport.PackagesCompliant = $false
                         }
                     }
@@ -2041,7 +2058,7 @@ function Test-Snapshot {
                     # Check for extra packages if not allowed
                     if (-not $AllowExtraPackages) {
                         foreach ($installedPackage in $installedPackages) {
-                            $matchingPackage = $Snapshot.packages | Where-Object { $_.name -eq $installedPackage.Package }
+                            $matchingPackage = $Snapshot.packages | Where-Object { $_.Package -eq $installedPackage.Package }
                             if (-not $matchingPackage) {
                                 $complianceReport.PackagesDifferences += "Extra package: $($installedPackage.Package) $($installedPackage.Version)"
                                 $complianceReport.PackagesCompliant = $false
@@ -2767,8 +2784,8 @@ function Sync-NipkgVersionWithSnapshot {
 
             # Install packages in order
             foreach ($package in $packagesToInstall) {
-                $packageName = $package.name
-                $packageVersion = $package.version
+                $packageName = $package.Package
+                $packageVersion = $package.Version
                 $packageSpec = "$packageName=$packageVersion"
 
                 Write-Information "Installing package: $packageSpec" -InformationAction Continue
@@ -3273,24 +3290,24 @@ function Get-PackageDefinitionsFromSnapshot {
             
             foreach ($snapshotPackage in $Snapshot.packages) {
                 # Validate snapshot package structure
-                if (-not $snapshotPackage.name) {
+                if (-not $snapshotPackage.Package) {
                     Write-Warning "Snapshot package missing 'name' property, skipping"
                     continue
                 }
                 
-                if (-not $snapshotPackage.version) {
+                if (-not $snapshotPackage.Version) {
                     Write-Warning "Snapshot package '$($snapshotPackage.name)' missing 'version' property, skipping"
                     continue
                 }
                 
                 # Create package definition for Install-Packages
                 $packageDef = [PSCustomObject]@{
-                    Package = $snapshotPackage.name
-                    Version = $snapshotPackage.version
+                    Package = $snapshotPackage.Package
+                    Version = $snapshotPackage.Version
                 }
                 
                 $packageDefinitions += $packageDef
-                Write-Verbose "Converted: $($snapshotPackage.name) v$($snapshotPackage.version) -> Package: $($packageDef.Package), Version: $($packageDef.Version)"
+                Write-Verbose "Converted: $($snapshotPackage.Package) v$($snapshotPackage.Version) -> Package: $($packageDef.Package), Version: $($packageDef.Version)"
             }
             
             Write-Verbose "Successfully converted $($packageDefinitions.Count) package definitions"
