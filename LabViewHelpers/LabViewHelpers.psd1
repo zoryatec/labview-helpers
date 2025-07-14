@@ -79,6 +79,7 @@
         "Export-NipkgSnapshotToJson",
         "Import-NipkgSnapshotFromJson",
         "Install-Snapshot",
+        "Install-PackagesFromSystemSnapshot",
         "Compare-PackageVersions",
         "Sync-NipkgVersionWithSnapshot",
         "Test-Snapshot",

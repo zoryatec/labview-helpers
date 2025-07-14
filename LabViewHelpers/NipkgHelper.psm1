@@ -2089,6 +2089,84 @@ function Test-Snapshot {
     }
 }
 
+
+function Install-PackagesFromSystemSnapshot {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [switch]$SkipFeedsInstallation,
+        
+        [Parameter()]
+        [switch]$SkipPackagesInstallation,
+        
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+        
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+        
+        [Parameter()]
+        [switch]$Yes,
+        
+        [Parameter()]
+        [switch]$Simulate,
+        
+        [Parameter()]
+        [switch]$ForceLocked,
+        
+        [Parameter()]
+        [switch]$AllowDowngrade,
+        
+        [Parameter()]
+        [switch]$AllowUninstall,
+        
+        [Parameter()]
+        [switch]$InstallAlsoUpgrades,
+        
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors
+    )
+
+    $installParams = @{
+        NipkgCmdPath = $NipkgCmdPath
+        Snapshot = $installerSnapshot
+        AcceptEulas = $AcceptEulas.IsPresent
+        Simulate = $Simulate.IsPresent
+        Yes = $true
+        ForceLocked = $true
+        AllowDowngrade = $true
+        AllowUninstall = $true
+        InstallAlsoUpgrades = $true
+        IncludeRecommended = $false
+        RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
+        RemoveSnapshotFeeds = $false
+        SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
+    }
+
+    Install-Snapshot @installParams
+    Test-Snapshot `
+            -NipkgCmdPath $NipkgCmdPath `
+            -Snapshot $installerSnapshot `
+            -AllowExtraFeeds $true `
+            -AllowExtraPackages $true `
+            -ValidateFeeds $false
+
+}
+
 function Test-FeedIsLocal {
     <#
     .SYNOPSIS
@@ -3398,6 +3476,7 @@ Export-ModuleMember -Function `
     ,   Export-NipkgSnapshotToJson `
     ,   Import-NipkgSnapshotFromJson `
     ,   Install-Snapshot `
+    ,   Install-PackagesFromSystemSnapshot `
     ,   Compare-PackageVersions `
     ,   Sync-NipkgVersionWithSnapshot `
     ,   Test-Snapshot `

@@ -13,16 +13,17 @@ $snapshotFileName = "labview-24.5.0.json"
 $snapshotFilePath = "$snapshotRepository/labview/$snapshotFileName"
 
 
-$applyParams = @{
-    SnapshotPath = $snapshotFilePath
-    NipkgCmdPath = $nipkgCmdPath
-    Verbose = $true
-    ValidateCompliance = $true
+$snapshot = Import-NipkgSnapshotFromJson `
+    InputPath $snapshotFilePath
+
+
+$installParams = @{
+    NipkgCmdPath = $NipkgCmdPath
+    $Snapshot = $snapshot
+    RemoveExistingFeeds = $false
+    Simulate = $true
+    NipkgInstallerPath = $nipkgInstallerPath
+    AcceptEulas = $true
 }
 
-$applyParams.RemoveExistingFeeds = $true
-$applyParams.RemoveSnapshotFeeds = $false
-$applyParams.RemoveUnlistedFeeds = $true
-
-
-Install-Snapshot @applyParams
+Install-PackagesFromSystemSnapshot @installParams
