@@ -23,4 +23,4 @@ Install-PackagesFromSystemSnapshot `
     -RemoveExistingFeeds:$true `
     -Simulate:$false `
     -AcceptEulas:$true `
-    -FilterFunction { @($input) | & (Get-StoreProductPackages) }
+    -FilterFunction { @($input) | & (Get-StoreProductPackages) | Where-Object { $_.Package -ne 'ni-switchexecutive' -and  $_.Package -ne 'ni-labview-2025-runtime-engine' -and $_.Package -ne 'ni-labview-2025-runtime-engine-x86'}  } 
