@@ -65,7 +65,10 @@ function Install-Packages {
         [switch]$InstallAlsoUpgrades,
         
         [Parameter()]
-        [switch]$IncludeRecommended
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors
     )
 
     begin {
@@ -100,6 +103,7 @@ function Install-Packages {
         if ($Simulate) { $arguments += "--simulate" }
         if ($ForceLocked) { $arguments += "--force-locked" }
         $arguments += "--verbose"
+        if ($SuppressIncompatibilityErrors) { $arguments += "--suppress-incompatibility-errors" }
         if ($AllowDowngrade) { $arguments += "--allow-downgrade" }
         if ($AllowUninstall) { $arguments += "--allow-uninstall" }
         if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
@@ -1808,8 +1812,10 @@ function Install-Snapshot {
         [switch]$InstallAlsoUpgrades,
         
         [Parameter()]
-        [switch]$IncludeRecommended
-    
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors
     )
 
     begin {
@@ -1845,6 +1851,7 @@ function Install-Snapshot {
                     InstallAlsoUpgrades = $InstallAlsoUpgrades.IsPresent
                     IncludeRecommended = $IncludeRecommended.IsPresent
                     PackageDefinitions = $packagesToInstall
+                    SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
                 }
                 Install-Packages @installSwitches   
             }

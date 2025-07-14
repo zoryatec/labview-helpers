@@ -21,7 +21,8 @@ Install-PackagesFromInstallerIso  `
     -RemoveIsoFile `
     -RemoveTemporaryDirectory `
     -FilterFunction $filterFunction `
-    -AcceptEulas
+    -AcceptEulas `
+    -SuppressIncompatibilityErrors
 
 
 Set-LabViewForCi `

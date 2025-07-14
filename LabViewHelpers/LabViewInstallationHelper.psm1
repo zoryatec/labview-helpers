@@ -184,6 +184,9 @@ function Install-PackagesFromInstallerDirectory {
         [switch]$IncludeRecommended,
 
         [Parameter()]
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
@@ -224,6 +227,7 @@ function Install-PackagesFromInstallerDirectory {
                 IncludeRecommended = $IncludeRecommended.IsPresent
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
+                SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
             }
 
             Install-Snapshot @installParams
@@ -359,6 +363,9 @@ function Install-PackagesFromInstallerIso {
         [switch]$IncludeRecommended,
 
         [Parameter()]
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
@@ -395,6 +402,7 @@ function Install-PackagesFromInstallerIso {
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
                 AcceptEulas = $AcceptEulas.IsPresent
                 IncludeRecommended = $IncludeRecommended.IsPresent
+                SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
                 FilterFunction = $FilterFunction
             }   
             
