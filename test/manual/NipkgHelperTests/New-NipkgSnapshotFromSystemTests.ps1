@@ -11,8 +11,8 @@ $systemSnapshot = "$tempDirectory/system-snapshot.json"
 
 $snapshot = New-SnapshotFromSystem `
                     -NipkgCmdPath $nipkgCmdPath `
-                    -FilterFunction {  @($input) | & (Get-StoreProductPackages) | & (Get-ApplicationSoftwarePackages)}
-                    -IncludeFeeds $true
+                    -FilterFunction {  @($input) | & (Get-StoreProductPackages) | & (Get-ApplicationSoftwarePackages)} `
+                    -IncludeFeeds $true 
 
     
 Export-NipkgSnapshotToJson  -Snapshot $snapshot `
