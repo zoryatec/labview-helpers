@@ -24,6 +24,7 @@ $installParams = @{
     Simulate = $true
     NipkgInstallerPath = $nipkgInstallerPath
     AcceptEulas = $true
+    FilterFunction = {  @($input) | & (Get-StoreProductPackages) }
 }
 
 Install-PackagesFromSystemSnapshot @installParams

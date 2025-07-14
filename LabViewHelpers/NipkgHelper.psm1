@@ -1832,7 +1832,10 @@ function Install-Snapshot {
         [switch]$IncludeRecommended,
 
         [Parameter()]
-        [switch]$SuppressIncompatibilityErrors
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction
     )
 
     begin {
@@ -1858,6 +1861,24 @@ function Install-Snapshot {
             if (-not $SkipPackagesInstallation -and $Snapshot.packages.Count -gt 0) {
                 Write-Information "Installing Packages..."
                 $packagesToInstall = Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot
+
+                $filteredPackages = $packagesToInstall
+            
+                if ($FilterFunction) {
+                    Write-Verbose "Applying custom filter function..."
+                    $originalCount = $filteredPackages.Count
+                    
+                    try {
+                        $filteredPackages = $filteredPackages | & $FilterFunction
+                        Write-Verbose "Filtered packages using custom function: $($filteredPackages.Count) (was $originalCount)"
+                    } catch {
+                        Write-Error "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
+                        throw
+                    }
+                } else {
+                    Write-Verbose "No filter function provided, using all packages: $($filteredPackages.Count)"
+                }
+            
                 $installSwitches = @{
                     NipkgCmdPath = $NipkgCmdPath
                     AcceptEulas = $AcceptEulas.IsPresent
@@ -1868,7 +1889,7 @@ function Install-Snapshot {
                     AllowUninstall = $AllowUninstall.IsPresent
                     InstallAlsoUpgrades = $InstallAlsoUpgrades.IsPresent
                     IncludeRecommended = $IncludeRecommended.IsPresent
-                    PackageDefinitions = $packagesToInstall
+                    PackageDefinitions = $filteredPackages
                     SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
                 }
                 Install-Packages @installSwitches   
@@ -2155,7 +2176,10 @@ function Install-PackagesFromSystemSnapshot {
         [switch]$IncludeRecommended,
 
         [Parameter()]
-        [switch]$SuppressIncompatibilityErrors
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction
     )
 
     $installParams = @{
@@ -2172,6 +2196,7 @@ function Install-PackagesFromSystemSnapshot {
         RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
         RemoveSnapshotFeeds = $false
         SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
+        FilterFunction = $FilterFunction
     }
 
     Install-Snapshot @installParams
