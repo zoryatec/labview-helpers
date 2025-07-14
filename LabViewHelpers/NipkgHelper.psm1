@@ -1845,6 +1845,7 @@ function Install-Snapshot {
                     NipkgCmdPath = $NipkgCmdPath
                     AcceptEulas = $AcceptEulas.IsPresent
                     Yes = $Yes.IsPresent
+                    Simulate = $Simulate.IsPresent
                     ForceLocked = $ForceLocked.IsPresent
                     AllowDowngrade = $AllowDowngrade.IsPresent
                     AllowUninstall = $AllowUninstall.IsPresent
@@ -3117,12 +3118,10 @@ function ConvertTo-FeedName {
         try {
             Write-Verbose "Converting folder name '$FolderName' to feed name"
             
-            # Apply naming transformations
             $feedName = $FolderName
-            
-            # Replace dots with underscores
             $feedName = $feedName -replace '\.', '-'
-            
+            $feedName = "local-installer-$feedName"
+ 
             Write-Verbose "Converted '$FolderName' to feed name '$feedName'"
             
             return $feedName
@@ -3324,7 +3323,7 @@ function Install-Feeds {
             Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
             
             # Still track it as an added feed in case we need to remove it later
-            $script:feedsAdded += $feed
+            # $script:feedsAdded += $feed // do not remove feed that was allready present
         }
         else {
             # Check if a feed with the same name but different URI exists
@@ -3338,13 +3337,13 @@ function Install-Feeds {
                 Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
                 Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
                 
-                & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)" 2>&1
+                $output = & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)" 2>&1
                 
                 if ($LASTEXITCODE -eq 0) {
                     $script:feedsAdded += $feed
                     Write-Verbose "Successfully added feed: $($feed.name)"
                 } else {
-                    Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE)"
+                    Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE) - nipkg output: $output"
                 }
             }
             catch {
@@ -3356,13 +3355,14 @@ function Install-Feeds {
     end {
         if ($script:feedsAdded.Count -gt 0) {
             Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
-            & $NipkgCmdPath update 2>&1
+            $output = & $NipkgCmdPath update 2>&1
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Information "Package database updated successfully" -InformationAction Continue
             } else {
                 Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
                 Write-Warning "This may cause package installation failures due to missing package information"
+                Write-Warning "NIPKG output: $output"
             }
         }
         

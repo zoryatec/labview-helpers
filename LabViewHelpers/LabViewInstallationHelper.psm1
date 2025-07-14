@@ -187,6 +187,9 @@ function Install-PackagesFromInstallerDirectory {
         [switch]$SuppressIncompatibilityErrors,
 
         [Parameter()]
+        [switch]$Simulate,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
@@ -219,6 +222,7 @@ function Install-PackagesFromInstallerDirectory {
                 NipkgCmdPath = $NipkgCmdPath
                 Snapshot = $installerSnapshot
                 AcceptEulas = $AcceptEulas.IsPresent
+                Simulate = $Simulate.IsPresent
                 Yes = $true
                 ForceLocked = $true
                 AllowDowngrade = $true
@@ -366,6 +370,9 @@ function Install-PackagesFromInstallerIso {
         [switch]$SuppressIncompatibilityErrors,
 
         [Parameter()]
+        [switch]$Simulate,
+
+        [Parameter()]
         [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
@@ -401,6 +408,7 @@ function Install-PackagesFromInstallerIso {
                 RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
                 RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
                 AcceptEulas = $AcceptEulas.IsPresent
+                Simulate = $Simulate.IsPresent
                 IncludeRecommended = $IncludeRecommended.IsPresent
                 SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
                 FilterFunction = $FilterFunction
@@ -656,6 +664,9 @@ function Install-PackagesFromInstallerIsoWithDownload {
         [switch]$IncludeRecommended,
 
         [Parameter()]
+        [switch]$Simulate,
+
+        [Parameter()]
         [ValidateRange(1, 480)]
         [int]$TimeoutMinutes = 60
     )
@@ -707,6 +718,7 @@ function Install-PackagesFromInstallerIsoWithDownload {
                 RemoveIsoFile = $RemoveDownloadedFiles
                 RemoveTemporaryDirectory = $RemoveTemporaryDirectory
                 AcceptEulas = $AcceptEulas.IsPresent
+                Simulate = $Simulate.IsPresent
                 IncludeRecommended = $IncludeRecommended.IsPresent
             }
             
