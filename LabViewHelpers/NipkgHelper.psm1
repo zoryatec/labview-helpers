@@ -2184,7 +2184,7 @@ function Install-PackagesFromSystemSnapshot {
 
     $installParams = @{
         NipkgCmdPath = $NipkgCmdPath
-        Snapshot = $installerSnapshot
+        Snapshot = $Snapshot
         AcceptEulas = $AcceptEulas.IsPresent
         Simulate = $Simulate.IsPresent
         Yes = $true
@@ -2202,7 +2202,7 @@ function Install-PackagesFromSystemSnapshot {
     Install-Snapshot @installParams
     Test-Snapshot `
             -NipkgCmdPath $NipkgCmdPath `
-            -Snapshot $installerSnapshot `
+            -Snapshot $Snapshot `
             -AllowExtraFeeds $true `
             -AllowExtraPackages $true `
             -ValidateFeeds $false

@@ -12,19 +12,15 @@ $snapshotRepository = "$PSScriptRoot/../../../../nipkg-snapshots"
 $snapshotFileName = "labview-24.5.0.json"
 $snapshotFilePath = "$snapshotRepository/labview/$snapshotFileName"
 
+$nipkgInstallerPath = Join-Path $PSScriptRoot ".." "manual-docker/installer-nipkg/Install.exe"
 
-$snapshot = Import-NipkgSnapshotFromJson `
-    InputPath $snapshotFilePath
+$snapshot = Import-NipkgSnapshotFromJson  -InputPath $snapshotFilePath
 
 
-$installParams = @{
-    NipkgCmdPath = $NipkgCmdPath
-    $Snapshot = $snapshot
-    RemoveExistingFeeds = $false
-    Simulate = $true
-    NipkgInstallerPath = $nipkgInstallerPath
-    AcceptEulas = $true
-    FilterFunction = {  @($input) | & (Get-StoreProductPackages) }
-}
-
-Install-PackagesFromSystemSnapshot @installParams
+Install-PackagesFromSystemSnapshot `
+    -NipkgCmdPath $nipkgCmdPath `
+    -Snapshot $snapshot `
+    -RemoveExistingFeeds:$true `
+    -Simulate:$false `
+    -AcceptEulas:$true `
+    -FilterFunction { @($input) | & (Get-StoreProductPackages) }
