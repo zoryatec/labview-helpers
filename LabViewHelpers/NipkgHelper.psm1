@@ -1870,6 +1870,7 @@ function Install-Snapshot {
                     
                     try {
                         $filteredPackages = $filteredPackages | & $FilterFunction
+                        $filteredPackages = Remove-DuplicatePackagesByVersion -PackagesInfo $filteredPackages
                         Write-Verbose "Filtered packages using custom function: $($filteredPackages.Count) (was $originalCount)"
                     } catch {
                         Write-Error "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
@@ -3329,6 +3330,11 @@ function Get-PackageDefinitionsFromSnapshot {
                 $packageDef = [PSCustomObject]@{
                     Package = $snapshotPackage.Package
                     Version = $snapshotPackage.Version
+                    Depends = $snapshotPackage.Depends 
+                    Description = $snapshotPackage.Description
+                    Section = $snapshotPackage.Section
+                    UserVisible = $snapshotPackage.UserVisible
+                    StoreProduct = $snapshotPackage.StoreProduct
                 }
                 
                 $packageDefinitions += $packageDef

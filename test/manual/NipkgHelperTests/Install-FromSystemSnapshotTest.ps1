@@ -15,7 +15,7 @@ $snapshotFilePath = "$snapshotRepository/labview/$snapshotFileName"
 $nipkgInstallerPath = Join-Path $PSScriptRoot ".." "manual-docker/installer-nipkg/Install.exe"
 
 $snapshot = Import-NipkgSnapshotFromJson  -InputPath $snapshotFilePath
-
+$filterFunction = {  @($input) | Where-Object { $_.Package -eq 'ni-labview-2025-core-x86-en'}}
 
 Install-PackagesFromSystemSnapshot `
     -NipkgCmdPath $nipkgCmdPath `
