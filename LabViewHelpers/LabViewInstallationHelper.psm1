@@ -235,7 +235,11 @@ function Install-PackagesFromInstallerDirectory {
             }
 
             Install-Snapshot @installParams
-            Test-Snapshot -NipkgCmdPath $NipkgCmdPath -Snapshot $installerSnapshot
+            Test-Snapshot `
+                 -NipkgCmdPath $NipkgCmdPath `
+                 -Snapshot $installerSnapshot `
+                 -AllowExtraFeeds $true `
+                 -AllowExtraPackages $true
 
         }
         catch {
