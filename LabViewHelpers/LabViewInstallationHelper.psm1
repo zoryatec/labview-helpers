@@ -239,7 +239,8 @@ function Install-PackagesFromInstallerDirectory {
                  -NipkgCmdPath $NipkgCmdPath `
                  -Snapshot $installerSnapshot `
                  -AllowExtraFeeds $true `
-                 -AllowExtraPackages $true
+                 -AllowExtraPackages $true `
+                 -ValidateFeeds $false
 
         }
         catch {
