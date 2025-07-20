@@ -34,7 +34,7 @@ Install-Module -Name LabViewHelpers -Scope CurrentUser
 
 ### LabViewInstallationHelper
 
-- `Install-LabView` / `Install-LabViewIso` / `Install-LabViewOffline`
+- `Install-PackagesFromInstallerIso` / `Install-PackagesFromInstallerDirectory`
 - `Set-LabViewForCi` / `Expand-Iso`
 - `Install-Chocolatey` / `Install-Gcd`
 
@@ -59,7 +59,7 @@ Import-Module LabViewHelpers
 Set-ConfigValue -ConfigFile "C:\...\LabVIEW.ini" -Section "LabVIEW" -Key "server.tcp.enabled" -Value "true"
 
 # Install from ISO
-Install-LabViewIso -IsoPath "C:\Installers\labview.iso"
+Install-PackagesFromInstallerIso -IsoPath "C:\Installers\labview.iso"
 
 # Add package feeds
 Add-FeedDirectories -FeedDirectories @("C:\Packages\Feed1", "C:\Packages\Feed2")

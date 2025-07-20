@@ -14,7 +14,7 @@ USER ContainerAdministrator
 
 RUN Write-Host 'Starting LabVIEW installation...'; \
     Set-Location C:\scripts; \
-    .\Install-LabView.ps1 -Verbose; \
+    .\Install-LabViewFromSource.ps1 -Verbose; \
     Write-Host 'LabVIEW installation completed'
 
 RUN New-Item -ItemType Directory -Path C:/workspace -Force -ErrorAction SilentlyContinue

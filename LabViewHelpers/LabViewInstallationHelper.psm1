@@ -15,86 +15,6 @@
     Copyright 2025 : LabVIEW Helpers
 #>
 
-function Install-LabView {
-    <#
-    .SYNOPSIS
-        Installs LabVIEW packages using NI Package Manager.
-
-    .DESCRIPTION
-        Automates the installation of LabVIEW programming environments, drivers, 
-        applications, and utilities using NIPKG package manager.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .EXAMPLE
-        Install-LabView
-
-    .EXAMPLE
-        Install-LabView -NipkgCmdPath "C:\Program Files\National Instruments\NI Package Manager\nipkg.exe"
-
-    .NOTES
-        Requires NIPKG to be installed and feeds to be configured.
-        Installs packages in order: Programming Environments, Drivers, Applications, Utilities.
-    #>
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter()]
-        [ValidateNotNullOrEmpty()]
-        [string]$NipkgCmdPath = 'nipkg'
-    )
-    
-    begin {
-        Write-Verbose "Starting Install-LabView operation"
-    }
-    
-    process {
-        try {
-
-    $packagesInfo = Get-PackagesInfo `
-        -NipkgCmdPath $NipkgCmdPath `
-        -Type 'available' # 'installed' or 'available'
-
-    Write-Host "Installing programming environments packages..." -ForegroundColor Cyan
-    $programingEnvironmentsPackages  = Get-ProgrammingEnvironmentsPackages -PackagesInfo $packagesInfo
-    foreach ($package in $programingEnvironmentsPackages) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
-
-    Write-Host "Installing drivers packages..." -ForegroundColor Cyan
-    $driversPackages  = Get-DriverPackages -PackagesInfo $packagesInfo
-    foreach ($package in $driversPackages) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
-
-    Write-Host "Installing application packages..." -ForegroundColor Cyan
-    $applicationPackages  = Get-ApplicationSoftwarePackages -PackagesInfo $packagesInfo
-    foreach ($package in $applicationPackages) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
-
-    Write-Host "Installing utilities packages..." -ForegroundColor Cyan
-    $utilitiesPackages  = Get-UtilitiesPackages -PackagesInfo $packagesInfo
-    foreach ($package in $utilitiesPackages ) {
-        Write-Host "Installing package: $($package.Package) version $($package.Version)"
-        & $NipkgCmdPath install "$($package.Package)" --accept-eulas --include-recommended -y  
-    }
-        }
-        catch {
-            $errorMessage = "Failed to install LabVIEW packages. Error: $($_.Exception.Message)"
-            Write-Error -Message $errorMessage -Category NotInstalled
-            throw
-        }
-    }
-    
-    end {
-        Write-Verbose "Completed Install-LabView operation"
-    }
-}
-
 function Install-Chocolatey {
     <#
     .SYNOPSIS
@@ -184,30 +104,6 @@ function Install-ChocolateyPackage7zip {
 }
 
 function Install-Gcd {
-    <#
-    .SYNOPSIS
-        Installs the GCD (Generic Configuration Deployer) tool via NIPKG.
-
-    .DESCRIPTION
-        Adds the GCD feed to NIPKG, updates the package list, and installs the GCD tool.
-        Also adds GCD to the system PATH for global access.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .PARAMETER GcdFeed
-        URL of the GCD package feed. Defaults to the official Zoryatec GCD feed.
-
-    .EXAMPLE
-        Install-Gcd
-
-    .EXAMPLE
-        Install-Gcd -NipkgCmdPath "C:\Program Files\National Instruments\NI Package Manager\nipkg.exe"
-
-    .NOTES
-        Requires NIPKG to be installed and administrative privileges.
-        Adds GCD to system PATH automatically.
-    #>
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -258,34 +154,7 @@ function Install-Gcd {
 }
 
 
-function Install-LabViewOffline {
-    <#
-    .SYNOPSIS
-        Performs offline installation of LabVIEW from installer directory.
-
-    .DESCRIPTION
-        Installs LabVIEW using offline installer files. Optionally installs NIPKG manager
-        first, then adds feeds and performs the LabVIEW installation.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to standard installation path.
-
-    .PARAMETER LabViewInstallerDirectory
-        Path to the directory containing LabVIEW installer files and feeds.
-
-    .PARAMETER NipkgInstallerPath
-        Optional path to NIPKG installer if it needs to be installed first.
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview"
-
-    .EXAMPLE
-        Install-LabViewOffline -LabViewInstallerDirectory "C:\installers\labview" -NipkgInstallerPath "C:\installers\nipkg\Install.exe"
-
-    .NOTES
-        Requires administrative privileges.
-        The installer directory must contain a 'feeds' subdirectory with NIPKG feeds.
-    #>
+function Install-PackagesFromInstallerDirectory {
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -297,11 +166,35 @@ function Install-LabViewOffline {
         [string]$LabViewInstallerDirectory,
         
         [Parameter()]
-        [string]$NipkgInstallerPath
+        [string]$NipkgInstallerPath,
+
+        [Parameter()]
+        [string]$InstallationSnapshotFile,
+
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
+        [switch]$Simulate,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
     begin {
-        Write-Verbose "Starting Install-LabViewOffline operation"
+        Write-Verbose "Starting Install-PackagesFromInstallerDirectory operation"
     }
     
     process {
@@ -310,29 +203,45 @@ function Install-LabViewOffline {
                 throw "LabVIEW installer directory not found: $LabViewInstallerDirectory"
             }
 
-            $labViewInstallerPath = Join-Path -Path $LabViewInstallerDirectory -ChildPath "Install.exe"
-            $feedsDirectory = Join-Path -Path $LabViewInstallerDirectory -ChildPath "feeds"
 
             if ($NipkgInstallerPath -and (Test-Path -Path $NipkgInstallerPath)) {
                 Write-Information "Installing NIPKG manager first..." -InformationAction Continue
                 Install-NipkgManager -InstallerPath $NipkgInstallerPath
             }
+                                    
+            $installerSnapshot = New-SnapshotFromInstallerDirectory `
+                                        -InstallerDirectory $LabViewInstallerDirectory `
+                                        -FilterFunction $FilterFunction
 
-            # Verify NIPKG is available
-            Write-Information "Verifying NIPKG installation..." -InformationAction Continue
-            & $NipkgCmdPath --version
-            
-            if ($LASTEXITCODE -ne 0) {
-                throw "NIPKG is not installed or not accessible at: $NipkgCmdPath"
+            if (-not [string]::IsNullOrEmpty($InstallationSnapshotFile)) {
+                Export-NipkgSnapshotToJson -Snapshot $installerSnapshot -OutputPath $InstallationSnapshotFile -Verbose
+                $installerSnapshot = Import-NipkgSnapshotFromJson $InstallationSnapshotFile
             }
 
-            Write-Information "Adding feed directories..." -InformationAction Continue
-            Add-FeedDirectories -FeedsDirectory $feedsDirectory -NipkgCmdPath $NipkgCmdPath 
+            $installParams = @{
+                NipkgCmdPath = $NipkgCmdPath
+                Snapshot = $installerSnapshot
+                AcceptEulas = $AcceptEulas.IsPresent
+                Simulate = $Simulate.IsPresent
+                Yes = $true
+                ForceLocked = $true
+                AllowDowngrade = $true
+                AllowUninstall = $true
+                InstallAlsoUpgrades = $true
+                IncludeRecommended = $IncludeRecommended.IsPresent
+                RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
+                RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
+                SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
+            }
 
-            Write-Information "Starting LabVIEW installation..." -InformationAction Continue
-            Install-LabView -NipkgCmdPath $NipkgCmdPath
-            
-            Write-Information "LabVIEW offline installation completed successfully" -InformationAction Continue
+            Install-Snapshot @installParams
+            Test-Snapshot `
+                 -NipkgCmdPath $NipkgCmdPath `
+                 -Snapshot $installerSnapshot `
+                 -AllowExtraFeeds $true `
+                 -AllowExtraPackages $true `
+                 -ValidateFeeds $false
+
         }
         catch {
             $errorMessage = "Failed to install LabVIEW offline. Error: $($_.Exception.Message)"
@@ -342,7 +251,7 @@ function Install-LabViewOffline {
     }
     
     end {
-        Write-Verbose "Completed Install-LabViewOffline operation"
+        Write-Verbose "Completed Install-PackagesFromInstallerDirectory operation"
     }
 }
 
@@ -426,37 +335,7 @@ function Expand-Iso {
     }
 }
 
-function Install-LabViewIso {
-    <#
-    .SYNOPSIS
-        Installs LabVIEW from an ISO file.
-
-    .DESCRIPTION
-        Extracts a LabVIEW ISO file and performs offline installation. Combines
-        ISO extraction and offline installation in a single operation.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to standard installation path.
-
-    .PARAMETER IsoFilePath
-        Path to the LabVIEW ISO file to install from.
-
-    .PARAMETER NipkgInstallerPath
-        Optional path to NIPKG installer if it needs to be installed first.
-
-    .PARAMETER TemporaryExpandDirectory
-        Directory to temporarily extract ISO contents. Defaults to C:\installer-labview.
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso"
-
-    .EXAMPLE
-        Install-LabViewIso -IsoFilePath "C:\labview.iso" -NipkgInstallerPath "C:\nipkg\Install.exe" -TemporaryExpandDirectory "D:\temp"
-
-    .NOTES
-        Requires administrative privileges and sufficient disk space for extraction.
-        Temporary directory will be created if it doesn't exist.
-    #>
+function Install-PackagesFromInstallerIso {
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -472,11 +351,38 @@ function Install-LabViewIso {
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$TemporaryExpandDirectory = "C:\installer-labview"
+        [string]$TemporaryExpandDirectory = "C:\installer-labview",
+
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$RemoveIsoFile,
+
+        [Parameter()]
+        [switch]$RemoveTemporaryDirectory,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
+        [switch]$Simulate,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
     )
     
     begin {
-        Write-Verbose "Starting Install-LabViewIso operation"
+        Write-Verbose "Starting Install-PackagesFromInstallerIso operation"
     }
     
     process {
@@ -486,8 +392,39 @@ function Install-LabViewIso {
             Write-Information "Step 1: Extracting ISO file..." -InformationAction Continue
             Expand-Iso -IsoFilePath $IsoFilePath -OutputDirectoryPath $TemporaryExpandDirectory
 
+            # Remove ISO file immediately after extraction if requested to free up disk space
+            if ($RemoveIsoFile -and (Test-Path $IsoFilePath)) {
+                try {
+                    Write-Information "Removing ISO file to free up disk space: $IsoFilePath" -InformationAction Continue
+                    Remove-Item -Path $IsoFilePath -Force
+                    Write-Verbose "Successfully removed ISO file after extraction"
+                }
+                catch {
+                    Write-Warning "Failed to remove ISO file after extraction: $($_.Exception.Message)"
+                }
+            }
+
             Write-Information "Step 2: Installing LabVIEW from extracted files..." -InformationAction Continue
-            Install-LabViewOffline -NipkgCmdPath $NipkgCmdPath -LabViewInstallerDirectory $TemporaryExpandDirectory -NipkgInstallerPath $NipkgInstallerPath
+            
+            # Build parameters for Install-PackagesFromInstallerDirectory using actual parameter values
+            $installParams = @{
+                NipkgCmdPath = $NipkgCmdPath
+                LabViewInstallerDirectory = $TemporaryExpandDirectory
+                RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
+                RemoveSnapshotFeeds = $RemoveSnapshotFeeds.IsPresent
+                AcceptEulas = $AcceptEulas.IsPresent
+                Simulate = $Simulate.IsPresent
+                IncludeRecommended = $IncludeRecommended.IsPresent
+                SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
+                FilterFunction = $FilterFunction
+            }   
+            
+            # Add optional string parameter if provided
+            if ($NipkgInstallerPath) {
+                $installParams.NipkgInstallerPath = $NipkgInstallerPath
+            }
+            
+            Install-PackagesFromInstallerDirectory @installParams
             
             Write-Information "LabVIEW ISO installation completed successfully" -InformationAction Continue
         }
@@ -497,15 +434,364 @@ function Install-LabViewIso {
             throw
         }
         finally {
-            # Optional: Clean up temporary directory
-            if (Test-Path $TemporaryExpandDirectory) {
+            # Perform cleanup operations if requested
+            Write-Verbose "Performing cleanup operations..."
+            
+            # Remove temporary directory if requested
+            if ($RemoveTemporaryDirectory -and (Test-Path $TemporaryExpandDirectory)) {
+                try {
+                    Write-Information "Removing temporary directory: $TemporaryExpandDirectory" -InformationAction Continue
+                    Remove-Item -Path $TemporaryExpandDirectory -Recurse -Force
+                    Write-Verbose "Successfully removed temporary directory"
+                }
+                catch {
+                    Write-Warning "Failed to remove temporary directory: $($_.Exception.Message)"
+                }
+            }
+            elseif (Test-Path $TemporaryExpandDirectory) {
                 Write-Verbose "Temporary directory remains at: $TemporaryExpandDirectory"
+            }
+            
+            # Remove ISO file if it still exists (in case extraction failed and RemoveIsoFile was requested)
+            if ($RemoveIsoFile -and (Test-Path $IsoFilePath)) {
+                try {
+                    Write-Information "Removing remaining ISO file: $IsoFilePath" -InformationAction Continue
+                    Remove-Item -Path $IsoFilePath -Force
+                    Write-Verbose "Successfully removed remaining ISO file"
+                }
+                catch {
+                    Write-Warning "Failed to remove remaining ISO file: $($_.Exception.Message)"
+                }
             }
         }
     }
     
     end {
-        Write-Verbose "Completed Install-LabViewIso operation"
+        Write-Verbose "Completed Install-PackagesFromInstallerIso operation"
+    }
+}
+
+function Invoke-FileDownload {
+    <#
+    .SYNOPSIS
+        Downloads a file from a URL with progress reporting.
+
+    .DESCRIPTION
+        Downloads a file from HTTP/HTTPS URL to a specified local path with progress reporting,
+        timeout handling, and validation. Provides detailed progress information during download.
+
+    .PARAMETER Url
+        URL of the file to download.
+
+    .PARAMETER OutputPath
+        Local file path where the downloaded file will be saved.
+
+    .PARAMETER TimeoutMinutes
+        Download timeout in minutes. Defaults to 60 minutes.
+
+    .PARAMETER MinimumFileSizeMB
+        Minimum expected file size in MB for validation. Defaults to 1 MB.
+
+    .EXAMPLE
+        Invoke-FileDownload -Url "https://example.com/file.iso" -OutputPath "C:\temp\file.iso"
+
+    .EXAMPLE
+        Invoke-FileDownload -Url "https://example.com/large-file.iso" -OutputPath "C:\temp\file.iso" -TimeoutMinutes 120 -MinimumFileSizeMB 100
+
+    .NOTES
+        Requires internet connectivity and write access to the output directory.
+        Progress is reported every 5 seconds during download.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Url,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath,
+
+        [Parameter()]
+        [ValidateRange(1, 480)]
+        [int]$TimeoutMinutes = 60,
+
+        [Parameter()]
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$MinimumFileSizeMB = 1
+    )
+    
+    begin {
+        Write-Verbose "Starting Invoke-FileDownload operation"
+    }
+    
+    process {
+        try {
+            # Validate URL format
+            try {
+                $uri = [System.Uri]$Url
+                if (-not ($uri.Scheme -eq 'http' -or $uri.Scheme -eq 'https')) {
+                    throw "URL must use HTTP or HTTPS protocol"
+                }
+            }
+            catch {
+                throw "Invalid URL format: $Url. Error: $($_.Exception.Message)"
+            }
+            
+            # Create output directory if it doesn't exist
+            $outputDirectory = [System.IO.Path]::GetDirectoryName($OutputPath)
+            if (-not (Test-Path -Path $outputDirectory)) {
+                Write-Information "Creating output directory: $outputDirectory" -InformationAction Continue
+                New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+            }
+            
+            Write-Information "Starting file download..." -InformationAction Continue
+            Write-Information "  Source: $Url" -InformationAction Continue
+            Write-Information "  Destination: $OutputPath" -InformationAction Continue
+            Write-Information "  Timeout: $TimeoutMinutes minutes" -InformationAction Continue
+            
+            # Download with progress reporting
+            $webClient = New-Object System.Net.WebClient
+            $webClient.Timeout = $TimeoutMinutes * 60 * 1000  # Convert to milliseconds
+            
+            # Register progress event
+            Register-ObjectEvent -InputObject $webClient -EventName DownloadProgressChanged -Action {
+                $Global:DownloadProgress = $Event.SourceEventArgs
+            } | Out-Null
+            
+            try {
+                # Start async download
+                $downloadTask = $webClient.DownloadFileTaskAsync($Url, $OutputPath)
+                
+                # Monitor progress
+                $lastReportTime = Get-Date
+                while (-not $downloadTask.IsCompleted) {
+                    Start-Sleep -Milliseconds 1000
+                    
+                    if ($Global:DownloadProgress -and ((Get-Date) - $lastReportTime).TotalSeconds -ge 5) {
+                        $progress = $Global:DownloadProgress
+                        $percentComplete = $progress.ProgressPercentage
+                        $bytesReceived = $progress.BytesReceived
+                        $totalBytes = $progress.TotalBytesToReceive
+                        
+                        $receivedMB = [math]::Round($bytesReceived / 1MB, 2)
+                        $totalMB = [math]::Round($totalBytes / 1MB, 2)
+                        
+                        Write-Information "  Download progress: $percentComplete% ($receivedMB MB / $totalMB MB)" -InformationAction Continue
+                        $lastReportTime = Get-Date
+                    }
+                    
+                    # Check for timeout
+                    if ($downloadTask.Wait(1000)) {
+                        break
+                    }
+                }
+                
+                # Wait for completion and check result
+                $downloadTask.Wait()
+                if ($downloadTask.IsFaulted) {
+                    throw "Download failed: $($downloadTask.Exception.InnerException.Message)"
+                }
+                
+                Write-Information "Download completed successfully" -InformationAction Continue
+                
+                # Verify file exists and validate size
+                if (-not (Test-Path -Path $OutputPath)) {
+                    throw "Downloaded file not found at: $OutputPath"
+                }
+                
+                $fileInfo = Get-Item -Path $OutputPath
+                $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+                Write-Information "  Downloaded file size: $fileSizeMB MB" -InformationAction Continue
+                
+                if ($fileInfo.Length -lt ($MinimumFileSizeMB * 1MB)) {
+                    throw "Downloaded file appears to be too small (${fileSizeMB} MB, expected at least ${MinimumFileSizeMB} MB). This may indicate a download error."
+                }
+                
+                return $OutputPath
+            }
+            finally {
+                # Cleanup event registration and web client
+                Get-EventSubscriber | Where-Object { $_.SourceObject -eq $webClient } | Unregister-Event
+                $webClient.Dispose()
+                Remove-Variable -Name DownloadProgress -Scope Global -ErrorAction SilentlyContinue
+            }
+        }
+        catch {
+            $errorMessage = "Failed to download file from URL. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category ConnectionError
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Invoke-FileDownload operation"
+    }
+}
+
+function Install-PackagesFromInstallerIsoWithDownload {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$IsoUrl,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "C:\Program Files\National Instruments\NI Package Manager\nipkg.exe",
+        
+        [Parameter()]
+        [string]$NipkgInstallerPath,
+
+        [Parameter()]
+        [string]$TemporaryDownloadDirectory,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$TemporaryExpandDirectory = "C:\installer-labview",
+
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$RemoveDownloadedFiles = $true,
+
+        [Parameter()]
+        [switch]$RemoveTemporaryDirectory,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$Simulate,
+
+        [Parameter()]
+        [ValidateRange(1, 480)]
+        [int]$TimeoutMinutes = 60
+    )
+    
+    begin {
+        Write-Verbose "Starting Install-PackagesFromInstallerIsoWithDownload operation"
+        
+        # Generate unique temporary download directory if not provided
+        if ([string]::IsNullOrEmpty($TemporaryDownloadDirectory)) {
+            $tempGuid = [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
+            $TemporaryDownloadDirectory = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "labview-iso-download-$tempGuid"
+        }
+    }
+    
+    process {
+        $downloadedIsoPath = $null
+        
+        try {
+            Write-Information "Starting LabVIEW installation from ISO URL: $IsoUrl" -InformationAction Continue
+            
+            # Create download directory
+            if (-not (Test-Path -Path $TemporaryDownloadDirectory)) {
+                Write-Information "Creating download directory: $TemporaryDownloadDirectory" -InformationAction Continue
+                New-Item -ItemType Directory -Path $TemporaryDownloadDirectory -Force | Out-Null
+            }
+            
+            # Generate ISO filename from URL
+            $uri = [System.Uri]$IsoUrl
+            $isoFileName = [System.IO.Path]::GetFileName($uri.LocalPath)
+            if ([string]::IsNullOrEmpty($isoFileName) -or -not $isoFileName.EndsWith('.iso', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isoFileName = "labview-installer-$(Get-Date -Format 'yyyyMMdd-HHmmss').iso"
+                Write-Verbose "Generated ISO filename: $isoFileName"
+            }
+            
+            $downloadedIsoPath = Join-Path -Path $TemporaryDownloadDirectory -ChildPath $isoFileName
+            
+            Write-Information "Step 1: Downloading ISO file..." -InformationAction Continue
+            
+            # Download the ISO file using the dedicated download function
+            $downloadedIsoPath = Invoke-FileDownload -Url $IsoUrl -OutputPath $downloadedIsoPath -TimeoutMinutes $TimeoutMinutes -MinimumFileSizeMB 1
+            
+            Write-Information "Step 2: Installing LabVIEW from downloaded ISO..." -InformationAction Continue
+            
+            # Build parameters for Install-PackagesFromInstallerIso
+            $installParams = @{
+                NipkgCmdPath = $NipkgCmdPath
+                IsoFilePath = $downloadedIsoPath
+                TemporaryExpandDirectory = $TemporaryExpandDirectory
+                RemoveIsoFile = $RemoveDownloadedFiles
+                RemoveTemporaryDirectory = $RemoveTemporaryDirectory
+                AcceptEulas = $AcceptEulas.IsPresent
+                Simulate = $Simulate.IsPresent
+                IncludeRecommended = $IncludeRecommended.IsPresent
+            }
+            
+            if ($NipkgInstallerPath) {
+                $installParams.NipkgInstallerPath = $NipkgInstallerPath
+            }
+            
+            if ($RemoveExistingFeeds) {
+                $installParams.RemoveExistingFeeds = $true
+            }
+            
+            if ($RemoveSnapshotFeeds) {
+                $installParams.RemoveSnapshotFeeds = $true
+            }
+            
+            # Install using existing function
+            Install-PackagesFromInstallerIso @installParams
+            
+            Write-Information "LabVIEW installation from downloaded ISO completed successfully" -InformationAction Continue
+        }
+        catch {
+            $errorMessage = "Failed to download and install LabVIEW from ISO URL. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category NotInstalled
+            throw
+        }
+        finally {
+            # Perform cleanup operations if requested
+            if ($RemoveDownloadedFiles) {
+                Write-Verbose "Performing download cleanup operations..."
+                
+                # Remove downloaded ISO file if it still exists
+                if ($downloadedIsoPath -and (Test-Path $downloadedIsoPath)) {
+                    try {
+                        Write-Information "Removing downloaded ISO file: $downloadedIsoPath" -InformationAction Continue
+                        Remove-Item -Path $downloadedIsoPath -Force
+                        Write-Verbose "Successfully removed downloaded ISO file"
+                    }
+                    catch {
+                        Write-Warning "Failed to remove downloaded ISO file: $($_.Exception.Message)"
+                    }
+                }
+                
+                # Remove download directory if empty
+                if ((Test-Path $TemporaryDownloadDirectory)) {
+                    try {
+                        $remainingFiles = Get-ChildItem -Path $TemporaryDownloadDirectory -Force
+                        if ($remainingFiles.Count -eq 0) {
+                            Write-Information "Removing empty download directory: $TemporaryDownloadDirectory" -InformationAction Continue
+                            Remove-Item -Path $TemporaryDownloadDirectory -Force
+                            Write-Verbose "Successfully removed download directory"
+                        }
+                        else {
+                            Write-Verbose "Download directory not empty, keeping: $TemporaryDownloadDirectory"
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to remove download directory: $($_.Exception.Message)"
+                    }
+                }
+            }
+            elseif ($downloadedIsoPath -and (Test-Path $downloadedIsoPath)) {
+                Write-Verbose "Downloaded ISO file remains at: $downloadedIsoPath"
+            }
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Install-PackagesFromInstallerIsoWithDownload operation"
     }
 }
 
@@ -593,11 +879,12 @@ function Set-LabViewForCi {
 
 
 Export-ModuleMember -Function `
-        Install-LabViewOffline `
+        Install-PackagesFromInstallerDirectory `
     ,   Install-Chocolatey `
     ,   Install-ChocolateyPackage7zip `
     ,   Install-Gcd `
-    ,   Install-LabView `
     ,   Expand-Iso `
-    ,   Install-LabViewIso `
+    ,   Install-PackagesFromInstallerIso `
+    ,   Invoke-FileDownload `
+    ,   Install-PackagesFromInstallerIsoWithDownload `
     ,   Set-LabViewForCi

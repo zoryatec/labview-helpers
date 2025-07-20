@@ -3,7 +3,7 @@
     # Generated on: June 30, 2025
     
     # Module Information
-    ModuleVersion = '0.1.0'
+    ModuleVersion = '0.2.0'
     
     # Supported PowerShell version
     PowerShellVersion = '5.1'
@@ -45,25 +45,46 @@
         'Initialize-LabVIEWCLIConfig',
         
         # LabViewInstallationHelper functions
-        'Install-LabViewOffline',
+        'Install-PackagesFromInstallerDirectory',
         'Install-Chocolatey',
         'Install-ChocolateyPackage7zip',
         'Install-Gcd',
-        'Install-LabView',
         'Expand-Iso',
-        'Install-LabViewIso',
+        'Install-PackagesFromInstallerIso',
         'Set-LabViewForCi',
         
         # NipkgHelper functions
         'Add-FeedDirectories',
-        'Get-PackagesInfo',
+        'Test-NipkgAvailability',
+        'Get-NipkgCommandOutput',
+        'ConvertFrom-NipkgOutput',
+        'ConvertFrom-NipkgPackagesFile',
+        'Get-PackagesInfoFromNipkgCmd',
+        'Get-PackagesInfoFromPackagesFile',
+        'Get-PackageDefinitionsFromSnapshot',
+        'Get-PackageInstallationOrder',
         'Get-DriverPackages',
         'Get-ProgrammingEnvironmentsPackages',
         'Get-UtilitiesPackages',
         'Get-ApplicationSoftwarePackages',
-        'Get-FeedsInfo',
+        'Get-StoreProductPackages',
+        'Get-FeedDefinitionsFromSystem',
+        'Install-Feeds',
         'Remove-Feeds',
-        'Install-NipkgManager'
+        'Install-Packages',
+        'Install-NipkgManager',
+        'New-Snapshot',
+        'New-SnapshotFromInstallerDirectory',
+        'New-SnapshotFromSystem',
+        "Export-NipkgSnapshotToJson",
+        "Import-NipkgSnapshotFromJson",
+        "Install-Snapshot",
+        "Install-PackagesFromSystemSnapshot",
+        "Compare-PackageVersions",
+        "Sync-NipkgVersionWithSnapshot",
+        "Test-Snapshot",
+        "Test-NipkgSnapshotDependencies",
+        "Resolve-PackageDependencies"
     )
     
     # Cmdlets to export from this module
@@ -136,6 +157,12 @@
             
             # Release notes for this module
             ReleaseNotes = @'
+
+## Version 0.2.0
+- major changes allows to install LabVIEW from ISO files
+- Added support for installing packages from system snapshots
+- Improved error handling and logging in installation scripts
+
 ## Version 0.1.0
 - Initial release of LabVIEW Helper Modules
 - LabViewConfigHelper: Manage LabVIEW.ini configuration files

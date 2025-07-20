@@ -1,44 +1,141 @@
 #Requires -Version 5.1
 
-<#
-.SYNOPSIS
-    NI Package Manager (NIPKG) Helper Module
 
-.DESCRIPTION
-    Provides comprehensive functions for managing National Instruments packages using NIPKG.
-    Supports feed management, package installation, and package information retrieval.
+function ConvertTo-PackageSpecifications {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [PSCustomObject[]]$PackageDefinitions
+    )
 
-.NOTES
-    File Name      : NipkgHelper.psm1
-    Author         : LabVIEW Helpers Team
-    Prerequisite   : PowerShell 5.1 or higher, NIPKG installed
-    Copyright 2025 : LabVIEW Helpers
-#>
+    $packageSpecs = @()
+    
+    foreach ($packageDef in $PackageDefinitions) {
+        # Validate package definition
+        if (-not $packageDef.Package) {
+            Write-Warning "Package definition missing 'Package' property, skipping"
+            continue
+        }
+        
+        if (-not $packageDef.Version) {
+            Write-Warning "Package definition for '$($packageDef.Package)' missing 'Version' property, skipping"
+            continue
+        }
+        
+        $packageName = $packageDef.Package
+        $packageVersion = $packageDef.Version
+        $packageSpec = "$packageName=$packageVersion"
+        
+        $packageSpecs += $packageSpec
+        Write-Verbose "Added package specification: $packageSpec"
+    }
+    
+    return $packageSpecs
+}
+
+function Install-Packages {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [PSCustomObject[]]$PackageDefinitions,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [switch]$AcceptEulas,
+        
+        [Parameter()]
+        [switch]$Yes,
+        
+        [Parameter()]
+        [switch]$Simulate,
+        
+        [Parameter()]
+        [switch]$ForceLocked,
+        
+        [Parameter()]
+        [switch]$AllowDowngrade,
+        
+        [Parameter()]
+        [switch]$AllowUninstall,
+        
+        [Parameter()]
+        [switch]$InstallAlsoUpgrades,
+        
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors
+    )
+
+    begin {
+        try {
+            $null = Get-Command $NipkgCmdPath -ErrorAction Stop
+        }
+        catch {
+            throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
+        }
+    }
+    
+    process {
+        if (-not $PackageDefinitions -or $PackageDefinitions.Count -eq 0) {
+            Write-Warning "No package definitions provided, skipping installation"
+            return
+        }
+        
+        $packageSpecs = ConvertTo-PackageSpecifications -PackageDefinitions $PackageDefinitions
+        
+        if ($packageSpecs.Count -eq 0) {
+            Write-Warning "No valid package definitions found, skipping installation"
+            return
+        }
+        
+        Write-Information "Installing $($packageSpecs.Count) packages in batch mode..." -InformationAction Continue
+        Write-Information "Package specifications: $($packageSpecs -join ', ')" -InformationAction Continue
+        
+        $arguments = @("install") + $packageSpecs
+        
+        if ($AcceptEulas) { $arguments += "--accept-eulas" }
+        if ($Yes) { $arguments += "-y" }
+        if ($Simulate) { $arguments += "--simulate" }
+        if ($ForceLocked) { $arguments += "--force-locked" }
+        $arguments += "--verbose"
+        if ($SuppressIncompatibilityErrors) { $arguments += "--suppress-incompatibility-errors" }
+        if ($AllowDowngrade) { $arguments += "--allow-downgrade" }
+        if ($AllowUninstall) { $arguments += "--allow-uninstall" }
+        if ($InstallAlsoUpgrades) { $arguments += "--install-also-upgrades" }
+        if ($IncludeRecommended) { $arguments += "--include-recommended" }
+        
+        Write-Verbose "Executing NIPKG command: $NipkgCmdPath $($arguments -join ' ')"
+        
+        # Execute NIPKG command with interactive output
+        & $NipkgCmdPath @arguments
+        $exitCode = $LASTEXITCODE
+        
+        Write-Verbose "NIPKG installation completed with exit code: $exitCode"
+        
+        switch ($exitCode) {
+            0 {
+                Write-Information "Successfully installed $($packageSpecs.Count) packages" -InformationAction Continue
+            }
+            -125071 {
+                Write-Warning "Installation completed successfully but requires system restart (exit code: $exitCode)"
+                $global:LASTEXITCODE = 0
+            }
+            default {
+                throw "Packages Installation failed with exit code: $exitCode"
+            }
+        }
+    }
+    
+    end {
+    }
+}
 
 function Add-FeedDirectories {
-    <#
-    .SYNOPSIS
-        Adds multiple directory feeds to NI Package Manager.
-
-    .DESCRIPTION
-        Scans a parent directory for subdirectories and adds each as a feed to NIPKG.
-        Updates the package database after adding all feeds.
-
-    .PARAMETER FeedsDirectory
-        Path to the directory containing feed subdirectories.
-
-    .PARAMETER NipkgCmdPath
-        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
-
-    .EXAMPLE
-        Add-FeedDirectories -FeedsDirectory "C:\Installers\feeds"
-
-    .EXAMPLE
-        Add-FeedDirectories -FeedsDirectory "C:\feeds" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
-
-    .NOTES
-        Each subdirectory in the FeedsDirectory will be added as a separate feed.
-    #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
@@ -71,12 +168,14 @@ function Add-FeedDirectories {
 
             foreach ($dir in $directories) {
                 if ($PSCmdlet.ShouldProcess($dir.FullName, "Add NIPKG feed")) {
-                    Write-Verbose "Adding feed directory: $($dir.Name)"
-                    Write-Information "Adding feed: $($dir.Name)" -InformationAction Continue
-                    & $NipkgCmdPath feed-add "$($dir.FullName)"
+                    # Convert folder name to valid feed name
+                    $feedName = ConvertTo-FeedName -FolderName $dir.Name
+                    Write-Verbose "Adding feed directory: $($dir.Name) as feed name: $feedName"
+                    Write-Information "Adding feed: $feedName (from folder: $($dir.Name))" -InformationAction Continue
+                    & $NipkgCmdPath feed-add "$($dir.FullName)" --name="$feedName"
                     
                     if ($LASTEXITCODE -ne 0) {
-                        Write-Warning "Failed to add feed: $($dir.Name)"
+                        Write-Warning "Failed to add feed: $feedName"
                     }
                 }
             }
@@ -104,47 +203,131 @@ function Add-FeedDirectories {
     }
 }
 
-function Get-FeedsInfo {
+function Get-FeedDefinitionsFromSystem {
     <#
     .SYNOPSIS
         Retrieves information about configured NIPKG feeds.
 
     .DESCRIPTION
         Gets a list of all currently configured package feeds from NI Package Manager,
-        including feed names and their associated paths.
+        including feed names and their associated paths. Can filter feeds by type (local vs online).
 
     .PARAMETER NipkgCmdPath
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
-    .EXAMPLE
-        Get-FeedsInfo
+    .PARAMETER ExcludeLocalFeeds
+        Exclude local file system feeds from the results. Only online feeds will be returned.
+
+    .PARAMETER ExcludeOnlineFeeds
+        Exclude online feeds from the results. Only local file system feeds will be returned.
 
     .EXAMPLE
-        Get-FeedsInfo -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        Get-FeedDefinitionsFromSystem
+
+    .EXAMPLE
+        Get-FeedDefinitionsFromSystem -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .EXAMPLE
+        # Get only online feeds
+        Get-FeedDefinitionsFromSystem -ExcludeLocalFeeds
+
+    .EXAMPLE
+        # Get only local feeds
+        Get-FeedDefinitionsFromSystem -ExcludeOnlineFeeds
 
     .NOTES
-        Returns PSCustomObject with Name and Path properties for each feed.
+        Returns PSCustomObject with Name, Path, and Type properties for each feed.
+        Feed types are determined as follows:
+        - Local: file:// paths or local file system paths (C:\, D:\, etc.)
+        - Online: http://, https://, ftp://, or other network protocols
+        
+        If neither ExcludeLocalFeeds nor ExcludeOnlineFeeds is specified, all feeds are returned.
     #>
     [CmdletBinding()]
     param (
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$NipkgCmdPath = "nipkg" 
+        [string]$NipkgCmdPath = "nipkg",
+
+        [Parameter()]
+        [switch]$ExcludeLocalFeeds,
+
+        [Parameter()]
+        [switch]$ExcludeOnlineFeeds
     )
 
-    $lines = & $NipkgCmdPath feed-list
-
-    $results = foreach ($line in $lines) {
-        $line = $line.Trim()
-
-        if ($line -match '^(.*\S)\s+([a-zA-Z]:\\.*)$') {
-            [PSCustomObject]@{
-                Name = $matches[1]
-                Path = $matches[2]
-            }
+    begin {
+        Write-Verbose "Starting Get-FeedDefinitionsFromSystem operation"
+        
+        # Validate parameter combination
+        if ($ExcludeLocalFeeds -and $ExcludeOnlineFeeds) {
+            throw "Cannot exclude both local and online feeds. Please specify only one exclusion parameter or none."
         }
     }
-    return $results
+
+    process {
+        try {
+            Write-Verbose "Executing NIPKG feed-list command"
+            $lines = & $NipkgCmdPath feed-list
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "NIPKG feed-list command failed with exit code: $LASTEXITCODE"
+            }
+
+            $allResults = @()
+            
+            foreach ($line in $lines) {
+                $line = $line.Trim()
+
+                # Parse feed lines - handle both local paths and URIs
+                if ($line -match '^(.*\S)\s+(.+)$') {
+                    $feedName = $matches[1].Trim()
+                    $feedPath = $matches[2].Trim()
+                    
+                    # Determine feed type based on path
+                    $feedType = if (Test-FeedIsLocal -FeedPath $feedPath) { "Local" } else { "Online" }
+                    
+                    $feedObj = [PSCustomObject]@{
+                        Name = $feedName
+                        Path = $feedPath
+                        Type = $feedType
+                    }
+                    
+                    $allResults += $feedObj
+                    
+                    Write-Verbose "Found feed: $feedName ($feedType) -> $feedPath"
+                }
+            }
+
+            Write-Verbose "Retrieved $($allResults.Count) total feeds from NIPKG"
+
+            # Apply filtering based on parameters
+            $filteredResults = $allResults
+            
+            if ($ExcludeLocalFeeds) {
+                $filteredResults = $filteredResults | Where-Object { $_.Type -eq "Online" }
+                Write-Verbose "Filtered to $($filteredResults.Count) online feeds (excluded local)"
+            }
+            elseif ($ExcludeOnlineFeeds) {
+                $filteredResults = $filteredResults | Where-Object { $_.Type -eq "Local" }
+                Write-Verbose "Filtered to $($filteredResults.Count) local feeds (excluded online)"
+            }
+            else {
+                Write-Verbose "Returning all $($filteredResults.Count) feeds (no filtering applied)"
+            }
+
+            return $filteredResults
+        }
+        catch {
+            $errorMessage = "Failed to retrieve feeds information from NIPKG. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $NipkgCmdPath
+            throw
+        }
+    }
+
+    end {
+        Write-Verbose "Completed Get-FeedDefinitionsFromSystem operation"
+    }
 }
 
 function Remove-Feeds {
@@ -162,18 +345,18 @@ function Remove-Feeds {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .EXAMPLE
-        $feeds = Get-FeedsInfo
+        $feeds = Get-FeedDefinitionsFromSystem
         Remove-Feeds -FeedsInfo $feeds
 
     .EXAMPLE
         Remove-Feeds -FeedsInfo $feedsToRemove -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
-        Use Get-FeedsInfo to get the required FeedsInfo object.
+        Use Get-FeedDefinitionsFromSystem to get the required FeedsInfo object.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [ValidateNotNull()]
         [PSCustomObject]$FeedsInfo,
         
@@ -213,14 +396,14 @@ function Remove-Feeds {
 
 
 
-function Get-PackagesInfo {
+function Get-NipkgCommandOutput {
     <#
     .SYNOPSIS
-        Retrieves package information from NI Package Manager.
+        Executes NIPKG command and returns raw output lines.
 
     .DESCRIPTION
-        Gets detailed information about either installed or available packages from NIPKG,
-        parsing the output into structured PSCustomObject format.
+        Executes the specified NIPKG command and returns the raw output as an array of lines.
+        This function handles only command execution, not parsing.
 
     .PARAMETER Type
         Specifies whether to get 'installed' or 'available' packages.
@@ -229,13 +412,13 @@ function Get-PackagesInfo {
         Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
 
     .EXAMPLE
-        Get-PackagesInfo -Type "installed"
+        $output = Get-NipkgCommandOutput -Type "installed"
 
     .EXAMPLE
-        Get-PackagesInfo -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+        $output = Get-NipkgCommandOutput -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
 
     .NOTES
-        Returns an array of PSCustomObjects with package properties parsed from NIPKG output.
+        Returns an array of strings representing the raw command output.
     #>
     [CmdletBinding()]
     param (
@@ -248,171 +431,451 @@ function Get-PackagesInfo {
         [string]$NipkgCmdPath = "nipkg" 
     )
 
-    $subCmd = if ($Type -eq "installed") { "info-installed" } else { "info" }
-    $lines = & $NipkgCmdPath $subCmd
-    # Variables to hold packages
-    $packages = @()
-    $currentPackage = @()
-    $blankLineCount = 0
-
-    foreach ($line in $lines) {
-        if ([string]::IsNullOrWhiteSpace($line)) {
-            # Increment count for blank lines
-            $blankLineCount++
-            # If 3 or more consecutive blank lines, start a new package block
-            if ($blankLineCount -ge 3) {
-                if ($currentPackage.Count -gt 0) {
-                    $packages += ,@($currentPackage)
-                    $currentPackage = @()
+    begin {
+        Write-Verbose "Starting Get-NipkgCommandOutput operation"
+        
+        # Check if NIPKG command is available
+        try {
+            $null = Get-Command $NipkgCmdPath -ErrorAction Stop
+        }
+        catch {
+            throw "NIPKG command not found: $NipkgCmdPath. Please ensure NI Package Manager is installed and accessible."
+        }
+    }
+    
+    process {
+        try {
+            $subCmd = if ($Type -eq "installed") { "info-installed" } else { "info" }
+            Write-Verbose "Executing NIPKG command: $NipkgCmdPath $subCmd"
+            
+            $lines = & $NipkgCmdPath $subCmd
+            
+            # Handle empty or null output
+            if (-not $lines) {
+                Write-Warning "NIPKG command returned no output"
+                return @()
+            }
+            
+            # Ensure we have an array and filter out any null/empty entries that might cause binding issues
+            $filteredLines = @()
+            foreach ($line in $lines) {
+                if ($null -ne $line) {
+                    $filteredLines += $line.ToString()
                 }
-                # Reset blank line count after splitting
-                $blankLineCount = 0
             }
+            
+            if ($filteredLines.Count -eq 0) {
+                Write-Warning "No valid output lines after filtering"
+                return @()
+            }
+            
+            Write-Verbose "Command executed successfully, returned $($filteredLines.Count) valid lines"
+            
+            return $filteredLines
         }
-        else {
-            # Non-blank line, reset blank line count and add to current package
+        catch {
+            $errorMessage = "Failed to execute NIPKG command - Type: '$Type', Command: '$NipkgCmdPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Type
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-NipkgCommandOutput operation"
+    }
+}
+
+function ConvertFrom-NipkgOutput {
+    <#
+    .SYNOPSIS
+        Parses NIPKG command output into structured package information.
+
+    .DESCRIPTION
+        Takes raw NIPKG command output lines and parses them into structured PSCustomObjects
+        containing package properties. Handles package separation and key-value parsing.
+
+    .PARAMETER OutputLines
+        Array of strings representing the raw NIPKG command output.
+
+    .EXAMPLE
+        $output = Get-NipkgCommandOutput -Type "installed"
+        $packages = ConvertFrom-NipkgOutput -OutputLines $output
+
+    .EXAMPLE
+        $lines = @("Package: example", "Version: 1.0.0", "", "", "", "Package: another", "Version: 2.0.0")
+        $packages = ConvertFrom-NipkgOutput -OutputLines $lines
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the output.
+        Uses 3+ consecutive blank lines as package separators.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$OutputLines
+    )
+
+    begin {
+        Write-Verbose "Starting ConvertFrom-NipkgOutput operation"
+    }
+    
+    process {
+        try {
+            # Handle empty input
+            if (-not $OutputLines -or $OutputLines.Count -eq 0) {
+                Write-Warning "No output lines provided for parsing"
+                return @()
+            }
+            
+            # Variables to hold packages
+            $packages = @()
+            $currentPackage = @()
             $blankLineCount = 0
-            $currentPackage += $line
-        }
-    }
 
-    # Add last package if any lines remain
-    if ($currentPackage.Count -gt 0) {
-        $packages += ,@($currentPackage)
-    }
+            Write-Verbose "Processing $($OutputLines.Count) output lines"
 
-
-    ## 🛠️ Step 3: Parse each package block into key-value pairs
-
-
-    $parsedPackages = @()
-
-    foreach ($packageLines in $packages) {
-        $packageProps = @{}
-        foreach ($line in $packageLines) {
-            # Split on first colon
-            $key, $value = $line -split ":\s*", 2
-            if ($key -and $value) {
-                $packageProps[$key] = $value
+            foreach ($line in $OutputLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) {
+                    # Increment count for blank lines
+                    $blankLineCount++
+                    # If 3 or more consecutive blank lines, start a new package block
+                    if ($blankLineCount -ge 3) {
+                        if ($currentPackage.Count -gt 0) {
+                            $packages += ,@($currentPackage)
+                            $currentPackage = @()
+                        }
+                        # Reset blank line count after splitting
+                        $blankLineCount = 0
+                    }
+                }
+                else {
+                    # Non-blank line, reset blank line count and add to current package
+                    $blankLineCount = 0
+                    $currentPackage += $line
+                }
             }
-        }
-        $parsedPackages += [PSCustomObject]$packageProps
-    }
 
-    return $parsedPackages
+            # Add last package if any lines remain
+            if ($currentPackage.Count -gt 0) {
+                $packages += ,@($currentPackage)
+            }
+
+            Write-Verbose "Split output into $($packages.Count) package blocks"
+
+            # Parse each package block into key-value pairs
+            $parsedPackages = @()
+
+            foreach ($packageLines in $packages) {
+                $packageProps = @{}
+                foreach ($line in $packageLines) {
+                    # Split on first colon
+                    $key, $value = $line -split ":\s*", 2
+                    if ($key -and $value) {
+                        $packageProps[$key] = $value
+                    }
+                }
+                if ($packageProps.Count -gt 0) {
+                    $parsedPackages += [PSCustomObject]$packageProps
+                }
+            }
+
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from output"
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to parse NIPKG output. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidData -TargetObject $OutputLines
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed ConvertFrom-NipkgOutput operation"
+    }
+}
+
+function ConvertFrom-NipkgPackagesFile {
+    <#
+    .SYNOPSIS
+        Parses NIPKG Packages file content into structured package information.
+
+    .DESCRIPTION
+        Takes content from NIPKG Packages files and parses it into structured PSCustomObjects.
+        This function is specifically designed for NIPKG feed Packages files which use single
+        blank line separation between packages (unlike command output which uses 3+ blank lines).
+
+    .PARAMETER OutputLines
+        Array of strings representing the content from a NIPKG Packages file.
+
+    .EXAMPLE
+        $lines = Get-Content "Packages" -Encoding UTF8
+        $packages = ConvertFrom-NipkgPackagesFile -OutputLines $lines
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the file content.
+        Uses single blank lines as package separators (NIPKG feed file format).
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$OutputLines
+    )
+
+    begin {
+        Write-Verbose "Starting ConvertFrom-NipkgPackagesFile operation"
+    }
+    
+    process {
+        try {
+            # Handle empty input
+            if (-not $OutputLines -or $OutputLines.Count -eq 0) {
+                Write-Warning "No output lines provided for parsing"
+                return @()
+            }
+            
+            # Variables to hold packages
+            $packages = @()
+            $currentPackage = @()
+
+            Write-Verbose "Processing $($OutputLines.Count) output lines"
+
+            foreach ($line in $OutputLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) {
+                    # Single blank line indicates end of package block in Packages files
+                    if ($currentPackage.Count -gt 0) {
+                        $packages += ,@($currentPackage)
+                        $currentPackage = @()
+                    }
+                }
+                else {
+                    # Non-blank line, add to current package
+                    $currentPackage += $line
+                }
+            }
+
+            # Add last package if any lines remain
+            if ($currentPackage.Count -gt 0) {
+                $packages += ,@($currentPackage)
+            }
+
+            Write-Verbose "Split output into $($packages.Count) package blocks"
+
+            # Parse each package block into key-value pairs
+            $parsedPackages = @()
+
+            foreach ($packageLines in $packages) {
+                $packageProps = @{}
+                foreach ($line in $packageLines) {
+                    # Split on first colon
+                    $key, $value = $line -split ":\s*", 2
+                    if ($key -and $value) {
+                        $packageProps[$key] = $value
+                    }
+                }
+                if ($packageProps.Count -gt 0) {
+                    $parsedPackages += [PSCustomObject]$packageProps
+                }
+            }
+
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from Packages file"
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to parse NIPKG Packages file content. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidData -TargetObject $OutputLines
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed ConvertFrom-NipkgPackagesFile operation"
+    }
+}
+
+function Get-PackagesInfoFromNipkgCmd {
+    <#
+    .SYNOPSIS
+        Retrieves package information from NI Package Manager.
+
+    .DESCRIPTION
+        Gets detailed information about either installed or available packages from NIPKG,
+        parsing the output into structured PSCustomObject format. This function combines
+        command execution and output parsing for convenience.
+
+    .PARAMETER Type
+        Specifies whether to get 'installed' or 'available' packages.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        Get-PackagesInfoFromNipkgCmd -Type "installed"
+
+    .EXAMPLE
+        Get-PackagesInfoFromNipkgCmd -Type "available" -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from NIPKG output.
+        This function is a convenience wrapper around Get-NipkgCommandOutput and ConvertFrom-NipkgOutput.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateSet("installed", "available")]
+        [string]$Type,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg" 
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackagesInfoFromNipkgCmd operation"
+    }
+    
+    process {
+        try {
+            # Get raw command output
+            $outputLines = Get-NipkgCommandOutput -Type $Type -NipkgCmdPath $NipkgCmdPath
+            
+            # Handle empty output
+            if (-not $outputLines -or $outputLines.Count -eq 0) {
+                Write-Warning "No package information available for type: $Type"
+                return @()
+            }
+            
+            # Parse the output into structured format
+            $parsedPackages = ConvertFrom-NipkgOutput -OutputLines $outputLines
+            
+            Write-Verbose "Retrieved and parsed $($parsedPackages.Count) packages"
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to get packages info - Type: '$Type'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Type
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackagesInfoFromNipkgCmd operation"
+    }
+}
+
+function Get-PackagesInfoFromPackagesFile {
+    <#
+    .SYNOPSIS
+        Retrieves package information from a NIPKG Packages file.
+
+    .DESCRIPTION
+        Reads and parses a NIPKG Packages file (typically found in feeds) and converts it into 
+        structured PSCustomObject format. This file format is the same as NIPKG command output
+        but stored in a file, commonly used in NIPKG feeds and repositories.
+
+    .PARAMETER InputPath
+        Path to the NIPKG Packages file to parse.
+
+    .EXAMPLE
+        Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\my-feed\Packages"
+
+    .EXAMPLE
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath ".\test-data\Packages"
+        $packages | Where-Object { $_.Section -eq "Programming Environments" }
+
+    .NOTES
+        Returns an array of PSCustomObjects with package properties parsed from the NIPKG Packages file.
+        The file format is the same as 'nipkg info' command output, with packages separated by blank lines
+        and properties in key: value format.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackagesInfoFromPackagesFile operation"
+    }
+    
+    process {
+        try {
+            # Validate input file exists
+            if (-not (Test-Path -Path $InputPath)) {
+                throw "NIPKG Packages file not found: $InputPath"
+            }
+
+            Write-Information "Reading NIPKG Packages file..." -InformationAction Continue
+            Write-Verbose "Reading file: $InputPath"
+            
+            # Read file content as array of lines
+            $outputLines = Get-Content -Path $InputPath -Encoding UTF8
+            Write-Verbose "Read $($outputLines.Count) lines from NIPKG Packages file"
+            
+            # Parse the output using the specialized Packages file parser
+            $parsedPackages = ConvertFrom-NipkgPackagesFile -OutputLines $outputLines
+            
+            Write-Information "Parsed packages from NIPKG file successfully: $InputPath" -InformationAction Continue
+            Write-Verbose "Parsed $($parsedPackages.Count) packages from NIPKG Packages file"
+            
+            return $parsedPackages
+        }
+        catch {
+            $errorMessage = "Failed to get packages info from NIPKG file - InputPath: '$InputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackagesInfoFromPackagesFile operation"
+    }
 }
 
 function Get-DriverPackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only driver packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Drivers" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfo -Type "installed"
-        Get-DriverPackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only driver packages.
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Drivers" }
-    return $filteredPackages | Sort-Object Package
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Drivers' }
+    }
 }
 
 function Get-ProgrammingEnvironmentsPackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only programming environment packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Programming Environments" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfo -Type "available"
-        Get-ProgrammingEnvironmentsPackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only programming environment packages.
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Programming Environments" }
-    return $filteredPackages | Sort-Object Package
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Programming Environments' }
+    }
 }
 
 function Get-UtilitiesPackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only utility packages.
-
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Utilities" section.
-
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfo -Type "installed"
-        Get-UtilitiesPackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only utility packages.
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Utilities" }
-    return $filteredPackages | Sort-Object Package
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Utilities' }
+    }
 }
 
-
 function Get-ApplicationSoftwarePackages {
-    <#
-    .SYNOPSIS
-        Filters package information to return only application software packages.
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.Section -eq 'Application Software' }
+    }
+}
 
-    .DESCRIPTION
-        Filters the provided package information to include only packages in the "Application Software" section.
+function Get-StoreProductPackages {
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.StoreProduct -eq 'yes' }
+    }
+}
 
-    .PARAMETER PackagesInfo
-        PSCustomObject array containing package information from Get-PackagesInfo.
-
-    .EXAMPLE
-        $packages = Get-PackagesInfo -Type "available"
-        Get-ApplicationSoftwarePackages -PackagesInfo $packages
-
-    .NOTES
-        Returns filtered and sorted package list containing only application software packages.
-    #>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [ValidateNotNull()]
-        [PSCustomObject]$PackagesInfo 
-    )
-    $filteredPackages = $PackagesInfo | Where-Object { $_.Section -eq "Application Software" }
-    return $filteredPackages | Sort-Object Package
+function Get-UserVisiblePackages {
+    return { 
+        $packages = @($input)
+        $packages | Where-Object { $_.UserVisible -eq 'yes' }
+    }
 }
 
 function Install-NipkgManager {
@@ -440,47 +903,2632 @@ function Install-NipkgManager {
         [string]$InstallerPath
     )
 
-    # & $InstallerPath `
-    #     --quiet `
-    #     --accept-eulas `
-    #     --prevent-reboot
-    $timeout = 300000  # 5 minutes
+    begin {
+        Write-Verbose "Starting Install-NipkgManager operation"
+    }
+    
+    process {
+        try {
+            if (-not (Test-Path -Path $InstallerPath)) {
+                throw "Installer not found: $InstallerPath"
+            }
 
-    # Set up the process start info
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo.FileName = $InstallerPath
-    $process.StartInfo.Arguments = "--quiet --accept-eulas --prevent-reboot"
-    $process.StartInfo.RedirectStandardOutput = $true
-    $process.StartInfo.RedirectStandardError = $true
-    $process.StartInfo.UseShellExecute = $false
-    $process.StartInfo.CreateNoWindow = $false
+            if ($PSCmdlet.ShouldProcess($InstallerPath, "Install NI Package Manager")) {
+                Write-Information "Installing NI Package Manager..." -InformationAction Continue
+                
+                $timeout = 300000  # 5 minutes
 
-    # Start the process
-    $process.Start()
+                # Set up the process start info
+                $process = New-Object System.Diagnostics.Process
+                $process.StartInfo.FileName = $InstallerPath
+                $process.StartInfo.Arguments = "--quiet --accept-eulas --prevent-reboot"
+                $process.StartInfo.RedirectStandardOutput = $true
+                $process.StartInfo.RedirectStandardError = $true
+                $process.StartInfo.UseShellExecute = $false
+                $process.StartInfo.CreateNoWindow = $false
 
-    # Wait for it to exit
-    $process.WaitForExit($timeout)
+                # Start the process
+                Write-Verbose "Starting installer process: $InstallerPath"
+                $process.Start()
 
-    # Capture the exit code
-    $exitCode = $process.ExitCode
+                # Wait for it to exit
+                $process.WaitForExit($timeout)
 
-    # Optionally capture output or error text
-    $output = $process.StandardOutput.ReadToEnd()
-    $errorOutput = $process.StandardError.ReadToEnd()
+                # Capture the exit code
+                $exitCode = $process.ExitCode
 
-    # Display results
-    Write-Host "Exit Code: $exitCode"
-    Write-Host "Output: $output"
-    Write-Host "Error Output: $errorOutput"
+                # Optionally capture output or error text
+                $output = $process.StandardOutput.ReadToEnd()
+                $errorOutput = $process.StandardError.ReadToEnd()
+
+                # Display results
+                Write-Information "Installation completed with exit code: $exitCode" -InformationAction Continue
+                Write-Verbose "Installer output: $output"
+                
+                if ($errorOutput) {
+                    Write-Warning "Installer error output: $errorOutput"
+                }
+
+                if ($exitCode -ne 0) {
+                    Write-Warning "Installation may have failed with exit code: $exitCode"
+                }
+                
+                return [PSCustomObject]@{
+                    ExitCode = $exitCode
+                    Output = $output
+                    ErrorOutput = $errorOutput
+                    InstallerPath = $InstallerPath
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to install NI Package Manager - InstallerPath: '$InstallerPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InstallerPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Install-NipkgManager operation"
+    }
+}
+
+function New-Snapshot {
+    <#
+    .SYNOPSIS
+        Creates a snapshot object from provided NIPKG feeds and packages information.
+
+    .DESCRIPTION
+        Formats feeds and packages information from provided PSObjects into a structured object.
+        This object can be serialized to JSON or used for other purposes.
+        
+        When exactly one ni-package-manager package is found in the PackagesInfo, the function 
+        automatically resolves all its dependencies using Resolve-PackageDependencies and creates 
+        a separate packages-nipkg section containing these dependencies ordered for installation 
+        using Get-PackageInstallationOrder. This ensures that NIPKG package dependencies are 
+        properly tracked and can be installed in the correct order when applying snapshots.
+        
+        If more than one ni-package-manager package is found, the function will throw an error
+        and stop processing, as only exactly one ni-package-manager package is allowed per snapshot.
+
+    .PARAMETER FeedsInfo
+        PSCustomObject containing feed information from Get-FeedDefinitionsFromSystem.
+
+    .PARAMETER PackagesInfo
+        PSCustomObject containing package information from Get-PackagesInfoFromNipkgCmd.
+
+    .PARAMETER FilterFunction
+        Optional scriptblock or function name to filter packages. If not provided, all packages are included.
+        The filter function should accept pipeline input and return filtered packages.
+
+    .EXAMPLE
+        $feeds = Get-FeedDefinitionsFromSystem
+        $packages = Get-PackagesInfoFromNipkgCmd -Type "installed"
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages
+
+    .EXAMPLE
+        # Create snapshot with only user-visible packages using filter function
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -FilterFunction { Get-UserVisiblePackages }
+
+    .EXAMPLE
+        # Create snapshot with only store products
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -FilterFunction { Get-StoreProductPackages }
+
+    .EXAMPLE
+        # Create snapshot with chained filters
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages -FilterFunction { Get-UserVisiblePackages | Get-StoreProductPackages }
+
+    .NOTES
+        Returns a hashtable with:
+        - feeds: Array of feeds with name and uri
+        - packages: Array of packages with name and version (filtered based on FilterFunction)
+        - packages-nipkg: Array of ni-package-manager packages and their resolved dependencies ordered for installation (only present when exactly one ni-package-manager package is found)
+        
+        The packages-nipkg section includes all dependencies for the ni-package-manager package
+        found in the PackagesInfo, ordered for optimal installation sequence. This ensures that 
+        when snapshots are applied, all NIPKG dependencies are available for installation in the
+        correct order. NIPKG packages will also appear in the regular packages section 
+        (duplicated), which is expected behavior.
+        
+        If more than one ni-package-manager package is found in the input, an error will be
+        thrown and processing will stop.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]]$FeedsInfo,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject[]]$PackagesInfo,
+        
+        [Parameter()]
+        [scriptblock]$FilterFunction
+    )
+
+    begin {
+        Write-Verbose "Starting New-Snapshot operation"
+    }
+    
+    process {
+        try {    
+            $filteredPackages = $PackagesInfo
+            
+            if ($FilterFunction) {
+                Write-Verbose "Applying custom filter function..."
+                $originalCount = $filteredPackages.Count
+                
+                try {
+                    $filteredPackages = $filteredPackages | & $FilterFunction
+                    Write-Verbose "Filtered packages using custom function: $($filteredPackages.Count) (was $originalCount)"
+                } catch {
+                    Write-Error "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
+                    throw
+                }
+            } else {
+                Write-Verbose "No filter function provided, using all packages: $($filteredPackages.Count)"
+            }
+            
+            # Convert feeds to desired format
+            $feeds = @()
+            foreach ($feed in $FeedsInfo) {
+                $feeds += [ordered]@{
+                    name = $feed.Name
+                    uri = $feed.Path
+                }
+            }
+            
+            Write-Verbose "Formatting packages information"
+            
+            # Convert packages to desired format
+            $packages = @()
+            foreach ($package in $filteredPackages) {
+                $packages += [ordered]@{
+                    Package = $package.Package
+                    Version = $package.Version
+                    Depends = $package.Depends 
+                    Description = $package.Description
+                    Section = $package.Section
+                    UserVisible = $package.UserVisible
+                    StoreProduct = $package.StoreProduct
+                }
+            }
+            
+            # Resolve dependencies for ni-package-manager and create packages-nipkg section
+            Write-Verbose "Resolving dependencies for ni-package-manager packages..."
+            $packagesNipkg = @()
+            
+            # Find ni-package-manager packages in the filtered packages (already validated above)
+            $nipkgPackages = $PackagesInfo | Where-Object { 
+                $_.Package -eq "ni-package-manager"
+            }
+            
+            if ($nipkgPackages.Count -eq 1) {
+                Write-Verbose "Found exactly one ni-package-manager package"
+                
+                foreach ($nipkgPackage in $nipkgPackages) {
+                    try {
+                        Write-Verbose "Resolving dependencies for ni-package-manager package: $($nipkgPackage.Package) v$($nipkgPackage.Version)"
+                        
+                        # Resolve all dependencies for this ni-package-manager package
+                        $resolvedDependencies = Resolve-PackageDependencies -PackageName $nipkgPackage.Package -PackagesInfo $PackagesInfo -IncludeRootPackage $true -AllowCircularDependencies $true
+                        
+                        Write-Verbose "Resolved $($resolvedDependencies.Count) dependencies for $($nipkgPackage.Package)"
+                        
+                        # Apply installation order to the resolved dependencies
+                        try {
+                            Write-Verbose "Ordering resolved dependencies for optimal installation sequence..."
+                            $orderedDependencies = Get-PackageInstallationOrder -PackagesInfo $resolvedDependencies -AllowCircularDependencies
+                            Write-Verbose "Successfully ordered $($orderedDependencies.Count) dependencies (circular dependencies allowed)"
+                        }
+                        catch {
+                            Write-Warning "Dependency ordering failed for $($nipkgPackage.Package), using original order: $($_.Exception.Message)"
+                            $orderedDependencies = $resolvedDependencies
+                        }
+                        
+                        # Add ordered dependencies to packages-nipkg section
+                        foreach ($dependency in $orderedDependencies) {
+                            # Check if not already added (avoid duplicates)
+                            $existingPackage = $packagesNipkg | Where-Object { $_.Package -eq $dependency.Package }
+                            if (-not $existingPackage) {
+                                $packagesNipkg += [ordered]@{
+                                    Package = $dependency.Package
+                                    Version = $dependency.Version
+                                    Depends = $dependency.Depends 
+                                    Description = $dependency.Description
+                                    Section = $dependency.Section
+                                    UserVisible = $dependency.UserVisible
+                                    StoreProduct = $dependency.StoreProduct
+                                }
+                            }
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to resolve dependencies for ni-package-manager package '$($nipkgPackage.Package)': $($_.Exception.Message)"
+                        # Still add the ni-package-manager package itself even if dependency resolution fails
+                        $existingPackage = $packagesNipkg | Where-Object { $_.Package -eq $nipkgPackage.Package }
+                        if (-not $existingPackage) {
+                            $packagesNipkg += [ordered]@{
+                                Package = $nipkgPackage.Package
+                                Version = $nipkgPackage.Version
+                            }
+                        }
+                    }
+                }
+                
+                Write-Verbose "Created packages-nipkg section with $($packagesNipkg.Count) package(s)"
+            } else {
+                Write-Verbose "No ni-package-manager packages found in the package list"
+                Write-Verbose "Packages-nipkg section will not be created"
+            }
+            
+            # Create the snapshot object
+            $snapshot = @{
+                feeds = $feeds
+                packages = $packages
+            }
+            
+            # Only add packages-nipkg section if ni-package-manager packages were found
+            if ($packagesNipkg.Count -gt 0) {
+                $snapshot["packages-nipkg"] = $packagesNipkg
+                Write-Verbose "Added packages-nipkg section with $($packagesNipkg.Count) package(s)"
+            } else {
+                Write-Verbose "Skipped packages-nipkg section (no ni-package-manager packages found)"
+            }
+            
+            if ($packagesNipkg.Count -gt 0) {
+                Write-Verbose "Snapshot object contains $($feeds.Count) feeds, $($packages.Count) packages, and $($packagesNipkg.Count) NIPKG packages with dependencies"
+            } else {
+                Write-Verbose "Snapshot object contains $($feeds.Count) feeds and $($packages.Count) packages"
+            }
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to create NIPKG snapshot object. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed New-Snapshot operation"
+    }
+}
+
+function Export-NipkgSnapshotToJson {
+    <#
+    .SYNOPSIS
+        Exports a snapshot object to a JSON file.
+
+    .DESCRIPTION
+        Serializes a snapshot object (from New-Snapshot) to a JSON file.
+        Creates the output directory if it doesn't exist.
+
+    .PARAMETER Snapshot
+        Hashtable containing the snapshot data to serialize.
+
+    .PARAMETER OutputPath
+        Path where the JSON snapshot file will be created.
+
+    .EXAMPLE
+        $snapshot = New-Snapshot -FeedsInfo $feeds -PackagesInfo $packages
+        Export-NipkgSnapshotToJson -Snapshot $snapshot -OutputPath "C:\Snapshots\nipkg-snapshot.json"
+
+    .NOTES
+        Creates the output directory if it doesn't exist.
+        Returns summary information about the exported file.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$OutputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Export-NipkgSnapshotToJson operation"
+    }
+    
+    process {
+        try {
+            if ($PSCmdlet.ShouldProcess($OutputPath, "Export NIPKG snapshot to JSON")) {
+                Write-Information "Exporting NIPKG snapshot to JSON..." -InformationAction Continue
+                
+                # Convert to JSON
+                $jsonContent = $Snapshot | ConvertTo-Json -Depth 10 -Compress:$false
+                
+                # Ensure output directory exists
+                $outputDir = Split-Path -Path $OutputPath -Parent
+                if ($outputDir -and -not (Test-Path -Path $outputDir)) {
+                    Write-Verbose "Creating output directory: $outputDir"
+                    New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
+                }
+                
+                # Write JSON to file
+                $jsonContent | Out-File -FilePath $OutputPath -Encoding UTF8 -Force
+                
+                Write-Information "Snapshot exported successfully: $OutputPath" -InformationAction Continue
+                
+                $feedsCount = if ($Snapshot.feeds) { $Snapshot.feeds.Count } else { 0 }
+                $packagesCount = if ($Snapshot.packages) { $Snapshot.packages.Count } else { 0 }
+                $nipkgPackagesCount = if ($Snapshot."packages-nipkg") { $Snapshot."packages-nipkg".Count } else { 0 }
+                
+                Write-Verbose "Exported snapshot contains type '$snapshotType', $feedsCount feeds, $packagesCount packages, and $nipkgPackagesCount NIPKG packages"
+                
+                # Return summary information
+                return [PSCustomObject]@{
+                    SnapshotPath = $OutputPath
+                    FeedsCount = $feedsCount
+                    PackagesCount = $packagesCount
+                    NipkgPackagesCount = $nipkgPackagesCount
+                    FileSizeBytes = (Get-Item -Path $OutputPath).Length
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to export NIPKG snapshot to JSON - OutputPath: '$OutputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $OutputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Export-NipkgSnapshotToJson operation"
+    }
+}
+
+function Import-NipkgSnapshotFromJson {
+    <#
+    .SYNOPSIS
+        Imports a NIPKG snapshot from a JSON file.
+
+    .DESCRIPTION
+        Reads and parses a JSON snapshot file created by Export-NipkgSnapshotToJson.
+        Returns the snapshot object with feeds and packages information.
+
+    .PARAMETER InputPath
+        Path to the JSON snapshot file to import.
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\nipkg-snapshot.json"
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "C:\Snapshots\snapshot.json"
+        Write-Host "Imported $($snapshot.packages.Count) packages and $($snapshot.feeds.Count) feeds"
+
+    .NOTES
+        Returns a hashtable with:
+        - type: Snapshot type (Full, UserVisible, StoreProduct, or Unknown if not specified)
+        - feeds: Array of feeds with name and uri properties
+        - packages: Array of packages with name and version properties
+        - packages-nipkg: Array of NIPKG packages with name and version properties (if present)
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InputPath
+    )
+
+    begin {
+        Write-Verbose "Starting Import-NipkgSnapshotFromJson operation"
+    }
+    
+    process {
+        try {
+            # Validate input file exists
+            if (-not (Test-Path -Path $InputPath)) {
+                throw "Snapshot file not found: $InputPath"
+            }
+
+            Write-Information "Importing NIPKG snapshot from JSON..." -InformationAction Continue
+            Write-Verbose "Reading JSON file: $InputPath"
+            
+            # Read and parse JSON content
+            $jsonContent = Get-Content -Path $InputPath -Raw -Encoding UTF8
+            $snapshotData = $jsonContent | ConvertFrom-Json
+            
+            # Validate JSON structure
+            if (-not $snapshotData) {
+                throw "Invalid or empty JSON content"
+            }
+            
+            # Convert back to hashtable format
+            $snapshot = @{
+                feeds = @()
+                packages = @()
+            }
+            
+            # Process feeds if they exist
+            if ($snapshotData.feeds) {
+                Write-Verbose "Processing $($snapshotData.feeds.Count) feeds"
+                foreach ($feed in $snapshotData.feeds) {
+                    $snapshot.feeds += [ordered]@{
+                        name = $feed.name
+                        uri = $feed.uri
+                    }
+                }
+            }
+            
+            # Process packages if they exist
+            if ($snapshotData.packages) {
+                Write-Verbose "Processing $($snapshotData.packages.Count) packages"
+                foreach ($package in $snapshotData.packages) {
+                    $snapshot.packages += [ordered]@{
+                        Package = $package.Package
+                        Version = $package.Version
+                        Depends = $package.Depends 
+                        Description = $package.Description
+                        Section = $package.Section
+                        UserVisible = $package.UserVisible
+                        StoreProduct = $package.StoreProduct
+                    }
+                }
+            }
+            
+            # Process packages-nipkg if they exist
+            if ($snapshotData."packages-nipkg") {
+                Write-Verbose "Processing $($snapshotData.'packages-nipkg'.Count) NIPKG packages"
+                $snapshot."packages-nipkg" = @()
+                foreach ($package in $snapshotData."packages-nipkg") {
+                    $snapshot."packages-nipkg" += [ordered]@{
+                        Package = $package.Package
+                        Version = $package.Version
+                        Depends = $package.Depends 
+                        Description = $package.Description
+                        Section = $package.Section
+                        UserVisible = $package.UserVisible
+                        StoreProduct = $package.StoreProduct
+                    }
+                }
+            }
+            
+            Write-Information "Snapshot imported successfully: $InputPath" -InformationAction Continue
+            
+            $nipkgPackagesCount = if ($snapshot."packages-nipkg") { $snapshot."packages-nipkg".Count } else { 0 }
+            $snapshotType = $snapshot.type
+            if ($nipkgPackagesCount -gt 0) {
+                Write-Verbose "Imported snapshot contains type '$snapshotType', $($snapshot.feeds.Count) feeds, $($snapshot.packages.Count) packages, and $nipkgPackagesCount NIPKG packages"
+            } else {
+                Write-Verbose "Imported snapshot contains type '$snapshotType', $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            }
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to import NIPKG snapshot from JSON - InputPath: '$InputPath'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InputPath
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Import-NipkgSnapshotFromJson operation"
+    }
+}
+
+function Test-NipkgAvailability {
+    <#
+    .SYNOPSIS
+        Tests if NI Package Manager is available and accessible.
+
+    .DESCRIPTION
+        Checks if the NIPKG command is available and can be executed.
+        This is useful for troubleshooting connection issues.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .EXAMPLE
+        Test-NipkgAvailability
+
+    .EXAMPLE
+        Test-NipkgAvailability -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+
+    .NOTES
+        Returns $true if NIPKG is available, $false otherwise.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg" 
+    )
+
+    begin {
+        Write-Verbose "Starting Test-NipkgAvailability operation"
+    }
+    
+    process {
+        try {
+            # Test if command exists
+            $command = Get-Command $NipkgCmdPath -ErrorAction Stop
+            Write-Verbose "NIPKG command found at: $($command.Source)"
+            
+            # Test if command can execute (try getting version)
+            $versionOutput = & $NipkgCmdPath --version 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Information "NIPKG is available and working" -InformationAction Continue
+                Write-Verbose "NIPKG version output: $versionOutput"
+                return $true
+            } else {
+                Write-Warning "NIPKG command exists but failed to execute properly (exit code: $LASTEXITCODE)"
+                Write-Verbose "NIPKG error output: $versionOutput"
+                return $false
+            }
+        }
+        catch {
+            Write-Warning "NIPKG command not found or not accessible: $NipkgCmdPath"
+            Write-Verbose "Error details: $($_.Exception.Message)"
+            return $false
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Test-NipkgAvailability operation"
+    }
+}
+
+function New-SnapshotFromInstallerDirectory {
+    <#
+    .SYNOPSIS
+        Creates a NIPKG snapshot from an installer directory structure.
+
+    .DESCRIPTION
+        Scans an installer directory for feeds and packages, then creates a snapshot object
+        containing all available feeds and packages from the installer. This is useful for
+        creating snapshots from offline installers before installation.
+        
+        The function automatically detects and includes:
+        - Standard feeds in the 'feeds' subdirectory
+        - Special NIPKG feed in 'bin/ni-package-manager-packages' (for offline installers)
+        
+        Feed names are generated from folder names using ConvertTo-FeedName to ensure
+        compatibility with feed naming requirements (dots are replaced with underscores).
+        
+        Duplicate packages (same name, different versions) are automatically removed by 
+        selecting the highest version of each package before creating the snapshot.
+
+    .PARAMETER InstallerDirectory
+        Path to the installer directory containing the feeds subdirectory.
+
+    .PARAMETER IncludeFeeds
+        Whether to include feed information in the snapshot. Defaults to $true.
+
+    .PARAMETER FilterFunction
+        Optional scriptblock or function name to filter packages. If not provided, defaults to Get-StoreProductPackages.
+        The filter function should accept pipeline input and return filtered packages.
+
+    .EXAMPLE
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installers\ni-labview-2025-community-x86_25.1.3_offline"
+
+    .EXAMPLE
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -IncludeFeeds $false
+
+    .EXAMPLE
+        # Create snapshot with only user-visible packages from installer
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -FilterFunction { Get-UserVisiblePackages }
+
+    .EXAMPLE
+        # Create snapshot with chained filters from installer
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory ".\installers\labview-2025" -FilterFunction { Get-UserVisiblePackages | Get-ProgrammingEnvironmentsPackages }
+
+    .NOTES
+        Returns a hashtable with:
+        - feeds: Array of feeds with name and uri (if IncludeFeeds is true)
+        - packages: Array of packages with name and version from all feeds
+        
+        Feed names are automatically converted using ConvertTo-FeedName to ensure compatibility
+        (e.g., "ni-488.2" becomes "ni-488_2", "ni-vivado-2021.1-cg" becomes "ni-vivado-2021_1-cg").
+        
+        The function looks for:
+        1. A 'feeds' subdirectory and scans all subdirectories for Packages files
+        2. A special 'bin/ni-package-manager-packages' directory for NIPKG packages (offline installers)
+        
+        Duplicate packages are automatically removed by selecting the highest version of each package.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$InstallerDirectory,
+        
+        [Parameter()]
+        [bool]$IncludeFeeds = $true,
+        
+        [Parameter()]
+        [scriptblock]$FilterFunction = {  @($input) | & (Get-StoreProductPackages)}
+    )
+
+    begin {
+        Write-Verbose "Starting New-SnapshotFromInstallerDirectory operation"
+    }
+    
+    process {
+        try {
+            # Validate installer directory exists
+            if (-not (Test-Path -Path $InstallerDirectory -PathType Container)) {
+                throw "Installer directory not found: $InstallerDirectory"
+            }
+
+            Write-Information "Scanning installer directory for feeds and packages..." -InformationAction Continue
+            Write-Verbose "Installer directory: $InstallerDirectory"
+
+            # Look for feeds directory
+            $feedsDirectory = Join-Path -Path $InstallerDirectory -ChildPath "feeds"
+            if (-not (Test-Path -Path $feedsDirectory -PathType Container)) {
+                throw "Feeds directory not found in installer: $feedsDirectory"
+            }
+
+            Write-Verbose "Found feeds directory: $feedsDirectory"
+
+            # Get all feed subdirectories
+            $feedSubdirectories = Get-ChildItem -Path $feedsDirectory -Directory -ErrorAction Stop
+            
+            if ($feedSubdirectories.Count -eq 0) {
+                Write-Warning "No feed subdirectories found in: $feedsDirectory"
+                return @{
+                    feeds = @()
+                    packages = @()
+                }
+            }
+
+            Write-Information "Found $($feedSubdirectories.Count) feed(s) in installer" -InformationAction Continue
+
+            # Initialize collections
+            $allPackages = @()
+            $allFeeds = @()
+
+            # Check for special NIPKG feed in bin directory (for offline installers)
+            $nipkgFeedDirectory = Join-Path -Path $InstallerDirectory -ChildPath "bin\ni-package-manager-packages"
+            if (Test-Path -Path $nipkgFeedDirectory -PathType Container) {
+                Write-Information "Found special NIPKG feed in bin directory" -InformationAction Continue
+                Write-Verbose "Processing special NIPKG feed: $nipkgFeedDirectory"
+                
+                $nipkgPackagesFile = Join-Path -Path $nipkgFeedDirectory -ChildPath "Packages"
+                if (Test-Path -Path $nipkgPackagesFile -PathType Leaf) {
+                    try {
+                        # Parse packages from the NIPKG feed
+                        $nipkgPackages = Get-PackagesInfoFromPackagesFile -InputPath $nipkgPackagesFile
+                        Write-Verbose "Found $($nipkgPackages.Count) packages in NIPKG feed"
+                        
+                        # Add packages to the combined collection
+                        $allPackages += $nipkgPackages
+                        
+                        # Add feed information if requested
+                        if ($IncludeFeeds) {
+                            $nipkgFeedInfo = [PSCustomObject]@{
+                                Name = "local-installer-ni-package-manager-packages"
+                                Path = $nipkgFeedDirectory
+                            }
+                            $allFeeds += $nipkgFeedInfo
+                        }
+                        
+                        Write-Information "Successfully processed NIPKG feed with $($nipkgPackages.Count) packages" -InformationAction Continue
+                    }
+                    catch {
+                        Write-Warning "Failed to parse packages from NIPKG feed: $($_.Exception.Message)"
+                    }
+                } else {
+                    Write-Warning "No Packages file found in NIPKG feed directory: $nipkgFeedDirectory"
+                }
+            } else {
+                Write-Verbose "No special NIPKG feed found in bin directory"
+            }
+
+            # Process each feed subdirectory
+            foreach ($feedDir in $feedSubdirectories) {
+                Write-Verbose "Processing feed: $($feedDir.Name)"
+                
+                # Look for Packages file in this feed
+                $packagesFile = Join-Path -Path $feedDir.FullName -ChildPath "Packages"
+                
+                if (Test-Path -Path $packagesFile -PathType Leaf) {
+                    Write-Information "Processing packages from feed: $($feedDir.Name)" -InformationAction Continue
+                    
+                    try {
+                        # Parse packages from this feed
+                        $feedPackages = Get-PackagesInfoFromPackagesFile -InputPath $packagesFile
+                        Write-Verbose "Found $($feedPackages.Count) packages in feed: $($feedDir.Name)"
+                        
+                        # Add packages to the combined collection
+                        $allPackages += $feedPackages
+                        
+                        # Add feed information if requested
+                        if ($IncludeFeeds) {
+                            $feedName = ConvertTo-FeedName -FolderName $feedDir.Name
+                            $feedInfo = [PSCustomObject]@{
+                                Name = $feedName
+                                Path = $feedDir.FullName
+                            }
+                            $allFeeds += $feedInfo
+                        }
+                    }
+                    catch {
+                        Write-Warning "Failed to parse packages from feed '$($feedDir.Name)': $($_.Exception.Message)"
+                    }
+                } else {
+                    Write-Warning "No Packages file found in feed directory: $($feedDir.FullName)"
+                }
+            }
+
+            Write-Information "Successfully processed installer: $($allFeeds.Count) feeds, $($allPackages.Count) total packages" -InformationAction Continue
+
+            # Remove duplicate packages by selecting highest version
+            Write-Verbose "Removing duplicate packages by selecting highest versions"
+            $uniquePackages = Remove-DuplicatePackagesByVersion -PackagesInfo $allPackages
+            Write-Information "After duplicate removal: $($uniquePackages.Count) unique packages (removed $($allPackages.Count - $uniquePackages.Count) duplicates)" -InformationAction Continue
+
+            $snapshot = New-Snapshot -FeedsInfo $allFeeds -PackagesInfo $uniquePackages -FilterFunction $FilterFunction
+            
+            Write-Verbose "Created snapshot with $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to create snapshot from installer - InstallerDirectory: '$InstallerDirectory'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $InstallerDirectory
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed New-SnapshotFromInstallerDirectory operation"
+    }
+}
+
+function New-SnapshotFromSystem {
+    <#
+    .SYNOPSIS
+        Creates a NIPKG snapshot from the current system state.
+
+    .DESCRIPTION
+        Creates a snapshot by capturing the current NIPKG configuration including configured feeds
+        and installed packages. This function combines Get-FeedDefinitionsFromSystem, Get-PackagesInfo, 
+        and New-Snapshot to create a complete system state snapshot.
+
+    .PARAMETER PackageType
+        Specifies whether to capture 'installed' or 'available' packages. Defaults to 'installed'.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER IncludeFeeds
+        Whether to include current feed configuration in the snapshot. Defaults to $true.
+
+
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [bool]$IncludeFeeds = $true,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction
+        
+    )
+
+    begin {
+        Write-Verbose "Starting New-SnapshotFromSystem operation"
+    }
+    
+    process {
+        try {
+            Write-Information "Creating NIPKG snapshot from current system state..." -InformationAction Continue
+
+            # Initialize collections
+            $feedsInfo = @()
+            $packagesInfo = @()
+
+            # Get current feeds if requested
+            if ($IncludeFeeds) {
+                Write-Information "Retrieving current feed configuration..." -InformationAction Continue
+                Write-Verbose "Getting feeds info from NIPKG command"
+                
+                try {
+                    $feedsInfo = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath -ExcludeLocalFeeds
+                    Write-Verbose "Retrieved $($feedsInfo.Count) feeds from system"
+                    Write-Information "Found $($feedsInfo.Count) configured feed(s)" -InformationAction Continue
+                }
+                catch {
+                    Write-Warning "Failed to retrieve feeds information: $($_.Exception.Message)"
+                    $feedsInfo = @()
+                }
+            } else {
+                Write-Information "Skipping feed configuration (IncludeFeeds=$IncludeFeeds)" -InformationAction Continue
+            }
+
+
+            
+            try {
+                $packagesInfo = Get-PackagesInfoFromNipkgCmd -Type "Installed" -NipkgCmdPath $NipkgCmdPath
+                Write-Verbose "Retrieved $($packagesInfo.Count) packages from system"
+                Write-Information "Found $($packagesInfo.Count) $PackageType package(s)" -InformationAction Continue
+            }
+            catch {
+                Write-Error "Failed to retrieve packages information: $($_.Exception.Message)"
+                throw
+            }
+
+            # Create the snapshot using the retrieved information
+            Write-Information "Creating snapshot object..." -InformationAction Continue
+            Write-Verbose "Creating snapshot with type '$Type', $($feedsInfo.Count) feeds and $($packagesInfo.Count) packages"
+            
+            $snapshot = New-Snapshot -FeedsInfo $feedsInfo -PackagesInfo $packagesInfo -FilterFunction $FilterFunction
+            
+            Write-Information "System snapshot created successfully" -InformationAction Continue
+            Write-Verbose "Snapshot contains $($snapshot.feeds.Count) feeds and $($snapshot.packages.Count) packages"
+            
+            return $snapshot
+        }
+        catch {
+            $errorMessage = "Failed to create system snapshot - PackageType: '$PackageType'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $PackageType
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed New-SnapshotFromSystem operation"
+    }
+}
+
+function Install-Snapshot {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [switch]$SkipFeedsInstallation,
+        
+        [Parameter()]
+        [switch]$SkipPackagesInstallation,
+        
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+        
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+        
+        [Parameter()]
+        [switch]$Yes,
+        
+        [Parameter()]
+        [switch]$Simulate,
+        
+        [Parameter()]
+        [switch]$ForceLocked,
+        
+        [Parameter()]
+        [switch]$AllowDowngrade,
+        
+        [Parameter()]
+        [switch]$AllowUninstall,
+        
+        [Parameter()]
+        [switch]$InstallAlsoUpgrades,
+        
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction
+    )
+
+    begin {
+        Write-Verbose "Starting Install-Snapshot operation"
+    }
+    
+    process {
+        try {
+            Write-Information "Applying NIPKG snapshot..." -InformationAction Continue
+            Write-Information "Snapshot contains $($Snapshot.feeds.Count) feeds and $($Snapshot.packages.Count) packages" -InformationAction Continue
+
+            if($RemoveExistingFeeds) {
+                Write-Information "Removing existing feeds..."
+                Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath | Remove-Feeds -NipkgCmdPath $NipkgCmdPath
+            }
+
+            $snapshotFeedsAdded = @()
+            if (-not $SkipFeedsInstallation -and $Snapshot.feeds.Count -gt 0) {
+                Write-Information "Adding feeds from snapshot..."
+                $snapshotFeedsAdded = $Snapshot.feeds | Install-Feeds -NipkgCmdPath $NipkgCmdPath
+            }
+
+            if (-not $SkipPackagesInstallation -and $Snapshot.packages.Count -gt 0) {
+                Write-Information "Installing Packages..."
+                $packagesToInstall = Get-PackageDefinitionsFromSnapshot -Snapshot $Snapshot
+
+                $filteredPackages = $packagesToInstall
+            
+                if ($FilterFunction) {
+                    Write-Verbose "Applying custom filter function..."
+                    $originalCount = $filteredPackages.Count
+                    
+                    try {
+                        $filteredPackages = $filteredPackages | & $FilterFunction
+                        $filteredPackages = Remove-DuplicatePackagesByVersion -PackagesInfo $filteredPackages
+                        Write-Verbose "Filtered packages using custom function: $($filteredPackages.Count) (was $originalCount)"
+                    } catch {
+                        Write-Error "Filter function failed, using unfiltered packages: $($_.Exception.Message)"
+                        throw
+                    }
+                } else {
+                    Write-Verbose "No filter function provided, using all packages: $($filteredPackages.Count)"
+                }
+            
+                $installSwitches = @{
+                    NipkgCmdPath = $NipkgCmdPath
+                    AcceptEulas = $AcceptEulas.IsPresent
+                    Yes = $Yes.IsPresent
+                    Simulate = $Simulate.IsPresent
+                    ForceLocked = $ForceLocked.IsPresent
+                    AllowDowngrade = $AllowDowngrade.IsPresent
+                    AllowUninstall = $AllowUninstall.IsPresent
+                    InstallAlsoUpgrades = $InstallAlsoUpgrades.IsPresent
+                    IncludeRecommended = $IncludeRecommended.IsPresent
+                    PackageDefinitions = $filteredPackages
+                    SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
+                }
+                Install-Packages @installSwitches   
+            }
+
+            if ($RemoveSnapshotFeeds -and $snapshotFeedsAdded.Count -gt 0) {
+                Write-Information "Removing feeds added by snapshot..."  
+                $snapshotFeedsAdded | Remove-Feeds -NipkgCmdPath $NipkgCmdPath
+            } 
+
+            Write-Information "Snapshot application completed successfully" -InformationAction Continue
+        }
+        catch {
+            $errorMessage = "Failed to apply NIPKG snapshot. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Snapshot
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Install-Snapshot operation"
+        # Return the snapshot for pipeline continuation
+        return $Snapshot
+    }
+}
+
+function Test-Snapshot {
+    <#
+    .SYNOPSIS
+        Validates that the current system state matches the desired snapshot state.
+
+    .DESCRIPTION
+        Compares the current NIPKG configuration (feeds and/or packages) against a snapshot
+        to verify compliance. This function is useful for validating that Install-Snapshot
+        achieved the desired state or for ongoing compliance monitoring.
+
+    .PARAMETER Snapshot
+        The snapshot object containing packages and their versions. Can be passed via pipeline from Install-Snapshot.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER ValidateFeeds
+        Whether to validate feed configuration compliance. Defaults to $true.
+
+    .PARAMETER ValidatePackages
+        Whether to validate package installation compliance. Defaults to $true.
+
+    .PARAMETER FailOnNonCompliance
+        Whether to throw an error if the system is not compliant. If false, returns
+        compliance status without failing. Defaults to $false.
+
+    .PARAMETER AllowExtraFeeds
+        Allow extra feeds beyond those in the snapshot. If false, extra feeds cause
+        non-compliance. Defaults to $false.
+
+    .PARAMETER AllowExtraPackages
+        Allow extra packages beyond those in the snapshot. If false, extra packages cause
+        non-compliance. Defaults to $false.
+
+    .OUTPUTS
+        PSCustomObject with compliance validation results including:
+        - IsCompliant: Boolean indicating overall compliance
+        - FeedsCompliant: Boolean indicating feed compliance
+        - PackagesCompliant: Boolean indicating package compliance
+        - ComplianceSummary: String summary of compliance status
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        Test-Snapshot -Snapshot $snapshot
+
+    .EXAMPLE
+        # Pipeline usage with Install-Snapshot
+        Import-NipkgSnapshotFromJson -InputPath "snapshot.json" | Install-Snapshot | Test-Snapshot
+
+    .EXAMPLE
+        # Validate only packages, allow extra feeds
+        $snapshot | Test-Snapshot -ValidateFeeds $false -AllowExtraFeeds $true
+
+    .EXAMPLE
+        # Strict validation - fail build if not compliant
+        $snapshot | Test-Snapshot -FailOnNonCompliance
+
+    .NOTES
+        Returns a compliance report object with detailed information about differences.
+        Can be used in CI/CD pipelines to ensure environment consistency.
+        Accepts snapshot objects from pipeline or directly as parameter.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        $Snapshot,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+
+        [Parameter()]
+        [bool]$ValidateFeeds = $true,
+
+        [Parameter()]
+        [bool]$ValidatePackages = $true,
+
+        [Parameter()]
+        [switch]$FailOnNonCompliance,
+
+        [Parameter()]
+        [bool]$AllowExtraFeeds = $false,
+
+        [Parameter()]
+        [bool]$AllowExtraPackages = $false
+    )
+
+    begin {
+        Write-Verbose "Starting Test-Snapshot operation"
+    }
+    
+    process {
+        try {
+            Write-Information "Validating NIPKG snapshot compliance..." -InformationAction Continue
+            Write-Verbose "Snapshot contains $($Snapshot.feeds.Count) feeds and $($Snapshot.packages.Count) packages"
+
+            # Initialize compliance report
+            $complianceReport = [PSCustomObject]@{
+                IsCompliant = $true
+                FeedsCompliant = $true
+                PackagesCompliant = $true
+                ComplianceSummary = "System is compliant with snapshot"
+                FeedsDifferences = @()
+                PackagesDifferences = @()
+                ValidationTimestamp = Get-Date
+            }
+
+            # Validate feeds if requested
+            if ($ValidateFeeds -and $Snapshot.feeds.Count -gt 0) {
+                Write-Information "Validating feed compliance..." -InformationAction Continue
+                
+                try {
+                    $currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath
+                    
+                    # Check for missing feeds
+                    foreach ($snapshotFeed in $Snapshot.feeds) {
+                        $matchingFeed = $currentFeeds | Where-Object { $_.name -eq $snapshotFeed.name -and $_.uri -eq $snapshotFeed.uri }
+                        if (-not $matchingFeed) {
+                            $complianceReport.FeedsDifferences += "Missing feed: $($snapshotFeed.name) ($($snapshotFeed.uri))"
+                            $complianceReport.FeedsCompliant = $false
+                        }
+                    }
+                    
+                    # Check for extra feeds if not allowed
+                    if (-not $AllowExtraFeeds) {
+                        foreach ($currentFeed in $currentFeeds) {
+                            $matchingFeed = $Snapshot.feeds | Where-Object { $_.name -eq $currentFeed.name -and $_.uri -eq $currentFeed.uri }
+                            if (-not $matchingFeed) {
+                                $complianceReport.FeedsDifferences += "Extra feed: $($currentFeed.name) ($($currentFeed.uri))"
+                                $complianceReport.FeedsCompliant = $false
+                            }
+                        }
+                    }
+                } catch {
+                    Write-Warning "Failed to validate feeds: $($_.Exception.Message)"
+                    $complianceReport.FeedsCompliant = $false
+                    $complianceReport.FeedsDifferences += "Error validating feeds: $($_.Exception.Message)"
+                }
+            }
+
+            # Validate packages if requested
+            if ($ValidatePackages -and $Snapshot.packages.Count -gt 0) {
+                Write-Information "Validating package compliance..." -InformationAction Continue
+                
+                try {
+                    $installedPackages = Get-PackagesInfoFromNipkgCmd -Type "installed" -NipkgCmdPath $NipkgCmdPath
+                    
+                    # Check for missing or incorrect versions
+                    foreach ($snapshotPackage in $Snapshot.packages) {
+                        $matchingPackage = $installedPackages | Where-Object { $_.Package -eq $snapshotPackage.Package }
+                        if (-not $matchingPackage) {
+                            $complianceReport.PackagesDifferences += "Missing package: $($snapshotPackage.Package) $($snapshotPackage.Version)"
+                            $complianceReport.PackagesCompliant = $false
+                        } elseif ($matchingPackage.Version -ne $snapshotPackage.version) {
+                            $complianceReport.PackagesDifferences += "Version mismatch: $($snapshotPackage.Package) (expected: $($snapshotPackage.version), actual: $($matchingPackage.Version))"
+                            $complianceReport.PackagesCompliant = $false
+                        }
+                    }
+                    
+                    # Check for extra packages if not allowed
+                    if (-not $AllowExtraPackages) {
+                        foreach ($installedPackage in $installedPackages) {
+                            $matchingPackage = $Snapshot.packages | Where-Object { $_.Package -eq $installedPackage.Package }
+                            if (-not $matchingPackage) {
+                                $complianceReport.PackagesDifferences += "Extra package: $($installedPackage.Package) $($installedPackage.Version)"
+                                $complianceReport.PackagesCompliant = $false
+                            }
+                        }
+                    }
+                } catch {
+                    Write-Warning "Failed to validate packages: $($_.Exception.Message)"
+                    $complianceReport.PackagesCompliant = $false
+                    $complianceReport.PackagesDifferences += "Error validating packages: $($_.Exception.Message)"
+                }
+            }
+
+            # Update overall compliance
+            $complianceReport.IsCompliant = $complianceReport.FeedsCompliant -and $complianceReport.PackagesCompliant
+            
+            if (-not $complianceReport.IsCompliant) {
+                $totalDifferences = $complianceReport.FeedsDifferences.Count + $complianceReport.PackagesDifferences.Count
+                $complianceReport.ComplianceSummary = "System is NOT compliant with snapshot ($totalDifferences difference(s) found)"
+                
+                if ($FailOnNonCompliance) {
+                    $errorMessage = $complianceReport.ComplianceSummary
+                    if ($complianceReport.FeedsDifferences.Count -gt 0) {
+                        $errorMessage += ". Feed differences: " + ($complianceReport.FeedsDifferences -join "; ")
+                    }
+                    if ($complianceReport.PackagesDifferences.Count -gt 0) {
+                        $errorMessage += ". Package differences: " + ($complianceReport.PackagesDifferences -join "; ")
+                    }
+                    throw $errorMessage
+                }
+            }
+
+            Write-Information $complianceReport.ComplianceSummary -InformationAction Continue
+            return $complianceReport
+
+        } catch {
+            $errorMessage = "Failed to validate NIPKG snapshot compliance. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Snapshot
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Test-Snapshot operation"
+    }
+}
+
+
+function Install-PackagesFromSystemSnapshot {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot,
+        
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+        
+        [Parameter()]
+        [switch]$SkipFeedsInstallation,
+        
+        [Parameter()]
+        [switch]$SkipPackagesInstallation,
+        
+        [Parameter()]
+        [switch]$RemoveExistingFeeds,
+        
+        [Parameter()]
+        [switch]$RemoveSnapshotFeeds,
+
+        [Parameter()]
+        [switch]$AcceptEulas,
+        
+        [Parameter()]
+        [switch]$Yes,
+        
+        [Parameter()]
+        [switch]$Simulate,
+        
+        [Parameter()]
+        [switch]$ForceLocked,
+        
+        [Parameter()]
+        [switch]$AllowDowngrade,
+        
+        [Parameter()]
+        [switch]$AllowUninstall,
+        
+        [Parameter()]
+        [switch]$InstallAlsoUpgrades,
+        
+        [Parameter()]
+        [switch]$IncludeRecommended,
+
+        [Parameter()]
+        [switch]$SuppressIncompatibilityErrors,
+
+        [Parameter()]
+        [scriptblock]$FilterFunction
+    )
+
+    $installParams = @{
+        NipkgCmdPath = $NipkgCmdPath
+        Snapshot = $Snapshot
+        AcceptEulas = $AcceptEulas.IsPresent
+        Simulate = $Simulate.IsPresent
+        Yes = $true
+        ForceLocked = $true
+        AllowDowngrade = $true
+        AllowUninstall = $true
+        InstallAlsoUpgrades = $true
+        IncludeRecommended = $false
+        RemoveExistingFeeds = $RemoveExistingFeeds.IsPresent
+        RemoveSnapshotFeeds = $false
+        SuppressIncompatibilityErrors = $SuppressIncompatibilityErrors.IsPresent
+        FilterFunction = $FilterFunction
+    }
+
+    Install-Snapshot @installParams
+    Test-Snapshot `
+            -NipkgCmdPath $NipkgCmdPath `
+            -Snapshot $Snapshot `
+            -AllowExtraFeeds $true `
+            -AllowExtraPackages $true `
+            -ValidateFeeds $false
+
+}
+
+function Test-FeedIsLocal {
+    <#
+    .SYNOPSIS
+        Tests whether a feed path represents a local or online feed.
+
+    .DESCRIPTION
+        Determines if a feed path is local (file system) or online (network) based on the URI scheme or path format.
+
+    .PARAMETER FeedPath
+        The feed path/URI to test.
+
+    .NOTES
+        Returns $true for local feeds, $false for online feeds.
+        Local feeds include:
+        - file:// URIs
+        - Windows drive paths (C:\, D:\, etc.)
+        - UNC paths (\\server\share)
+        - Relative paths
+        
+        Online feeds include:
+        - http://, https:// URIs
+        - ftp://, ftps:// URIs
+        - Other network protocols
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$FeedPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FeedPath)) {
+        return $false
+    }
+
+    $FeedPath = $FeedPath.Trim()
+
+    # Check for online protocols
+    $onlineProtocols = @('http://', 'https://', 'ftp://', 'ftps://', 'sftp://')
+    foreach ($protocol in $onlineProtocols) {
+        if ($FeedPath.StartsWith($protocol, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+    }
+
+    # Check for file:// protocol (local)
+    if ($FeedPath.StartsWith('file://', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+
+    # Check for Windows drive letters (C:\, D:\, etc.)
+    if ($FeedPath -match '^[a-zA-Z]:\\') {
+        return $true
+    }
+
+    # Check for UNC paths (\\server\share)
+    if ($FeedPath.StartsWith('\\')) {
+        return $true
+    }
+
+    # Check for relative paths or paths without protocol
+    # If it doesn't start with a protocol, assume it's local
+    if (-not ($FeedPath -match '^[a-zA-Z][a-zA-Z0-9+.-]*://')) {
+        return $true
+    }
+
+    # Default to online for unknown protocols
+    return $false
+}
+
+function Compare-PackageVersions {
+    <#
+    .SYNOPSIS
+        Compares two package version strings.
+
+    .DESCRIPTION
+        Compares two version strings and returns:
+        - 1 if Version1 is greater than Version2
+        - 0 if versions are equal
+        - -1 if Version1 is less than Version2
+
+    .PARAMETER Version1
+        First version string to compare.
+
+    .PARAMETER Version2
+        Second version string to compare.
+
+    .EXAMPLE
+        Compare-PackageVersions -Version1 "2.0.0" -Version2 "1.0.0"
+        Returns: 1 (Version1 is greater)
+
+    .EXAMPLE
+        Compare-PackageVersions -Version1 "1.0.0" -Version2 "1.0.0"
+        Returns: 0 (versions are equal)
+
+    .NOTES
+        Handles NIPKG version formats including build metadata (e.g., 24.0.0.49212-0+f60).
+        Attempts to parse as System.Version first, then strips build metadata and retries.
+        Falls back to string comparison as last resort.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Version1,
+        
+        [Parameter(Mandatory)]
+        [string]$Version2
+    )
+
+    begin {
+        Write-Verbose "Starting Compare-PackageVersions operation"
+        Write-Verbose "Comparing versions: '$Version1' vs '$Version2'"
+    }
+    
+    process {
+        # Quick equality check first
+        if ($Version1 -eq $Version2) {
+            Write-Verbose "Versions are identical strings"
+            return 0
+        }
+        
+        try {
+            # Try to parse as System.Version first (works for standard formats)
+            $v1 = [System.Version]::Parse($Version1)
+            $v2 = [System.Version]::Parse($Version2)
+            
+            Write-Verbose "Successfully parsed as System.Version"
+            return $v1.CompareTo($v2)
+        }
+        catch {
+            Write-Verbose "Failed to parse as System.Version: $($_.Exception.Message)"
+            
+            # Strip build metadata (+xxx) and pre-release info (-xxx) for NIPKG versions
+            $cleanVersion1 = $Version1 -replace '\+.*$', '' -replace '-.*$', ''
+            $cleanVersion2 = $Version2 -replace '\+.*$', '' -replace '-.*$', ''
+            
+            Write-Verbose "Cleaned versions: '$cleanVersion1' vs '$cleanVersion2'"
+            
+            try {
+                $v1 = [System.Version]::Parse($cleanVersion1)
+                $v2 = [System.Version]::Parse($cleanVersion2)
+                
+                Write-Verbose "Successfully parsed cleaned versions as System.Version"
+                $result = $v1.CompareTo($v2)
+                
+                # If core versions are equal, compare the original strings to handle pre-release/build info
+                if ($result -eq 0 -and $Version1 -ne $Version2) {
+                    Write-Verbose "Core versions equal, comparing full version strings"
+                    if ($Version1 -gt $Version2) {
+                        return 1
+                    } else {
+                        return -1
+                    }
+                }
+                
+                return $result
+            }
+            catch {
+                # Fall back to string comparison if all version parsing fails
+                Write-Verbose "Failed to parse cleaned versions, using string comparison"
+                
+                if ($Version1 -gt $Version2) {
+                    return 1
+                }
+                else {
+                    return -1
+                }
+            }
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Compare-PackageVersions operation"
+    }
+}
+
+function Get-PackageInstallationOrder {
+    <#
+    .SYNOPSIS
+        Sorts packages into correct installation order based on dependencies.
+
+    .DESCRIPTION
+        Analyzes package dependencies from NIPKG Packages file data and returns packages
+        in the correct installation order. Ensures that all dependencies are installed
+        with exact versions before dependent packages, preventing NIPKG from selecting
+        random compatible versions during installation.
+
+    .PARAMETER PackagesInfo
+        Array of package objects from Get-PackagesInfoFromPackagesFile containing
+        package information including dependencies.
+
+    .PARAMETER IncludeDependencyTypes
+        Array of dependency types to consider for ordering. Valid values are:
+        'Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements'.
+        Defaults to @('Depends', 'Recommends') for critical dependencies.
+
+    .PARAMETER AllowCircularDependencies
+        Allow circular dependencies by breaking cycles at arbitrary points.
+        If false, throws an error when circular dependencies are detected.
+
+    .EXAMPLE
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\Packages"
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -AllowCircularDependencies
+
+    .EXAMPLE
+        # Include all dependency types for ordering
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath ".\Packages"
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -IncludeDependencyTypes @('Depends', 'Recommends', 'Suggests')
+
+    .EXAMPLE
+        # Only consider hard dependencies
+        $orderedPackages = Get-PackageInstallationOrder -PackagesInfo $packages -IncludeDependencyTypes @('Depends')
+
+    .NOTES
+        Returns packages ordered from least dependent (no dependencies) to most dependent.
+        Packages with the same dependency level are sorted alphabetically by package name.
+        
+        The function performs topological sorting on the dependency graph to ensure
+        that all dependencies are installed before their dependents.
+        
+        Dependency strings are parsed to extract package names and version constraints.
+        Only packages present in the input list are considered for ordering.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]]$PackagesInfo,
+        
+        [Parameter()]
+        [ValidateSet('Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements')]
+        [string[]]$IncludeDependencyTypes = @('Depends', 'Recommends'),
+        
+        [Parameter()]
+        [switch]$AllowCircularDependencies
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackageInstallationOrder operation"
+    }
+    
+    process {
+        try {
+            if (-not $PackagesInfo -or $PackagesInfo.Count -eq 0) {
+                Write-Warning "No packages provided for ordering"
+                return @()
+            }
+            
+            Write-Information "Analyzing dependencies for $($PackagesInfo.Count) packages..." -InformationAction Continue
+            Write-Verbose "Including dependency types: $($IncludeDependencyTypes -join ', ')"
+            
+            # Create a lookup table for packages by name
+            $packageLookup = @{}
+            foreach ($package in $PackagesInfo) {
+                $packageLookup[$package.Package] = $package
+            }
+
+            # Parse dependencies for each package
+            $dependencyGraph = @{}
+            $allPackageNames = @($PackagesInfo | ForEach-Object { $_.Package })
+
+            foreach ($package in $PackagesInfo) {
+                $packageName = $package.Package
+                $dependencies = @()
+
+                # Extract dependencies from all specified dependency types
+                foreach ($depType in $IncludeDependencyTypes) {
+                    if ($package.PSObject.Properties.Name -contains $depType -and $package.$depType) {
+                        $depString = $package.$depType
+                        $parsedDeps = Get-ParsedDependencies -DependencyString $depString -AvailablePackages $allPackageNames
+                        $dependencies += $parsedDeps
+                    }
+                }
+
+                $dependencyGraph[$packageName] = @{
+                    Package = $package
+                    Dependencies = $dependencies | Sort-Object -Unique
+                    Visited = $false
+                    InStack = $false
+                }
+
+                Write-Verbose "Package '$packageName' depends on: $($dependencies -join ', ')"
+            }
+
+            Write-Verbose "Built dependency graph for $($dependencyGraph.Count) packages"
+
+            # Perform topological sort using DFS
+            $sortedPackages = @()
+            $visitStack = @()
+
+            foreach ($packageName in $dependencyGraph.Keys) {
+                if (-not $dependencyGraph[$packageName].Visited) {
+                    $result = Invoke-TopologicalSort -DependencyGraph $dependencyGraph -PackageName $packageName -SortedList ([ref]$sortedPackages) -VisitStack ([ref]$visitStack) -AllowCircular $AllowCircularDependencies
+                    
+                    if (-not $result.Success) {
+                        if ($AllowCircularDependencies) {
+                            Write-Warning "Circular dependency detected: $($result.ErrorMessage). Continuing with partial ordering."
+                        } else {
+                            throw "Circular dependency detected: $($result.ErrorMessage)"
+                        }
+                    }
+                }
+            }
+
+            # Return the packages in installation order (DFS post-order is correct)
+            # Dependencies are added first, then dependents
+            
+            Write-Information "Successfully ordered $($sortedPackages.Count) packages for installation" -InformationAction Continue
+            Write-Verbose "Installation order: $($sortedPackages | ForEach-Object { $_.Package } | Join-String -Separator ', ')"
+
+            return $sortedPackages
+        }
+        catch {
+            $errorMessage = "Failed to determine package installation order. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $PackagesInfo
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackageInstallationOrder operation"
+    }
+}
+
+function Get-ParsedDependencies {
+    <#
+    .SYNOPSIS
+        Parses NIPKG dependency strings into package names.
+
+    .DESCRIPTION
+        Internal helper function that parses NIPKG dependency strings and extracts
+        package names that are available in the provided package list.
+
+    .PARAMETER DependencyString
+        The dependency string from a NIPKG package (e.g., "pkg1 (>= 1.0), pkg2, pkg3 | pkg4").
+
+    .PARAMETER AvailablePackages
+        Array of available package names to filter dependencies against.
+
+    .NOTES
+        Handles various NIPKG dependency formats:
+        - Simple: "package-name"
+        - Versioned: "package-name (>= 1.0.0)"
+        - Multiple: "pkg1, pkg2, pkg3"
+        - Alternatives: "pkg1 | pkg2 | pkg3" (returns first available)
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$DependencyString,
+        
+        [Parameter(Mandatory)]
+        [string[]]$AvailablePackages
+    )
+
+    $dependencies = @()
+    
+    if ([string]::IsNullOrWhiteSpace($DependencyString)) {
+        return $dependencies
+    }
+
+    # Split by comma for multiple dependencies
+    $depParts = $DependencyString -split ','
+    
+    foreach ($depPart in $depParts) {
+        $depPart = $depPart.Trim()
+        
+        # Skip empty parts
+        if ([string]::IsNullOrWhiteSpace($depPart)) {
+            continue
+        }
+        
+        # Handle alternative dependencies (pkg1 | pkg2 | pkg3)
+        if ($depPart -match '\|') {
+            $alternatives = $depPart -split '\|'
+            foreach ($alt in $alternatives) {
+                $altTrimmed = $alt.Trim()
+                if ([string]::IsNullOrWhiteSpace($altTrimmed)) {
+                    continue
+                }
+                $cleanAlt = Get-CleanPackageName -PackageSpec $altTrimmed
+                if ($cleanAlt -and $cleanAlt -in $AvailablePackages) {
+                    $dependencies += $cleanAlt
+                    break  # Only take the first available alternative
+                }
+            }
+        } else {
+            # Single dependency
+            $cleanDep = Get-CleanPackageName -PackageSpec $depPart
+            if ($cleanDep -and $cleanDep -in $AvailablePackages) {
+                $dependencies += $cleanDep
+            }
+        }
+    }
+
+    return $dependencies
+}
+
+function Get-CleanPackageName {
+    <#
+    .SYNOPSIS
+        Extracts clean package name from package specification.
+
+    .DESCRIPTION
+        Internal helper function that removes version constraints and other
+        specifications from package names.
+
+    .PARAMETER PackageSpec
+        Package specification that may include version constraints.
+
+    .NOTES
+        Handles formats like:
+        - "package-name"
+        - "package-name (>= 1.0.0)"
+        - "package-name (<< 2.0)"
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$PackageSpec
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PackageSpec)) {
+        return $null
+    }
+
+    # Remove version constraints in parentheses
+    $cleanName = $PackageSpec -replace '\s*\([^)]*\)\s*', ''
+    
+    # Remove any remaining whitespace
+    $cleanName = $cleanName.Trim()
+    
+    # Return null if empty after cleaning
+    if ([string]::IsNullOrWhiteSpace($cleanName)) {
+        return $null
+    }
+
+    return $cleanName
+}
+
+function Invoke-TopologicalSort {
+    <#
+    .SYNOPSIS
+        Performs depth-first search topological sorting.
+
+    .DESCRIPTION
+        Internal helper function that performs DFS-based topological sorting
+        to determine dependency order.
+
+    .PARAMETER DependencyGraph
+        Hashtable representing the dependency graph.
+
+    .PARAMETER PackageName
+        Current package name being processed.
+
+    .PARAMETER SortedList
+        Reference to the sorted list being built.
+
+    .PARAMETER VisitStack
+        Reference to the current visit stack for cycle detection.
+
+    .PARAMETER AllowCircular
+        Whether to allow circular dependencies.
+
+    .NOTES
+        Returns a result object with Success boolean and ErrorMessage if applicable.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [hashtable]$DependencyGraph,
+        
+        [Parameter(Mandatory)]
+        [string]$PackageName,
+        
+        [Parameter(Mandatory)]
+        [ref]$SortedList,
+        
+        [Parameter(Mandatory)]
+        [ref]$VisitStack,
+        
+        [Parameter()]
+        [bool]$AllowCircular = $false
+    )
+
+    $node = $DependencyGraph[$PackageName]
+    
+    # Check for circular dependency
+    if ($node.InStack) {
+        $cycleStart = $VisitStack.Value.IndexOf($PackageName)
+        $cycle = $VisitStack.Value[$cycleStart..($VisitStack.Value.Count - 1)] + @($PackageName)
+        return @{
+            Success = $false
+            ErrorMessage = "Circular dependency detected: $($cycle -join ' -> ')"
+        }
+    }
+
+    # Skip if already visited
+    if ($node.Visited) {
+        return @{ Success = $true }
+    }
+
+    # Mark as in current path and add to stack
+    $node.InStack = $true
+    $VisitStack.Value += $PackageName
+
+    # Visit all dependencies first
+    foreach ($depName in $node.Dependencies) {
+        if ($DependencyGraph.ContainsKey($depName)) {
+            $result = Invoke-TopologicalSort -DependencyGraph $DependencyGraph -PackageName $depName -SortedList $SortedList -VisitStack $VisitStack -AllowCircular $AllowCircularDependencies
+            
+            if (-not $result.Success -and -not $AllowCircular) {
+                return $result
+            }
+        }
+    }
+
+    # Mark as visited and remove from current path
+    $node.Visited = $true
+    $node.InStack = $false
+    $VisitStack.Value = $VisitStack.Value[0..($VisitStack.Value.Count - 2)]  # Remove last element
+
+    # Add to sorted list (will be reversed later)
+    $SortedList.Value += $node.Package
+
+    return @{ Success = $true }
+}
+
+function Sync-NipkgVersionWithSnapshot {
+    <#
+    .SYNOPSIS
+        Installs packages from the packages-nipkg section in order.
+
+    .DESCRIPTION
+        Installs all packages from the packages-nipkg section of a snapshot in the correct order.
+        This ensures that NIPKG-related packages and their dependencies are installed properly
+        without version checking - simply installs all packages in the specified order.
+
+    .PARAMETER Snapshot
+        The snapshot object containing the packages-nipkg section with ordered packages.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .PARAMETER Force
+        This parameter is retained for compatibility but is not used in the current implementation.
+
+    .OUTPUTS
+        PSCustomObject with:
+        - PackagesInstalled: Number of packages successfully installed
+        - PackagesFailed: Number of packages that failed to install
+        - InstalledPackages: Array of successfully installed package names
+        - FailedPackages: Array of failed package names with error details
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        $result = Sync-NipkgVersionWithSnapshot -Snapshot $snapshot -NipkgCmdPath "nipkg"
+        Write-Host "Installed $($result.PackagesInstalled) packages successfully"
+
+    .NOTES
+        This function installs packages from the packages-nipkg section in the order they appear.
+        No version checking is performed - all packages are installed with their specified versions.
+        Requires administrative privileges for package installation.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Snapshot,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$NipkgCmdPath = "nipkg",
+
+        [Parameter()]
+        [switch]$Force
+    )
+
+    begin {
+        Write-Verbose "Starting Sync-NipkgVersionWithSnapshot operation"
+    }
+    
+    process {
+        try {
+            $result = [PSCustomObject]@{
+                PackagesInstalled = 0
+                PackagesFailed = 0
+                InstalledPackages = @()
+                FailedPackages = @()
+            }
+
+            # Check if the snapshot has a packages-nipkg section
+            if (-not $Snapshot."packages-nipkg" -or $Snapshot."packages-nipkg".Count -eq 0) {
+                Write-Information "No packages-nipkg section found in snapshot or section is empty - no packages to install" -InformationAction Continue
+                return $result
+            }
+
+            $packagesToInstall = $Snapshot."packages-nipkg"
+            Write-Information "Installing $($packagesToInstall.Count) packages from packages-nipkg section in order..." -InformationAction Continue
+
+            # Install packages in order
+            foreach ($package in $packagesToInstall) {
+                $packageName = $package.Package
+                $packageVersion = $package.Version
+                $packageSpec = "$packageName=$packageVersion"
+
+                Write-Information "Installing package: $packageSpec" -InformationAction Continue
+
+                if ($PSCmdlet.ShouldProcess($packageSpec, "Install NIPKG package")) {
+                    try {
+                        Write-Verbose "Executing: & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall --force-locked"
+                        & $NipkgCmdPath install $packageSpec --accept-eulas -y --allow-downgrade --allow-uninstall
+
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Information "Successfully installed: $packageSpec" -InformationAction Continue
+                            $result.PackagesInstalled++
+                            $result.InstalledPackages += $packageSpec
+                        }
+                        else {
+                            Write-Warning "Failed to install: $packageSpec (exit code: $LASTEXITCODE)"
+                            $result.PackagesFailed++
+                            $result.FailedPackages += [PSCustomObject]@{
+                                Package = $packageSpec
+                                ExitCode = $LASTEXITCODE
+                                Error = "NIPKG install command failed"
+                            }
+                        }
+                    }
+                    catch {
+                         Write-Warning "Exception installing: $packageSpec - $($_.Exception.Message)"
+                        $result.PackagesFailed++
+                        $result.FailedPackages += [PSCustomObject]@{
+                            Package = $packageSpec
+                            ExitCode = $null
+                            Error = $_.Exception.Message
+                        }
+                    }
+                }
+            }
+
+            # Summary
+            Write-Information "Package installation completed:" -InformationAction Continue
+            Write-Information "  Successfully installed: $($result.PackagesInstalled) packages" -InformationAction Continue
+            if ($result.PackagesFailed -gt 0) {
+                Write-Information "  Failed to install: $($result.PackagesFailed) packages" -InformationAction Continue
+            }
+
+            return $result
+        }
+        catch {
+            $errorMessage = "Failed to install packages from packages-nipkg section. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Sync-NipkgVersionWithSnapshot operation"
+    }
+}
+
+function Resolve-PackageDependencies {
+    <#
+    .SYNOPSIS
+        Resolves all dependencies for a given package name using provided package information.
+
+    .DESCRIPTION
+        Takes a package name and a collection of package information (as returned by 
+        Get-PackagesInfoFromPackagesFile or similar functions) and recursively resolves 
+        all dependencies for the specified package. Only uses the provided package 
+        information and does not make external queries.
+
+    .PARAMETER PackageName
+        The name of the package for which to resolve dependencies.
+
+    .PARAMETER PackagesInfo
+        Array of package objects containing package information including dependencies.
+        Typically obtained from Get-PackagesInfoFromPackagesFile, Get-PackagesInfoFromNipkgCmd,
+        or similar functions.
+
+    .PARAMETER IncludeDependencyTypes
+        Array of dependency types to consider for resolution. Valid values are:
+        'Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements'.
+        Defaults to @('Depends', 'Recommends') for critical dependencies.
+
+    .PARAMETER IncludeRootPackage
+        Whether to include the root package in the returned dependency list.
+        Defaults to $true.
+
+    .PARAMETER AllowCircularDependencies
+        Allow circular dependencies by breaking cycles when detected.
+        If false, throws an error when circular dependencies are detected.
+        Defaults to $true for practical real-world scenarios.
+
+    .EXAMPLE
+        # Get package info from a Packages file
+        $packages = Get-PackagesInfoFromPackagesFile -InputPath "C:\feeds\Packages"
+        
+        # Resolve all dependencies for a specific package
+        $dependencies = Resolve-PackageDependencies -PackageName "ni-labview-2025" -PackagesInfo $packages
+
+    .EXAMPLE
+        # Get package info from installer and resolve dependencies
+        $snapshot = New-SnapshotFromInstallerDirectory -InstallerDirectory "C:\Installers\labview-2025"
+        $allPackages = $snapshot.packages | ForEach-Object { 
+            # Convert snapshot format back to package info format
+            [PSCustomObject]@{
+                Package = $_.name
+                Version = $_.version
+                # Note: Dependencies would need to be included in the package info
+            }
+        }
+        $dependencies = Resolve-PackageDependencies -PackageName "my-package" -PackagesInfo $allPackages
+
+    .EXAMPLE
+        # Only resolve hard dependencies (Depends), exclude root package
+        $dependencies = Resolve-PackageDependencies -PackageName "my-package" -PackagesInfo $packages -IncludeDependencyTypes @('Depends') -IncludeRootPackage $false
+
+    .EXAMPLE
+        # Strict mode - fail on circular dependencies
+        $dependencies = Resolve-PackageDependencies -PackageName "my-package" -PackagesInfo $packages -AllowCircularDependencies $false
+
+    .NOTES
+        Returns an array of package objects representing all resolved dependencies.
+        The returned packages are in dependency order (dependencies before dependents).
+        
+        The function performs recursive dependency resolution:
+        1. Finds the specified package in the provided package info
+        2. Extracts its dependencies based on the specified dependency types
+        3. Recursively resolves dependencies of those dependencies
+        4. Returns all unique dependencies in proper installation order
+        
+        Dependency strings are parsed to extract package names and version constraints.
+        Only packages present in the provided PackagesInfo are considered.
+        
+        If a dependency is not found in PackagesInfo, it is silently skipped with a warning.
+        This allows for partial dependency resolution when not all packages are available
+        in the provided data set.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNullOrEmpty()]
+        [string]$PackageName,
+        
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [PSCustomObject[]]$PackagesInfo,
+        
+        [Parameter()]
+        [ValidateSet('Depends', 'Recommends', 'Suggests', 'Enhances', 'Supplements')]
+        [string[]]$IncludeDependencyTypes = @('Depends', 'Recommends'),
+        
+        [Parameter()]
+        [bool]$IncludeRootPackage = $true,
+        
+        [Parameter()]
+        [bool]$AllowCircularDependencies = $true
+    )
+
+    begin {
+        Write-Verbose "Starting Resolve-PackageDependencies operation"
+    }
+    
+    process {
+        try {
+            if (-not $PackagesInfo -or $PackagesInfo.Count -eq 0) {
+                Write-Warning "No package information provided"
+                return @()
+            }
+
+            Write-Verbose "Resolving dependencies for package: $PackageName"
+            Write-Verbose "Including dependency types: $($IncludeDependencyTypes -join ', ')"
+            Write-Verbose "Searching in $($PackagesInfo.Count) available packages"
+
+            # Create a lookup table for packages by name
+            $packageLookup = @{}
+            foreach ($package in $PackagesInfo) {
+                $packageLookup[$package.Package] = $package
+            }
+
+            # Check if the root package exists
+            if (-not $packageLookup.ContainsKey($PackageName)) {
+                throw "Package '$PackageName' not found in provided package information"
+            }
+
+            # Initialize tracking collections
+            $resolvedPackages = @{}      # Track resolved packages to avoid duplicates
+            $resolutionStack = @()       # Track current resolution path for circular dependency detection
+            $allPackageNames = @($PackagesInfo | ForEach-Object { $_.Package })
+
+            # Internal function to recursively resolve dependencies
+            function Resolve-PackageRecursive {
+                param (
+                    [string]$CurrentPackageName,
+                    [hashtable]$PackageLookup,
+                    [hashtable]$ResolvedPackages,
+                    [System.Collections.Generic.List[string]]$ResolutionStack,
+                    [string[]]$AllPackageNames,
+                    [string[]]$DependencyTypes,
+                    [bool]$AllowCircular
+                )
+
+                Write-Verbose "Resolving dependencies for: $CurrentPackageName"
+
+                # Check for circular dependency
+                if ($ResolutionStack.Contains($CurrentPackageName)) {
+                    $cyclePath = ($ResolutionStack + $CurrentPackageName) -join ' -> '
+                    $errorMessage = "Circular dependency detected: $cyclePath"
+                    
+                    if ($AllowCircular) {
+                        Write-Warning $errorMessage
+                        return  # Break the cycle by returning early
+                    } else {
+                        throw $errorMessage
+                    }
+                }
+
+                # Check if already resolved
+                if ($ResolvedPackages.ContainsKey($CurrentPackageName)) {
+                    Write-Verbose "Package '$CurrentPackageName' already resolved"
+                    return
+                }
+
+                # Get the package information
+                $currentPackage = $PackageLookup[$CurrentPackageName]
+                if (-not $currentPackage) {
+                    Write-Warning "Package '$CurrentPackageName' not found in package information - skipping"
+                    return
+                }
+
+                # Add to resolution stack for circular dependency detection
+                $null = $ResolutionStack.Add($CurrentPackageName)
+
+                try {
+                    # Extract dependencies for this package
+                    $dependencies = @()
+                    foreach ($depType in $DependencyTypes) {
+                        if ($currentPackage.PSObject.Properties.Name -contains $depType -and $currentPackage.$depType) {
+                            $depString = $currentPackage.$depType
+                            $parsedDeps = Get-ParsedDependencies -DependencyString $depString -AvailablePackages $AllPackageNames
+                            $dependencies += $parsedDeps
+                        }
+                    }
+
+                    # Remove duplicates and sort
+                    $dependencies = $dependencies | Sort-Object -Unique
+
+                    Write-Verbose "Package '$CurrentPackageName' has dependencies: $($dependencies -join ', ')"
+
+                    # Recursively resolve each dependency first
+                    foreach ($dependency in $dependencies) {
+                        if ($PackageLookup.ContainsKey($dependency)) {
+                            $null = Resolve-PackageRecursive -CurrentPackageName $dependency -PackageLookup $PackageLookup -ResolvedPackages $ResolvedPackages -ResolutionStack $ResolutionStack -AllPackageNames $allPackageNames -DependencyTypes $DependencyTypes -AllowCircular $AllowCircularDependencies
+                        } else {
+                            Write-Warning "Dependency '$dependency' of package '$CurrentPackageName' not found in package information - skipping"
+                        }
+                    }
+
+                    # Add current package to resolved list (after its dependencies)
+                    $ResolvedPackages[$CurrentPackageName] = $currentPackage
+                    Write-Verbose "Resolved package: $CurrentPackageName"
+
+                } finally {
+                    # Remove from resolution stack
+                    $null = $ResolutionStack.Remove($CurrentPackageName)
+                }
+            }
+
+            # Start recursive resolution
+            $stackList = New-Object System.Collections.Generic.List[string]
+            $null = Resolve-PackageRecursive -CurrentPackageName $PackageName -PackageLookup $packageLookup -ResolvedPackages $resolvedPackages -ResolutionStack $stackList -AllPackageNames $allPackageNames -DependencyTypes $IncludeDependencyTypes -AllowCircular $AllowCircularDependencies
+
+            # Prepare result - create an ordered list of packages
+            $result = [System.Collections.ArrayList]::new()
+
+            # Add dependencies in resolution order (dependencies come first)
+            foreach ($packageName in $resolvedPackages.Keys) {
+                if ($IncludeRootPackage -or $packageName -ne $PackageName) {
+                    $null = $result.Add($resolvedPackages[$packageName])
+                }
+            }
+
+            Write-Information "Successfully resolved $($result.Count) dependencies for package '$PackageName'" -InformationAction Continue
+            Write-Verbose "Resolved packages: $($result | ForEach-Object { $_.Package } | Join-String -Separator ', ')"
+
+            # Return as array to ensure proper type
+            return $result.ToArray()
+        }
+        catch {
+            $errorMessage = "Failed to resolve dependencies for package '$PackageName'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $PackageName
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Resolve-PackageDependencies operation"
+    }
+}
+
+function Remove-DuplicatePackagesByVersion {
+    <#
+    .SYNOPSIS
+        Removes duplicate packages by selecting the highest version of each package.
+
+    .DESCRIPTION
+        Takes an array of package objects and removes duplicates based on the Package name,
+        keeping only the package with the highest version for each unique package name.
+        Uses the Compare-PackageVersions function for consistent version comparison logic.
+
+    .PARAMETER PackagesInfo
+        Array of PSCustomObject containing package information with Package and Version properties.
+
+    .EXAMPLE
+        $uniquePackages = Remove-DuplicatePackagesByVersion -PackagesInfo $allPackages
+
+    .NOTES
+        Returns an array of unique packages with the highest version for each package name.
+        Preserves all other properties of the package objects.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]]$PackagesInfo
+    )
+
+    begin {
+        Write-Verbose "Starting Remove-DuplicatePackagesByVersion operation"
+    }
+    
+    process {
+        try {
+            if ($PackagesInfo.Count -eq 0) {
+                Write-Verbose "No packages provided, returning empty array"
+                return @()
+            }
+            
+            Write-Verbose "Processing $($PackagesInfo.Count) packages for duplicate removal"
+            
+            # Group packages by name
+            $packageGroups = $PackagesInfo | Group-Object -Property Package
+            
+            $uniquePackages = @()
+            
+            foreach ($group in $packageGroups) {
+                if ($group.Count -eq 1) {
+                    # Only one version, add it directly
+                    $uniquePackages += $group.Group[0]
+                    Write-Verbose "Package '$($group.Name)': single version $($group.Group[0].Version)"
+                } else {
+                    # Multiple versions, select the highest
+                    Write-Verbose "Package '$($group.Name)': found $($group.Count) versions"
+                    
+                    $highestVersionPackage = $group.Group[0]
+                    
+                    foreach ($package in $group.Group[1..($group.Count-1)]) {
+                        # Use existing Compare-PackageVersions function for consistency
+                        $comparisonResult = Compare-PackageVersions -Version1 $package.Version -Version2 $highestVersionPackage.Version
+                        
+                        if ($comparisonResult -gt 0) {
+                            Write-Verbose "  Selected higher version: $($package.Version) > $($highestVersionPackage.Version)"
+                            $highestVersionPackage = $package
+                        }
+                    }
+                    
+                    $uniquePackages += $highestVersionPackage
+                    Write-Verbose "Package '$($group.Name)': selected version $($highestVersionPackage.Version) from $($group.Count) versions"
+                }
+            }
+            
+            Write-Verbose "Removed $($PackagesInfo.Count - $uniquePackages.Count) duplicate packages, returning $($uniquePackages.Count) unique packages"
+            return $uniquePackages
+        }
+        catch {
+            $errorMessage = "Failed to remove duplicate packages: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Remove-DuplicatePackagesByVersion operation"
+    }
+}
+
+function ConvertTo-FeedName {
+    <#
+    .SYNOPSIS
+        Converts a folder name to a valid feed name.
+
+    .DESCRIPTION
+        Transforms a folder name into a valid feed name by applying naming conventions.
+        Currently replaces dots (.) with underscores (_) to ensure compatibility with
+        feed naming requirements. This function can be extended in the future to apply
+        additional transformations as needed.
+
+    .PARAMETER FolderName
+        The folder name to convert to a feed name.
+
+    .EXAMPLE
+        $feedName = ConvertTo-FeedName -FolderName "ni-software-2025.q1"
+        # Returns: "ni-software-2025_q1"
+
+    .EXAMPLE
+        $feedName = ConvertTo-FeedName -FolderName "drivers.24.8"
+        # Returns: "drivers_24_8"
+
+    .NOTES
+        Current transformations:
+        - Replaces dots (.) with underscores (_)
+        
+        This function is designed to be easily extensible for future naming
+        convention requirements.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [ValidateNotNullOrEmpty()]
+        [string]$FolderName
+    )
+
+    begin {
+        Write-Verbose "Starting ConvertTo-FeedName operation"
+    }
+    
+    process {
+        try {
+            Write-Verbose "Converting folder name '$FolderName' to feed name"
+            
+            $feedName = $FolderName
+            $feedName = $feedName -replace '\.', '-'
+            $feedName = "local-installer-$feedName"
+ 
+            Write-Verbose "Converted '$FolderName' to feed name '$feedName'"
+            
+            return $feedName
+        }
+        catch {
+            $errorMessage = "Failed to convert folder name to feed name - FolderName: '$FolderName'. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed ConvertTo-FeedName operation"
+    }
+}
+
+function Get-PackageDefinitionsFromSnapshot {
+    <#
+    .SYNOPSIS
+        Converts snapshot packages section into package definitions for use with Install-Packages.
+
+    .DESCRIPTION
+        Takes a snapshot object and converts its packages section into an array of package 
+        definitions with Package and Version properties that can be used with Install-Packages
+        function for batch installation.
+
+    .PARAMETER Snapshot
+        Hashtable containing the snapshot data with packages section.
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        $packageDefinitions = Get-PackageDefinitionsFromSnapshot -Snapshot $snapshot
+        Install-Packages -PackageDefinitions $packageDefinitions -AcceptEulas -Yes
+
+    .EXAMPLE
+        # Direct pipeline usage
+        $snapshot | Get-PackageDefinitionsFromSnapshot | Install-Packages -AcceptEulas -Yes -AllowDowngrade
+
+    .NOTES
+        Returns an array of PSCustomObjects with Package and Version properties.
+        This function is designed to be a bridge between snapshot format and Install-Packages function.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [ValidateNotNull()]
+        [hashtable]$Snapshot
+    )
+
+    begin {
+        Write-Verbose "Starting Get-PackageDefinitionsFromSnapshot operation"
+    }
+    
+    process {
+        try {
+            # Validate snapshot structure
+            if (-not $Snapshot.packages) {
+                Write-Warning "Snapshot does not contain a packages section"
+                return @()
+            }
+            
+            if ($Snapshot.packages.Count -eq 0) {
+                Write-Verbose "Snapshot packages section is empty"
+                return @()
+            }
+            
+            Write-Verbose "Converting $($Snapshot.packages.Count) snapshot packages to package definitions"
+            
+            # Convert snapshot packages (name/version) to package definitions (Package/Version)
+            $packageDefinitions = @()
+            
+            foreach ($snapshotPackage in $Snapshot.packages) {
+                # Validate snapshot package structure
+                if (-not $snapshotPackage.Package) {
+                    Write-Warning "Snapshot package missing 'name' property, skipping"
+                    continue
+                }
+                
+                if (-not $snapshotPackage.Version) {
+                    Write-Warning "Snapshot package '$($snapshotPackage.name)' missing 'version' property, skipping"
+                    continue
+                }
+                
+                # Create package definition for Install-Packages
+                $packageDef = [PSCustomObject]@{
+                    Package = $snapshotPackage.Package
+                    Version = $snapshotPackage.Version
+                    Depends = $snapshotPackage.Depends 
+                    Description = $snapshotPackage.Description
+                    Section = $snapshotPackage.Section
+                    UserVisible = $snapshotPackage.UserVisible
+                    StoreProduct = $snapshotPackage.StoreProduct
+                }
+                
+                $packageDefinitions += $packageDef
+                Write-Verbose "Converted: $($snapshotPackage.Package) v$($snapshotPackage.Version) -> Package: $($packageDef.Package), Version: $($packageDef.Version)"
+            }
+            
+            Write-Verbose "Successfully converted $($packageDefinitions.Count) package definitions"
+            return $packageDefinitions
+        }
+        catch {
+            $errorMessage = "Failed to convert snapshot packages to package definitions. Error: $($_.Exception.Message)"
+            Write-Error -Message $errorMessage -Category InvalidOperation -TargetObject $Snapshot
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Completed Get-PackageDefinitionsFromSnapshot operation"
+    }
+}
+
+function Install-Feeds {
+    <#
+    .SYNOPSIS
+        Adds feeds to the system, avoiding duplicates.
+
+    .DESCRIPTION
+        This function adds feeds to the system. It checks for existing feeds
+        by comparing both name and URI to avoid duplicates. If a feed with the same name but different
+        URI already exists, it will show a warning but still attempt to add the new feed.
+
+        After adding feeds, it updates the package database to ensure the latest package information
+        is available.
+
+    .PARAMETER FeedDefinitions
+        Array of feed objects containing 'name' and 'uri' properties to be added.
+
+    .PARAMETER NipkgCmdPath
+        Path to the NIPKG command-line tool. Defaults to 'nipkg' if in PATH.
+
+    .OUTPUTS
+        Returns an array of feeds that were successfully added to the system.
+
+    .EXAMPLE
+        $feeds = @(
+            @{ name = "my-feed"; uri = "C:\feeds\my-feed" },
+            @{ name = "online-feed"; uri = "https://example.com/feed" }
+        )
+        $addedFeeds = Install-Feeds -FeedDefinitions $feeds
+
+    .EXAMPLE
+        $snapshot = Import-NipkgSnapshotFromJson -InputPath "snapshot.json"
+        $addedFeeds = Install-Feeds -FeedDefinitions $snapshot.feeds -NipkgCmdPath "C:\Program Files\NI\nipkg.exe"
+    #>
+    
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [object]$FeedDefinition,
+        
+        [Parameter()]
+        [string]$NipkgCmdPath = 'nipkg'
+    )
+
+    begin {
+        Write-Verbose "Starting Install-Feeds operation"
+        $script:feedsAdded = @()
+        
+        # Get currently configured feeds for duplicate checking
+        Write-Information "Retrieving currently configured feeds..." -InformationAction Continue
+        try {
+            $script:currentFeeds = Get-FeedDefinitionsFromSystem -NipkgCmdPath $NipkgCmdPath -ExcludeLocalFeeds
+            Write-Verbose "Found $($script:currentFeeds.Count) currently configured feeds"
+        }
+        catch {
+            Write-Warning "Failed to get current feeds list: $($_.Exception.Message)"
+            $script:currentFeeds = @()
+        }
+        
+        # Create lookup table for current feeds (by name and path)
+        $script:currentFeedsLookup = @{}
+        foreach ($currentFeed in $script:currentFeeds) {
+            # Create a key combining name and normalized path for comparison
+            $normalizedPath = $currentFeed.Path -replace '\\', '/' -replace '/$', ''
+            $lookupKey = "$($currentFeed.Name)|$normalizedPath"
+            $script:currentFeedsLookup[$lookupKey] = $currentFeed
+        }
+    }
+    
+    process {
+        # Process the individual feed definition
+        $feed = $FeedDefinition
+        
+        # Validate feed definition
+        if ([string]::IsNullOrWhiteSpace($feed.name)) {
+            Write-Warning "Feed definition has null or empty name - skipping"
+            return
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($feed.uri)) {
+            Write-Warning "Feed definition has null or empty URI - skipping"
+            return
+        }
+        
+        # Normalize the feed URI for comparison
+        $normalizedUri = $feed.uri -replace '\\', '/' -replace '/$', ''
+        $feedLookupKey = "$($feed.name)|$normalizedUri"
+        
+        # Check if this feed already exists with the same name and URI
+        if ($script:currentFeedsLookup.ContainsKey($feedLookupKey)) {
+            Write-Verbose "Feed '$($feed.name)' already exists with URI '$($feed.uri)' - skipping"
+            Write-Information "Skipping feed '$($feed.name)' - already configured" -InformationAction Continue
+            
+            # Still track it as an added feed in case we need to remove it later
+            # $script:feedsAdded += $feed // do not remove feed that was allready present
+        }
+        else {
+            # Check if a feed with the same name but different URI exists
+            $existingFeedWithSameName = $script:currentFeeds | Where-Object { $_.Name -eq $feed.name }
+            if ($existingFeedWithSameName) {
+                Write-Warning "Feed with name '$($feed.name)' already exists but with different URI: '$($existingFeedWithSameName.Path)' vs '$($feed.uri)'"
+            }
+            
+            # Feed doesn't exist - add it
+            try {
+                Write-Verbose "Adding new feed: $($feed.name) -> $($feed.uri)"
+                Write-Information "Adding feed: $($feed.name)" -InformationAction Continue
+                
+                $output = & $NipkgCmdPath feed-add "$($feed.uri)" --name="$($feed.name)" 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    $script:feedsAdded += $feed
+                    Write-Verbose "Successfully added feed: $($feed.name)"
+                } else {
+                    Write-Warning "Failed to add feed '$($feed.name)' (exit code: $LASTEXITCODE) - nipkg output: $output"
+                }
+            }
+            catch {
+                Write-Warning "Failed to add feed '$($feed.name)': $($_.Exception.Message)"
+            }
+        }
+    }
+    
+    end {
+        if ($script:feedsAdded.Count -gt 0) {
+            Write-Information "Updating package database to ensure latest package information..." -InformationAction Continue
+            $output = & $NipkgCmdPath update 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Information "Package database updated successfully" -InformationAction Continue
+            } else {
+                Write-Warning "Package database update failed (exit code: $LASTEXITCODE)"
+                Write-Warning "This may cause package installation failures due to missing package information"
+                Write-Warning "NIPKG output: $output"
+            }
+        }
+        
+        Write-Verbose "Completed Install-Feeds operation"
+        return $script:feedsAdded
+    }
 }
 
 Export-ModuleMember -Function `
         Add-FeedDirectories `
-    ,   Get-PackagesInfo `
+    ,   Test-NipkgAvailability `
+    ,   Get-NipkgCommandOutput `
+    ,   ConvertFrom-NipkgOutput `
+    ,   ConvertFrom-NipkgPackagesFile `
+    ,   ConvertTo-PackageSpecifications `
+    ,   Get-PackagesInfoFromNipkgCmd `
+    ,   Get-PackagesInfoFromPackagesFile `
+    ,   Get-PackageDefinitionsFromSnapshot `
+    ,   Get-PackageInstallationOrder `
     ,   Get-DriverPackages `
     ,   Get-ProgrammingEnvironmentsPackages `
     ,   Get-UtilitiesPackages `
     ,   Get-ApplicationSoftwarePackages `
-    ,   Get-FeedsInfo `
+    ,   Get-StoreProductPackages `
+    ,   Get-FeedDefinitionsFromSystem `
+    ,   Install-Feeds `
     ,   Remove-Feeds `
-    ,   Install-NipkgManager
+    ,   Install-Packages `
+    ,   Install-NipkgManager `
+    ,   New-Snapshot `
+    ,   New-SnapshotFromInstallerDirectory `
+    ,   New-SnapshotFromSystem `
+    ,   Export-NipkgSnapshotToJson `
+    ,   Import-NipkgSnapshotFromJson `
+    ,   Install-Snapshot `
+    ,   Install-PackagesFromSystemSnapshot `
+    ,   Compare-PackageVersions `
+    ,   Sync-NipkgVersionWithSnapshot `
+    ,   Test-Snapshot `
+    ,   Test-NipkgSnapshotDependencies `
+    ,   Resolve-PackageDependencies `
+    ,   Remove-DuplicatePackagesByVersion `
+    ,   ConvertTo-FeedName

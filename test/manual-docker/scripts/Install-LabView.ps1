@@ -1,8 +1,3 @@
-$srcDirectory = "$PSScriptRoot\..\LabViewHelpers"
-$modulePath = "$srcDirectory\LabViewHelpers.psd1"
-
-Import-Module -Name $modulePath -Force
-
 $niLicenseCmdDirectory = 'C:\\Program Files (x86)\\National Instruments\\Shared\\License Manager'
 $labViewCliDirectory = "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI"
 $labViewDirectory = "C:\\Program Files (x86)\\National Instruments\\LabVIEW 2025"
@@ -16,9 +11,19 @@ $nipkgInstallerPath = "C:\\installer-nipkg\Install.exe"
 $nipkgCmdPath = "$nipkgCmdContainingDir\\nipkg.exe"
 $gcdCmdPath = "$gcdCmdContainingDir\\gcd.exe"
 
-Install-LabViewIso `
+$VerbosePreference = 'Continue'
+
+$filterFunction = {  @($input) | Where-Object { $_.Package -eq 'ni-labview-2025-core-x86-en'}}
+
+Install-PackagesFromInstallerIso  `
     -NipkgInstallerPath $nipkgInstallerPath `
-    -IsoFilePath $installerIsoPath
+    -IsoFilePath $installerIsoPath `
+    -RemoveIsoFile `
+    -RemoveTemporaryDirectory `
+    -FilterFunction $filterFunction `
+    -AcceptEulas `
+    -SuppressIncompatibilityErrors
+
 
 Set-LabViewForCi `
     -LabViewDirectory $labViewDirectory `
