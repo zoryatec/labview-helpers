@@ -157,6 +157,12 @@
             
             # Release notes for this module
             ReleaseNotes = @'
+
+## Version 0.2.0
+- major changes allows to install LabVIEW from ISO files
+- Added support for installing packages from system snapshots
+- Improved error handling and logging in installation scripts
+
 ## Version 0.1.0
 - Initial release of LabVIEW Helper Modules
 - LabViewConfigHelper: Manage LabVIEW.ini configuration files
